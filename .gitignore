@@ -58,3 +58,4 @@ app.*.map.json
 .env
 *.log
 /windows/flutter/ephemeral/
+/.vs/ 
