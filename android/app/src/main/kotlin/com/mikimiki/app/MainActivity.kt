@@ -30,6 +30,27 @@ class MainActivity : FlutterActivity() {
     private var pipAuto = false
     private var pipRatio = Rational(16, 9)
 
+    /** Посилання `miki://open/…`, з яким запустили застосунок (віддається Dart один раз) */
+    private var pendingLink: String? = null
+
+    override fun onCreate(savedInstanceState: android.os.Bundle?) {
+        super.onCreate(savedInstanceState)
+        pendingLink = mikiLink(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        val link = mikiLink(intent) ?: return
+        val ch = channel
+        if (ch != null) ch.invokeMethod("deepLink", link) else pendingLink = link
+    }
+
+    private fun mikiLink(i: Intent?): String? {
+        val uri = i?.data ?: return null
+        return if (i.action == Intent.ACTION_VIEW && uri.scheme == "miki") uri.toString() else null
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         val ch = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "miki_miki/system")
@@ -57,7 +78,12 @@ class MainActivity : FlutterActivity() {
                     setVolume(call.argument<Double>("value") ?: 0.5)
                     result.success(null)
                 }
-                "openUrl" -> result.success(openUrl(call.argument<String>("url")))
+                "openUrl" -> result.success(openUrl(call.argument<String>("url"), call.argument<Boolean>("chooser") ?: false))
+                "initialLink" -> {
+                    val link = pendingLink
+                    pendingLink = null
+                    result.success(link)
+                }
                 "deviceInfo" -> result.success(deviceInfo())
                 else -> result.notImplemented()
             }
@@ -120,13 +146,15 @@ class MainActivity : FlutterActivity() {
 
     // ── Посилання ────────────────────────────────────────────────────────────
 
-    /** Відкриває http(s)-посилання у браузері; false — адреса недійсна або браузера немає */
-    private fun openUrl(url: String?): Boolean {
+    /** Відкриває http(s)-посилання у браузері; [chooser] — показати вибір програми. false — адреса недійсна або браузера немає */
+    private fun openUrl(url: String?, chooser: Boolean = false): Boolean {
         if (url.isNullOrBlank()) return false
         val uri = Uri.parse(url)
         if (uri.scheme != "http" && uri.scheme != "https") return false
         return try {
-            startActivity(Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            val view = Intent(Intent.ACTION_VIEW, uri)
+            val intent = if (chooser) Intent.createChooser(view, "Відкрити в…") else view
+            startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             true
         } catch (_: Exception) {
             false

@@ -403,9 +403,9 @@ class _HikkaWatchSectionState extends State<HikkaWatchSection> {
   // Основний вміст --------------------------------------------------------------
 
   Widget _content(WatchTitle t, List<WatchGroup> groups) {
-    final scale = _scale;
     final g = _load.defaultGroup(_store) ?? groups.first;
     final check = _load.checkOf(g);
+    final scale = _scale;
     final keys = episodeKeysOf(g);
     final watched = _store.watched(t.animeKey);
     final point = continuePoint(keys, watched, _store.last(t.animeKey)?.epKey);
@@ -416,7 +416,11 @@ class _HikkaWatchSectionState extends State<HikkaWatchSection> {
         if (t.licensed) _licensedBanner(t),
         _actions(t, g, keys, watched, point),
         _variants(t, groups, g),
-        if (check.hasNote) ...[SizedBox(height: 10 * scale), EpisodeNote(scale: scale, check: check)],
+        // «Не всі серії» / «озвучено не всі» і так видно в рядку озвучки (жовта іконка й «12 з 170»): плашку лишаємо для нумерації та OVA
+        if (check.hasNote && check.level != EpisodeCheckLevel.incomplete && check.level != EpisodeCheckLevel.lag) ...[
+          SizedBox(height: 10 * scale),
+          EpisodeNote(scale: scale, check: check),
+        ],
       ],
     );
   }

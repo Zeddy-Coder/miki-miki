@@ -5,6 +5,7 @@ import 'package:miki_miki/services/source_prefs.dart';
 import 'support/hikka_account_fakes.dart';
 
 void main() {
+  backendFallbackTests();
   late FakeBackend fake;
   late Map<String, dynamic> store;
   late BackendClient client;
@@ -65,5 +66,42 @@ void main() {
     expect(prefs.effectiveMoonKey, 'server-key');
     prefs.moonKey = 'my-key';
     expect(prefs.effectiveMoonKey, 'my-key');
+  });
+}
+
+void backendFallbackTests() {
+  test('основна адреса не резолвиться — запит іде через запасну й запамʼятовується', () async {
+    final calls = <String>[];
+    final store = <String, dynamic>{};
+    final c = BackendClient(
+      load: () => store,
+      save: (d) => store..clear()..addAll(d),
+      transport: (method, url, headers, body) async {
+        calls.add(url);
+        if (url.contains('cloudfunctions.net')) throw const BackendException('немає зʼєднання з бекендом: Failed host lookup');
+        if (url.endsWith('/session')) return (200, '{"session":"${'a' * 48}","expires":${DateTime.now().millisecondsSinceEpoch + 30 * 24 * 3600 * 1000}}');
+        return (200, '{"moonKey":"k"}');
+      },
+    );
+    expect(await c.refreshMoonKey(), 'k');
+    expect(calls.first, contains('cloudfunctions.net/session'));
+    expect(calls.any((u) => u.startsWith('https://miki-miki-729d9.web.app/api/session')), isTrue);
+    calls.clear();
+    await c.refreshMoonKey();
+    expect(calls.every((u) => u.contains('web.app')), isTrue, reason: 'далі одразу запасна адреса, без повторних невдач');
+  });
+
+  test('відповідь сервера (навіть помилка) запасну адресу не вмикає', () async {
+    var n = 0;
+    final c = BackendClient(
+      load: () => {},
+      save: (_) {},
+      transport: (method, url, headers, body) async {
+        n++;
+        return (500, '{}');
+      },
+    );
+    await expectLater(c.ensureSession(), throwsA(isA<BackendException>()));
+    expect(n, 1);
   });
 }

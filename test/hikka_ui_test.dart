@@ -164,12 +164,14 @@ void main() {
       expect(find.text('Опис'), findsOneWidget);
       expect(find.text('Персонажі'), findsWidgets);
       expect(find.text('Франшиза'), findsOneWidget);
-      expect(find.text('Рекомендації'), findsOneWidget);
+      expect(find.text('Рекомендації'), findsNothing, reason: 'нижня полиця не вантажиться, поки її не наблизили');
       await shot(tester, 'anime_desktop_top');
       await scrollPage(tester, 560);
       expect(tester.takeException(), isNull);
       await shot(tester, 'anime_desktop_scrolled');
       await scrollPage(tester, 1600);
+      await load(tester, rounds: 3);
+      expect(find.text('Рекомендації'), findsOneWidget);
       await shot(tester, 'anime_desktop_bottom');
     });
 
@@ -950,7 +952,7 @@ void main() {
       for (final label in ['Головна', 'Огляд', 'Списки', 'Профіль', 'Налаштування']) {
         expect(find.text(label), findsWidgets, reason: label);
       }
-      expect(find.text('v1.1.0'), findsOneWidget);
+      expect(find.text('v1.1.1'), findsOneWidget);
       expect(find.text('MyPlayer'), findsNothing);
       expect(find.text('YouTube Mobile Fork'), findsNothing);
       await shot(tester, 'homehub_desktop_home');

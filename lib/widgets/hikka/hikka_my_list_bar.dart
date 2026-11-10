@@ -124,52 +124,65 @@ class _HikkaMyListBarState extends State<HikkaMyListBar> {
     }
   }
 
+  /// Коротка кнопка статусу: лише значок, назва й олівець (без кількості серій); оцінка окремою плашкою поруч
   Widget _entryTile(HikkaWatchEntry e) {
     final scale = _scale;
-    final total = widget.anime.episodesTotal;
-    final progress = '${e.episodes}/${total != null && total > 0 ? total : '?'}';
-    return InkWell(
-      onTap: _edit,
-      borderRadius: uiTheme.borderRadius(12 * scale),
-      splashColor: Colors.transparent,
-      highlightColor: uiTheme.touchHighlight,
-      hoverColor: uiTheme.hoverOverlay,
-      child: Container(
-        constraints: BoxConstraints(minHeight: AppPlatform.isMobile ? AppPlatform.touchTarget : 44 * scale),
-        padding: EdgeInsets.symmetric(horizontal: 12 * scale, vertical: 8 * scale),
-        decoration: BoxDecoration(
-          color: hikkaStatusColor(e.status).withValues(alpha: 0.14),
+    final color = hikkaStatusColor(e.status);
+    Widget tappable({required Widget child, required Color fill, required Color line}) => InkWell(
+          onTap: _edit,
           borderRadius: uiTheme.borderRadius(12 * scale),
-          border: Border.all(color: hikkaStatusColor(e.status).withValues(alpha: 0.55)),
-        ),
-        child: Row(
-          children: [
-            Icon(hikkaStatusIcon(e.status), color: hikkaStatusColor(e.status), size: 22 * scale, weight: 300, fill: 1),
-            SizedBox(width: 10 * scale),
-            Expanded(
-              child: Wrap(
-                crossAxisAlignment: WrapCrossAlignment.center,
-                spacing: 10 * scale,
-                runSpacing: 2 * scale,
-                children: [
-                  Text(e.status.label, style: hikkaStyle(13.5 * scale, weight: FontWeight.bold)),
-                  Text('серій $progress', style: hikkaStyle(12 * scale, color: uiTheme.textMuted)),
-                  if (e.score > 0)
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Symbols.star_rounded, color: const Color(0xFFFFC23D), size: 16 * scale, fill: 1),
-                        SizedBox(width: 3 * scale),
-                        Text('${e.score}', style: hikkaStyle(12.5 * scale, weight: FontWeight.bold)),
-                      ],
-                    ),
-                ],
-              ),
+          splashColor: Colors.transparent,
+          highlightColor: uiTheme.touchHighlight,
+          hoverColor: uiTheme.hoverOverlay,
+          child: Container(
+            constraints: BoxConstraints(minHeight: AppPlatform.isMobile ? AppPlatform.touchTarget : 44 * scale),
+            padding: EdgeInsets.symmetric(horizontal: 12 * scale, vertical: 8 * scale),
+            decoration: BoxDecoration(
+              color: fill,
+              borderRadius: uiTheme.borderRadius(12 * scale),
+              border: Border.all(color: line),
             ),
-            Icon(Symbols.edit_rounded, color: uiTheme.textDarkMuted, size: 18 * scale, weight: 300),
-          ],
+            child: child,
+          ),
+        );
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Flexible(
+          child: tappable(
+            fill: color.withValues(alpha: 0.14),
+            line: color.withValues(alpha: 0.55),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(hikkaStatusIcon(e.status), color: color, size: 20 * scale, weight: 300, fill: 1),
+                SizedBox(width: 8 * scale),
+                Flexible(
+                  child: Text(e.status.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: hikkaStyle(13.5 * scale, weight: FontWeight.bold)),
+                ),
+                SizedBox(width: 10 * scale),
+                Icon(Symbols.edit_rounded, color: uiTheme.textDarkMuted, size: 16 * scale, weight: 300),
+              ],
+            ),
+          ),
         ),
-      ),
+        if (e.score > 0) ...[
+          SizedBox(width: 8 * scale),
+          tappable(
+            fill: const Color(0xFFFFC23D).withValues(alpha: 0.12),
+            line: const Color(0xFFFFC23D).withValues(alpha: 0.5),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Symbols.star_rounded, color: const Color(0xFFFFC23D), size: 18 * scale, fill: 1),
+                SizedBox(width: 4 * scale),
+                Text('${e.score}', style: hikkaStyle(13.5 * scale, weight: FontWeight.bold)),
+              ],
+            ),
+          ),
+        ],
+      ],
     );
   }
 

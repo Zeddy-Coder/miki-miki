@@ -11,6 +11,7 @@ import 'services/app_diagnostics.dart';
 import 'services/app_log.dart';
 import 'services/backend_client.dart';
 import 'services/app_updater.dart';
+import 'services/deep_links.dart';
 import 'services/hikka_api.dart';
 import 'services/hikka_disk_cache.dart';
 import 'services/hikka_lists.dart';
@@ -59,6 +60,10 @@ void main() async {
     // Телефон: обидві орієнтації (їх визначає датчик і системний автоповорот); кнопка повороту в плеєрі
     // може зафіксувати одну. Системні панелі показує головна, ховає — лише плеєр (див. контролер).
     SystemControls.init();
+    // Застосунок запущено за посиланням miki://open/…: виконуємо його, коли інтерфейс уже піднявся
+    unawaited(SystemControls.initialLink().then((l) {
+      if (l != null) Future<void>.delayed(const Duration(milliseconds: 600), () => DeepLinks.handle(l));
+    }));
     await SystemChrome.setPreferredOrientations(const <DeviceOrientation>[]);
     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   }

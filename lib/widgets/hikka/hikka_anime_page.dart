@@ -570,7 +570,7 @@ class _HikkaAnimePageState extends State<HikkaAnimePage> {
     bool visible(HikkaAnime x) => adult || !x.isAdult;
 
     return [
-      HikkaShelfAsync<HikkaCharacterRole>(
+      HikkaLazy(height: HikkaShelfMetrics.height(context, scale) + 70 * scale, builder: (_) => HikkaShelfAsync<HikkaCharacterRole>(
         scale: scale,
         pad: pad,
         title: 'Персонажі',
@@ -582,9 +582,9 @@ class _HikkaAnimePageState extends State<HikkaAnimePage> {
           scale: scale,
           caption: r.main ? 'Головний' : 'Другорядний',
         ),
-      ),
+      )),
       if (a.hasFranchise)
-        HikkaShelfAsync<FranchiseDirect>(
+        HikkaLazy(height: HikkaShelfMetrics.height(context, scale) + 70 * scale, builder: (_) => HikkaShelfAsync<FranchiseDirect>(
           scale: scale,
           pad: pad,
           title: 'Франшиза',
@@ -603,8 +603,11 @@ class _HikkaAnimePageState extends State<HikkaAnimePage> {
           },
           onMore: () => HikkaNav.instance.openFranchise(a.slug, seed: a),
           itemBuilder: (context, d) => HikkaAnimeCard(anime: d.node.anime, scale: scale, caption: d.label),
-        ),
-      HikkaShelfAsync<HikkaAnime>(
+        )),
+      HikkaLazy(
+        height: HikkaShelfMetrics.height(context, scale) + 70 * scale,
+        builder: (_) =>
+        HikkaShelfAsync<HikkaAnime>(
         scale: scale,
         pad: pad,
         title: 'Рекомендації',
@@ -612,8 +615,8 @@ class _HikkaAnimePageState extends State<HikkaAnimePage> {
         token: id,
         load: () async => (await api.recommendations(a.slug, size: 20, allowAdult: adult)).items,
         itemBuilder: (context, x) => HikkaAnimeCard(anime: x, scale: scale),
-      ),
-      _staff(a, pad),
+      )),
+      HikkaLazy(height: 150 * scale, builder: (_) => _staff(a, pad)),
       _links(a, pad),
       _videos(a, pad),
       _ost(a, pad),

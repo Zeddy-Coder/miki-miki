@@ -330,3 +330,61 @@ class _HikkaCollapsingHeaderState extends State<HikkaCollapsingHeader> with Sing
     );
   }
 }
+
+/// Будує [builder] (а отже й запускає його запити) лише тоді, коли місце секції наближається до видимої
+/// частини прокрутки. До того там порожня ділянка висотою [height]. Раз змонтована, секція лишається.
+/// Для довгих сторінок: нижні полиці не вантажаться, поки їх не прокрутили.
+class HikkaLazy extends StatefulWidget {
+  final double height;
+
+  /// За скільки пікселів до краю екрана починати завантаження
+  final double lead;
+  final WidgetBuilder builder;
+
+  const HikkaLazy({super.key, required this.height, required this.builder, this.lead = 700});
+
+  @override
+  State<HikkaLazy> createState() => _HikkaLazyState();
+}
+
+class _HikkaLazyState extends State<HikkaLazy> {
+  bool _shown = false;
+  ScrollPosition? _position;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_shown) return;
+    final next = Scrollable.maybeOf(context)?.position;
+    if (next != _position) {
+      _position?.removeListener(_check);
+      _position = next;
+      next?.addListener(_check);
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) => _check());
+  }
+
+  @override
+  void dispose() {
+    _position?.removeListener(_check);
+    super.dispose();
+  }
+
+  void _check() {
+    if (_shown || !mounted) return;
+    final box = context.findRenderObject();
+    if (box is! RenderBox || !box.attached || !box.hasSize) return;
+    final top = box.localToGlobal(Offset.zero).dy;
+    final screen = MediaQuery.sizeOf(context).height;
+    if (top < screen + widget.lead) {
+      _position?.removeListener(_check);
+      setState(() => _shown = true);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_shown) return widget.builder(context);
+    return SizedBox(height: widget.height);
+  }
+}

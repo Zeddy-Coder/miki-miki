@@ -380,6 +380,18 @@ void main() {
   });
 
   group('вхід', () {
+    testWidgets('телефон: вікно входу має «Копіювати посилання» і не переповнюється', (tester) async {
+      AppPlatform.debugMobile = true;
+      await openTab(tester, MainTab.lists, size: kNarrow);
+      await tester.tap(find.text('Увійти через Hikka'));
+      await load(tester, rounds: 6);
+      expect(find.text('Вхід у Hikka'), findsOneWidget);
+      expect(find.text('Відкрити знову'), findsOneWidget);
+      expect(find.text('Копіювати посилання'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await shot(tester, 'login_dialog_phone');
+    });
+
     testWidgets('вікно входу: сторінка дозволу відкривається, вставлена адреса завершує вхід і відкриває списки', (tester) async {
       await openTab(tester, MainTab.lists);
       expect(find.text('Гість'), findsOneWidget);
@@ -497,7 +509,7 @@ void main() {
 
       expect(account.mine[frieren]?['status'], 'watching');
       expect(find.text('Дивлюсь'), findsOneWidget, reason: 'тепер на сторінці плитка зі статусом');
-      expect(find.text('серій 0/28'), findsOneWidget);
+      expect(find.textContaining('серій'), findsNothing, reason: 'кількість серій на кнопці статусу не показуємо');
       await shot(tester, 'anime_my_list_watching_desktop');
 
       // Серце
@@ -520,7 +532,7 @@ void main() {
       expect(account.mine[frieren]?['episodes'], 28);
       expect(account.mine[frieren]?['score'], 9);
       expect(find.text('Переглянуто'), findsOneWidget);
-      expect(find.text('серій 28/28'), findsOneWidget);
+      expect(find.textContaining('серій'), findsNothing);
 
       // Прибрати
       await tester.tap(find.text('Переглянуто'));
@@ -536,8 +548,8 @@ void main() {
       signIn();
       await openAnime(tester);
       expect(find.text('Переглянуто'), findsOneWidget);
-      expect(find.text('серій 28/28'), findsOneWidget);
-      expect(find.text('9'), findsOneWidget, reason: 'оцінка біля зірки');
+      expect(find.textContaining('серій'), findsNothing);
+      expect(find.text('9'), findsOneWidget, reason: 'оцінка окремою плашкою зі зіркою');
       expect(find.text('Додати в список'), findsNothing);
     });
 

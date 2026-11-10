@@ -1,9 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../../constants/app_identity.dart';
+import '../../utils/platform_info.dart';
 import '../../services/hikka_auth.dart';
 import '../../services/system_controls.dart';
 import '../../services/ui_theme_service.dart';
@@ -129,6 +131,7 @@ class _HikkaLoginDialogState extends State<HikkaLoginDialog> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (exchanging) _status('Завершую вхід…'),
+              if (exchanging) _hint('Якщо мережа блокує службу входу, це може тривати до хвилини: застосунок обходить блокування сам.'),
               if (waiting) ...[
                 _status('Чекаю на підтвердження в браузері…'),
                 _hint(
@@ -152,6 +155,26 @@ class _HikkaLoginDialogState extends State<HikkaLoginDialog> {
                 icon: Symbols.open_in_new_rounded,
                 label: 'Відкрити знову',
                 onTap: () => unawaited(SystemControls.openUrl(_auth.authorizeUrl)),
+              ),
+            // Браузер за замовчуванням може бути не тим, де людина ввійшла на hikka.io: вибір програми або посилання вручну
+            if (waiting && AppPlatform.isAndroid)
+              AppSecondaryButton(
+                scale: scale,
+                expand: false,
+                icon: Symbols.public_rounded,
+                label: 'В іншому браузері',
+                onTap: () => unawaited(SystemControls.openUrl(_auth.authorizeUrl, chooser: true)),
+              ),
+            if (waiting)
+              AppSecondaryButton(
+                scale: scale,
+                expand: false,
+                icon: Symbols.content_copy_rounded,
+                label: 'Копіювати посилання',
+                onTap: () {
+                  Clipboard.setData(ClipboardData(text: _auth.authorizeUrl));
+                  ScaffoldMessenger.maybeOf(context)?.showSnackBar(const SnackBar(content: Text('Посилання скопійовано')));
+                },
               ),
             if (failed)
               AppAccentButton(scale: scale, solid: true, icon: Symbols.refresh_rounded, label: 'Спробувати ще раз', onTap: () => unawaited(_auth.startLogin())),

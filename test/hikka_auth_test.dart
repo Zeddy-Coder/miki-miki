@@ -62,6 +62,7 @@ void main() {
   HikkaAuth makeAuth({
     Future<HikkaLoopback?> Function()? loopback,
     Duration timeout = const Duration(minutes: 5),
+    Duration exchangeTimeout = const Duration(seconds: 30),
     Map<String, dynamic>? initial,
   }) {
     if (initial != null) store.addAll(initial);
@@ -75,6 +76,7 @@ void main() {
       },
       loopbackFactory: loopback ?? () async => loop = await HikkaLoopback.start(port: 0),
       loginTimeout: timeout,
+      exchangeTimeout: exchangeTimeout,
     );
   }
 
@@ -311,5 +313,27 @@ void main() {
       expect(store['sync'], false);
       expect(makeAuth().syncProgress, isFalse);
     });
+  });
+
+  test('обмін коду не висить вічно: за таймаутом помилка й можна повторити', () async {
+    backend.onExchange = (ref) => Completer<(int, Map<String, dynamic>)>().future; // служба мовчить
+    final auth = makeAuth(exchangeTimeout: const Duration(milliseconds: 150));
+    final login = auth.startLogin();
+    await until(() => auth.loopbackReady);
+    expect(auth.submit('00000000-0000-4000-8000-000000000001'), isTrue);
+    await login;
+    expect(auth.phase, HikkaAuthPhase.signedOut);
+    expect(auth.error, contains('довго не відповідає'));
+    expect(auth.token, isEmpty);
+  });
+
+  test('сторінка після входу веде назад у застосунок (miki://open)', () async {
+    final auth = makeAuth();
+    final login = auth.startLogin();
+    await until(() => loop != null);
+    final res = await rawGet(loop!.port, '/auth/confirm?reference=00000000-0000-4000-8000-000000000002');
+    expect(res, contains('miki://open'));
+    auth.cancelLogin();
+    await login;
   });
 }

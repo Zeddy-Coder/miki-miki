@@ -44,6 +44,7 @@ class HikkaAuth extends ChangeNotifier {
   final Future<bool> Function(String url) _openUrl;
   final Future<HikkaLoopback?> Function() _startLoopback;
   final Duration loginTimeout;
+  final Duration exchangeTimeout;
 
   late final Map<String, dynamic> _data = Map<String, dynamic>.of(_load());
   HikkaAuthPhase _phase = HikkaAuthPhase.signedOut;
@@ -53,6 +54,7 @@ class HikkaAuth extends ChangeNotifier {
   HikkaLoopback? _loopback;
   bool _cancelled = false;
   int _attempt = 0;
+  int _exchangeSeq = 0;
 
   HikkaAuth({
     HikkaApi? api,
@@ -61,6 +63,7 @@ class HikkaAuth extends ChangeNotifier {
     Future<bool> Function(String url)? urlOpener,
     Future<HikkaLoopback?> Function()? loopbackFactory,
     this.loginTimeout = const Duration(minutes: 5),
+    this.exchangeTimeout = const Duration(seconds: 75),
   })  : _apiOverride = api,
         _load = load ?? (() => StorageService.getSection(section)),
         _save = save ?? ((d) => StorageService.saveSection(section, d)),
@@ -220,20 +223,35 @@ class HikkaAuth extends ChangeNotifier {
   Future<void> _finish(String ref) async {
     _setPhase(HikkaAuthPhase.exchanging);
     try {
-      final t = customSecret.isNotEmpty ? await _api.exchangeToken(ref, customSecret) : await _viaBackend(ref);
-      _data['token'] = t.secret;
-      _data['expires'] = t.expiration;
-      final me = await _api.me();
-      _data['me'] = me.toJson();
-      _error = null;
-      _commit();
-      _phase = HikkaAuthPhase.signedIn;
-      notifyListeners();
+      // Обмін коду не має висіти вічно: якщо мережа чи служба входу мовчать, людина бачить помилку й може повторити
+      await _exchange(ref).timeout(
+        exchangeTimeout,
+        onTimeout: () => throw const HikkaException(HikkaErrorKind.timeout, 'Служба входу не відповіла вчасно. Перевірте мережу й спробуйте ще раз.'),
+      );
     } on HikkaException catch (e) {
       AppLog.w('hikka', 'вхід: не вдалося завершити: $e');
       _dropSession();
       _fail(_loginMessage(e));
     }
+  }
+
+  Future<void> _exchange(String ref) async {
+    final seq = ++_exchangeSeq;
+    final t = customSecret.isNotEmpty ? await _api.exchangeToken(ref, customSecret) : await _viaBackend(ref);
+    if (seq != _exchangeSeq || _phase != HikkaAuthPhase.exchanging) return; // обмін уже відкинуто (таймаут)
+    _data['token'] = t.secret;
+    _data['expires'] = t.expiration;
+    final HikkaMe me;
+    try {
+      me = await _api.me();
+    } on HikkaException catch (e) {
+      throw HikkaException(e.kind, 'Профіль Hikka: ${e.detail}', status: e.status, code: e.code);
+    }
+    _data['me'] = me.toJson();
+    _error = null;
+    _commit();
+    _phase = HikkaAuthPhase.signedIn;
+    notifyListeners();
   }
 
   /// Вбудований клієнт: код міняє бекенд, секрет клієнта до застосунку не потрапляє
@@ -248,7 +266,7 @@ class HikkaAuth extends ChangeNotifier {
       final detail = j['code'] ?? j['detail'];
       throw HikkaException(HikkaErrorKind.badResponse, 'Hikka відхилила вхід', status: status, code: detail is String ? detail : null);
     } on BackendException catch (e) {
-      throw HikkaException(HikkaErrorKind.network, 'Не вдалося зв’язатися зі службою входу. Спробуйте пізніше. (${e.message})');
+      throw HikkaException(HikkaErrorKind.network, 'Служба входу (бекенд): ${e.message}');
     }
   }
 
@@ -258,6 +276,11 @@ class HikkaAuth extends ChangeNotifier {
     }
     if (e.kind == HikkaErrorKind.badResponse || e.kind == HikkaErrorKind.forbidden) {
       return 'Hikka відхилила вхід (${e.code ?? e.status ?? 'помилка'}). Перевірте клієнта в налаштуваннях.';
+    }
+    if (e.kind == HikkaErrorKind.network && e.detail.isNotEmpty) {
+      // Без причини «немає інтернету» нічого не пояснює: показуємо, куди саме не вдалося достукатись
+      final d = e.detail.length > 140 ? '${e.detail.substring(0, 140)}…' : e.detail;
+      return '${e.message}\n$d';
     }
     return e.message;
   }
@@ -399,6 +422,12 @@ class HikkaLoopback {
     }
   }
 
+  /// Кнопка й автоматичне повернення в застосунок (на телефоні система відкриє його за схемою miki://)
+  static const String _backToApp =
+      '<p style="margin-top:18px"><a href="miki://open" style="display:inline-block;padding:11px 20px;border-radius:10px;'
+      'background:#e8636a;color:#fff;text-decoration:none;font-weight:bold">Повернутись у застосунок</a></p>'
+      '<script>if(/Android/i.test(navigator.userAgent)){setTimeout(function(){location.href="miki://open"},700)}</script>';
+
   static String _page({required bool ok}) {
     final title = ok ? 'Готово ✓' : 'Не вдалося завершити вхід';
     final text = ok
@@ -409,7 +438,7 @@ class HikkaLoopback {
         '<style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0f0f14;'
         'color:#f2f2f5;font-family:Arial,sans-serif;text-align:center}.c{max-width:340px;padding:24px}'
         'h1{font-size:21px;margin:0 0 10px}p{margin:0;color:#a9a9b6;line-height:1.5;font-size:14px}</style></head>'
-        '<body><div class="c"><h1>$title</h1><p>$text</p></div></body></html>';
+        '<body><div class="c"><h1>$title</h1><p>$text</p>${ok ? _backToApp : ''}</div></body></html>';
   }
 
   Future<void> close() async {

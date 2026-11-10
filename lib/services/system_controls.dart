@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../utils/platform_info.dart';
+import 'deep_links.dart';
 
 /// Можливості Android, яких немає у Flutter «з коробки»: картинка в картинці (PiP),
 /// яскравість екрана й системна гучність. Реалізація — у `MainActivity.kt`, канал `miki_miki/system`.
@@ -30,6 +31,7 @@ class SystemControls {
     _bound = true;
     _channel.setMethodCallHandler((call) async {
       if (call.method == 'pipChanged') inPip.value = call.arguments == true;
+      if (call.method == 'deepLink' && call.arguments is String) DeepLinks.handle(call.arguments as String);
       return null;
     });
   }
@@ -83,10 +85,10 @@ class SystemControls {
   }
 
   /// Відкриває посилання http(s) у браузері за замовчуванням. false — адреса недійсна або браузера немає.
-  static Future<bool> openUrl(String url) async {
+  static Future<bool> openUrl(String url, {bool chooser = false}) async {
     final uri = Uri.tryParse(url.trim());
     if (uri == null || !(uri.scheme == 'http' || uri.scheme == 'https') || uri.host.isEmpty) return false;
-    if (_active) return (await _call<bool>('openUrl', {'url': uri.toString()})) ?? false;
+    if (_active) return (await _call<bool>('openUrl', {'url': uri.toString(), 'chooser': chooser})) ?? false;
     try {
       // Адреса передається окремим аргументом, без оболонки: `&` та пробіли в ній нічого не ламають
       if (Platform.isWindows) {
@@ -104,6 +106,9 @@ class SystemControls {
       return false;
     }
   }
+
+  /// Посилання `miki://…`, з яким запущено застосунок (лише Android; віддається один раз)
+  static Future<String?> initialLink() => _call<String>('initialLink');
 
   /// Системна гучність (потік «медіа»), 0..1
   static Future<double?> getVolume() => _call<double>('getVolume');

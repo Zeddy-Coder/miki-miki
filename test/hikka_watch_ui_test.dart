@@ -327,7 +327,7 @@ void main() {
 
       expect(find.text('TuTaZaSho'), findsWidgets);
       expect(find.textContaining('4 з 5 сер.'), findsWidgets);
-      expect(find.textContaining('Озвучено 4 з 5 вийшлих серій, решта зʼявиться пізніше.'), findsOneWidget);
+      expect(find.textContaining('Озвучено 4 з 5 вийшлих серій'), findsNothing, reason: 'дисклеймер прибрано: кількість видно в рядку озвучки');
       await openEpisodes(tester);
       expect(find.text('5'), findsNothing); // п’ятої серії в цьому варіанті ще нема
       expect(find.text('4'), findsOneWidget);
@@ -556,7 +556,7 @@ void main() {
 
       expect(find.text('TuTaZaSho'), findsWidgets);
       expect(colorContaining(tester, '7 з 12 сер.'), amber);
-      expect(find.textContaining('Не всі серії: тут 7 з 12'), findsOneWidget);
+      expect(find.textContaining('Не всі серії: тут 7 з 12'), findsNothing, reason: 'плашку прибрано: застереження вже є в рядку озвучки');
       // Це не збій нумерації: хоч щось, а синхронізувати можна (рівень incomplete, не mismatch)
       expect(find.textContaining('не синхронізуватимуться'), findsNothing);
     });
