@@ -10,6 +10,7 @@ import 'screens/player_screen.dart';
 import 'services/app_diagnostics.dart';
 import 'services/app_log.dart';
 import 'services/backend_client.dart';
+import 'services/app_updater.dart';
 import 'services/hikka_api.dart';
 import 'services/hikka_disk_cache.dart';
 import 'services/hikka_lists.dart';
@@ -39,6 +40,7 @@ void main() async {
   uiTheme.init(); // Ініціалізація глобальної теми
   HikkaApi.instance.disk = HikkaDiskCache(); // Відповіді Hikka на диску: старт зі збереженого, оновлення у фоні
   unawaited(HikkaMyList.instance.loadIndex(delay: const Duration(seconds: 4))); // Статуси зі списків Hikka для позначок на постерах (якщо ввійшли)
+  unawaited(Future<void>.delayed(const Duration(seconds: 8), () => AppUpdater.instance.check(auto: true))); // Тиха перевірка нових версій на GitHub (раз на 12 год)
   unawaited(BackendClient.instance.refreshMoonKey()); // Ключ Moon із бекенду (у фоні, без очікування)
 
   if (AppPlatform.isDesktop) {

@@ -6,6 +6,8 @@ import 'package:file_picker/file_picker.dart';
 import '../constants/app_constants.dart';
 import '../constants/app_identity.dart';
 import '../services/app_diagnostics.dart';
+import '../services/app_updater.dart';
+import '../services/system_controls.dart';
 import '../services/anime4k_service.dart';
 import '../services/app_log.dart';
 import '../services/log_export.dart';
@@ -1579,6 +1581,8 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
                     ],
                   ),
                 ),
+                SizedBox(height: 14 * scale),
+                _buildUpdateBlock(scale),
               ],
             ),
           ),
@@ -1587,6 +1591,87 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
       default:
         return const SizedBox.shrink();
     }
+  }
+
+  // ───────── Оновлення ─────────
+
+  Widget _buildUpdateBlock(double scale) {
+    return ValueListenableBuilder<UpdateState>(
+      valueListenable: AppUpdater.instance.state,
+      builder: (context, st, _) {
+        final checking = st is UpdateChecking;
+        final String title;
+        final String? sub;
+        switch (st) {
+          case UpdateAvailable(:final info):
+            title = 'Доступна версія ${info.version}';
+            final size = info.size > 0 ? ' · ${(info.size / 1048576).toStringAsFixed(1)} МБ' : '';
+            sub = info.notes.isEmpty ? 'Файл: ${info.assetName.isEmpty ? 'сторінка релізу' : info.assetName}$size' : info.notes;
+          case UpdateUpToDate():
+            title = 'У вас остання версія';
+            sub = null;
+          case UpdateChecking():
+            title = 'Перевіряю…';
+            sub = null;
+          case UpdateFailed(:final message):
+            title = message;
+            sub = null;
+          case UpdateIdle():
+            title = 'Оновлення';
+            sub = 'Нові версії беруться з GitHub (${AppUpdater.repo})';
+        }
+        return Container(
+          width: double.infinity,
+          padding: EdgeInsets.all(14 * scale),
+          decoration: BoxDecoration(
+            color: uiTheme.bgSurface,
+            borderRadius: uiTheme.borderRadius(12 * scale),
+            border: Border.all(color: uiTheme.borderSubtle),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: TextStyle(fontFamily: 'Arial', color: uiTheme.textPrimary, fontSize: 13.5 * scale, fontWeight: FontWeight.bold),
+              ),
+              if (sub != null) ...[
+                SizedBox(height: 4 * scale),
+                Text(
+                  sub,
+                  maxLines: 6,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontFamily: 'Arial', color: uiTheme.textMuted, fontSize: 12 * scale, height: 1.4),
+                ),
+              ],
+              SizedBox(height: 12 * scale),
+              Wrap(
+                spacing: 10 * scale,
+                runSpacing: 10 * scale,
+                children: [
+                  if (st is UpdateAvailable)
+                    AppAccentButton(
+                      scale: scale,
+                      label: 'Завантажити',
+                      icon: Symbols.download_rounded,
+                      onTap: () => SystemControls.openUrl(st.info.target),
+                    ),
+                  AppSecondaryButton(
+                    scale: scale,
+                    label: checking ? 'Перевіряю…' : 'Перевірити оновлення',
+                    icon: Symbols.refresh_rounded,
+                    expand: false,
+                    onTap: () {
+                      if (!checking) AppUpdater.instance.check();
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   // ───────── Anime4K ─────────

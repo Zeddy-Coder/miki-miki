@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../../constants/app_identity.dart';
+import '../../services/app_updater.dart';
 import '../../services/hikka_nav.dart';
 import '../../services/storage_service.dart';
 import '../../services/ui_theme_service.dart';
@@ -120,12 +121,17 @@ class _HikkaProfilePageState extends State<HikkaProfilePage> {
                                 subtitle: 'Відкрити файл чи посилання, історія й плейлисти',
                                 onTap: HikkaNav.instance.openLocalLibrary,
                               ),
-                            _MenuRow(
-                              scale: scale,
-                              icon: Symbols.info_rounded,
-                              title: 'Про ${AppIdentity.name}',
-                              subtitle: 'Версія ${AppIdentity.version}',
-                              onTap: () => widget.onOpenSettings(tab: AppSettingsDialog.tabAbout),
+                            ValueListenableBuilder<UpdateState>(
+                              valueListenable: AppUpdater.instance.state,
+                              builder: (context, up, _) => _MenuRow(
+                                scale: scale,
+                                icon: Symbols.info_rounded,
+                                title: 'Про ${AppIdentity.name}',
+                                subtitle: up is UpdateAvailable
+                                    ? 'Версія ${AppIdentity.version} · доступна ${up.info.version}'
+                                    : 'Версія ${AppIdentity.version}',
+                                onTap: () => widget.onOpenSettings(tab: AppSettingsDialog.tabAbout),
+                              ),
                             ),
                           ]),
                         ),
