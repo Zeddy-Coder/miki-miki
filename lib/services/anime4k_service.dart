@@ -9,14 +9,19 @@ typedef MpvCommand = Future<void> Function(List<String> args);
 
 /// Якість ланцюжка шейдерів Anime4K.
 enum Anime4kQuality {
-  fast('Fast', 'Швидкий', 'Для слабших відеокарт: GTX 980, GTX 1060, RX 570 та подібних'),
-  hq('HQ', 'Висока якість', 'Для потужних відеокарт: GTX 1080, RTX 2070, RTX 3060, RX 5700 XT та вище');
+  fast('Fast', 'Швидкий', 'Для слабших відеокарт: GTX 980, GTX 1060, RX 570 та подібних', 'Для слабших пристроїв: менше навантаження й нагрів'),
+  hq('HQ', 'Висока якість', 'Для потужних відеокарт: GTX 1080, RTX 2070, RTX 3060, RX 5700 XT та вище', 'Для потужних пристроїв: краща картинка, більше навантаження');
 
-  const Anime4kQuality(this.label, this.title, this.gpuHint);
+  const Anime4kQuality(this.label, this.title, this.gpuHint, this.deviceHint);
 
   final String label;
   final String title;
+
+  /// Підказка для ПК (відеокарти)
   final String gpuHint;
+
+  /// Підказка для телефона (без назв відеокарт)
+  final String deviceHint;
 
   static Anime4kQuality parse(String? raw) =>
       Anime4kQuality.values.firstWhere((q) => q.name == raw, orElse: () => Anime4kQuality.fast);

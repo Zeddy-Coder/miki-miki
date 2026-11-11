@@ -1,3 +1,6 @@
+import '../services/hikka_nav.dart';
+import '../services/app_layers.dart';
+import '../services/video_zoom.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
@@ -50,6 +53,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   final GlobalKey _speedKey = GlobalKey();
   final GlobalKey _volumeKey = GlobalKey();
   final GlobalKey _playerAreaKey = GlobalKey();
+
+  /// Збільшення відео щипком (телефон)
+  final VideoZoomController _zoom = VideoZoomController();
   Size get _playerSize {
     final box = _playerAreaKey.currentContext?.findRenderObject();
     return (box is RenderBox && box.hasSize) ? box.size : Size.zero;
@@ -120,6 +126,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     _keyboardFocusNode.dispose();
     _drawerScrollController.dispose();
     _logScrollController.dispose();
+    _zoom.dispose();
     state.dispose();
     super.dispose();
   }
@@ -237,16 +244,24 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
               onOpenMultipleFiles: state.openMultipleFiles,
               onOpenQueue: (items, i) => state.openQueue(items, startIndex: i),
               onOpenSettings: ({int? tab}) => AppSettingsDialog.show(context, scale, state, initialTab: tab ?? 0),
-              settingsBuilder: mobile ? (ctx) => AppSettingsDialog(scale: scale, controller: state, embedded: true) : null,
+              settingsBuilder: mobile ? (ctx) => AppSettingsDialog(scale: scale, controller: state, embedded: true, initialTab: HikkaNav.instance.settingsTab) : null,
             ),
           ),
           Positioned(
             left: compact ? 12 + pad.left : null,
             right: compact ? 12 + pad.right : 24 * scale + pad.right,
             bottom: bottom,
-            child: AppPresence(
-              visible: state.isCollapsed,
-              slide: const Offset(0, 0.3),
+            child: ValueListenableBuilder<int>(
+              valueListenable: AppLayers.blockers,
+              // Шторка чи сторінка налаштувань відкрита — мініплеєр стоїть під нею, а не поверх кнопок
+              builder: (context, blockers, child) => IgnorePointer(
+                ignoring: blockers > 0,
+                child: AppPresence(
+                  visible: state.isCollapsed && blockers == 0,
+                  slide: const Offset(0, 0.3),
+                  child: child!,
+                ),
+              ),
               child: state.isCollapsed
                   ? CollapsedPlayer(
                       scale: scale,
@@ -460,6 +475,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       key: const ValueKey('player'),
       child: VideoViewport(
         scale: scale,
+        zoom: _zoom,
         controller: state.videoController,
         isSpeeding: state.isSpeeding,
         onSpeedStart: () {
@@ -490,6 +506,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                 MobileGestureLayer(
                   player: state.player,
                   osd: state.showOsdMessage,
+                  zoom: _zoom,
                   enabled: !panelOpen && !state.isSpeeding,
                 ),
                 SkipButton(
@@ -525,6 +542,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                   isEpisodesOpen: state.activeSidePanel == SidePanelType.episodes,
                   seekStep: StorageService.getSeekStep(),
                   seekButtons: StorageService.getMobileSeekButtons(),
+                  onSeekDrag: state.setSeekDragging,
                   onBack: state.collapsePlayer,
                   onInfo: () => state.toggleSidePanel(SidePanelType.info),
                   onPip: state.enterPip,

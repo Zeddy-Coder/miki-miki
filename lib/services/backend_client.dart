@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:flutter/foundation.dart' show ValueNotifier, visibleForTesting;
 
 import 'app_log.dart';
 import 'doh_resolver.dart';
@@ -182,16 +182,79 @@ class BackendClient {
     return (status, _json(text));
   }
 
+  // ── Банери ─────────────────────────────────────────────────────
+
+  /// Банери тайтлів від бекенду (він кешує адреси CDN TMDB / AniList): MAL-id → (адреса, колір); `null` у значенні —
+  /// банера немає. Сам `null` замість мапи — бекенд недоступний (тоді застосунок шукає банери сам).
+  Future<Map<int, (String?, int?)>?> banners(List<Map<String, Object?>> items) async {
+    if (items.isEmpty) return const {};
+    try {
+      final out = <int, (String?, int?)>{};
+      for (var i = 0; i < items.length; i += 30) {
+        final chunk = items.sublist(i, i + 30 > items.length ? items.length : i + 30);
+        final (status, text) = await _authed('POST', 'banners', body: jsonEncode({'items': chunk}));
+        final map = _json(text)['banners'];
+        if (status != 200 || map is! Map) {
+          AppLog.w('бекенд', 'банери: відповідь $status');
+          return null;
+        }
+        map.forEach((k, v) {
+          final id = int.tryParse('$k');
+          if (id == null) return;
+          if (v is Map && v['url'] is String) {
+            out[id] = (v['url'] as String, (v['color'] as num?)?.toInt());
+          } else {
+            out[id] = (null, null);
+          }
+        });
+      }
+      return out;
+    } on BackendException catch (e) {
+      AppLog.w('бекенд', 'банери: ${e.message}');
+      return null;
+    } catch (e) {
+      AppLog.w('бекенд', 'банери: ${e.runtimeType}: $e');
+      return null;
+    }
+  }
+
   // ── Moon ───────────────────────────────────────────────────────
 
   /// Ключ Moon, збережений після останнього успішного завантаження (порожній, якщо ще не завантажувався)
   String get cachedMoonKey => (_data['moon_key'] as String?) ?? '';
 
+  /// Збільшується, коли з бекенду прийшов новий ключ TMDB: екрани, що вже завантажили дані без нього, перезавантажуються
+  static final ValueNotifier<int> keyEpoch = ValueNotifier<int>(0);
+
+  /// Ключ TheMovieDB, що діє зараз: власний із налаштувань, а якщо його немає — з бекенду
+  static String effectiveTmdbKey() {
+    final own = StorageService.getTmdbKey().trim();
+    return own.isNotEmpty ? own : BackendClient.instance.cachedTmdbKey;
+  }
+
+  /// Ключ TheMovieDB з бекенду (постери й банери); власний ключ із налаштувань має перевагу
+  String get cachedTmdbKey => (_data['tmdb_key'] as String?) ?? '';
+
   /// Завантажує ключ Moon із бекенду й запамʼятовує. Помилка не фатальна: далі діє збережений ключ (а без нього Moon розбирає сторінку плеєра).
   Future<String> refreshMoonKey() async {
     try {
       final (status, text) = await _authed('GET', 'config');
-      final key = _json(text)['moonKey'];
+      final body = _json(text);
+      final key = body['moonKey'];
+      final tmdb = body['tmdbKey'];
+      if (status == 200) {
+        if (tmdb is String && tmdb.isNotEmpty) {
+          if (tmdb != cachedTmdbKey) {
+            final hadKey = cachedTmdbKey.isNotEmpty;
+            _data['tmdb_key'] = tmdb;
+            _save(_data);
+            if (!hadKey) keyEpoch.value++;
+          }
+          AppLog.i('бекенд', 'ключ TMDB отримано (${tmdb.length} симв.)');
+        } else {
+          AppLog.w('бекенд', 'бекенд не віддав ключ TMDB — секрет TMDB_KEY не задано чи функцію config не розгорнуто');
+        }
+      }
       if (status == 200 && key is String && key.isNotEmpty) {
         if (key != cachedMoonKey) {
           _data['moon_key'] = key;

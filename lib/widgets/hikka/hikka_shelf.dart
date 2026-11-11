@@ -144,7 +144,7 @@ class HikkaShelfSkeleton extends StatelessWidget {
     Widget bar(double width, double height) => Container(
           height: height,
           width: width,
-          decoration: BoxDecoration(color: uiTheme.bgElevated, borderRadius: BorderRadius.circular(4)),
+          decoration: BoxDecoration(color: uiTheme.bgElevated, borderRadius: uiTheme.borderRadius(4)),
         );
     return SizedBox(
       height: HikkaShelfMetrics.height(context, scale),

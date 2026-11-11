@@ -167,7 +167,16 @@ class HikkaNav extends ChangeNotifier {
   }
 
   /// Налаштування як сторінка поверх вкладки (телефон у портреті): нижня навігація лишається на місці
-  void openSettings() => _push(HikkaRoute(HikkaRouteKind.settings, 'settings'));
+  /// «Оновити дані»: скидає кеш відповідей і перезавантажує відкриті сторінки. Ставить хаб каталогу, поки він живий.
+  VoidCallback? refreshAll;
+
+  /// Вкладка, з якої відкривається сторінка налаштувань (див. `AppSettingsDialog.tab*`)
+  int settingsTab = 0;
+
+  void openSettings({int tab = 0}) {
+    settingsTab = tab;
+    _push(HikkaRoute(HikkaRouteKind.settings, 'settings'));
+  }
 
   void openArticle(String slug, {HikkaArticle? seed}) {
     if (slug.isNotEmpty) _push(HikkaRoute(HikkaRouteKind.article, slug, seed: seed));

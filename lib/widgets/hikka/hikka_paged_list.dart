@@ -126,6 +126,7 @@ class _HikkaPagedListState<T> extends State<HikkaPagedList<T>> {
         controller: _controller,
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
+          SliverToBoxAdapter(child: SizedBox(height: AppHeaderInset.of(context))), // місце під шапкою-накладкою
           if (widget.header != null) SliverToBoxAdapter(child: widget.header),
           if (pager.items.isEmpty)
             SliverToBoxAdapter(child: body)

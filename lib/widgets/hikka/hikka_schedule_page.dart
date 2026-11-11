@@ -176,7 +176,7 @@ class _HikkaSchedulePageState extends State<HikkaSchedulePage> {
       controller: _scroll,
       child: ListView.builder(
         controller: _scroll,
-        padding: EdgeInsets.fromLTRB(pad, 4 * scale, pad, 24 * scale + widget.bottomInset),
+        padding: EdgeInsets.fromLTRB(pad, 4 * scale + AppHeaderInset.of(context), pad, 24 * scale + widget.bottomInset),
         itemCount: entries.length,
         itemBuilder: (context, i) => Align(
           alignment: Alignment.topLeft,
@@ -246,7 +246,7 @@ class _EpisodeTile extends StatelessWidget {
         padding: EdgeInsets.all(10 * scale),
         child: Row(
           children: [
-            SizedBox(width: 62 * scale, child: HikkaPoster(url: a.image, scale: scale, radius: 8, icon: Symbols.movie_rounded)),
+            SizedBox(width: 62 * scale, child: HikkaPoster(url: a.image, malId: a.malId, scale: scale, radius: 8, icon: Symbols.movie_rounded)),
             SizedBox(width: 14 * scale),
             Expanded(
               child: Column(
@@ -335,7 +335,7 @@ class _ScheduleSkeleton extends StatelessWidget {
         );
     return SingleChildScrollView(
       physics: const NeverScrollableScrollPhysics(),
-      padding: EdgeInsets.fromLTRB(pad, 8 * scale, pad, 0),
+      padding: EdgeInsets.fromLTRB(pad, 8 * scale + AppHeaderInset.of(context), pad, 0),
       child: Align(
         alignment: Alignment.topLeft,
         child: ConstrainedBox(

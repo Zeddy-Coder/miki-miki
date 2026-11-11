@@ -556,7 +556,7 @@ void main() {
 
       expect(find.text('TuTaZaSho'), findsWidgets);
       expect(colorContaining(tester, '7 з 12 сер.'), amber);
-      expect(find.textContaining('Не всі серії: тут 7 з 12'), findsNothing, reason: 'плашку прибрано: застереження вже є в рядку озвучки');
+      expect(find.textContaining('У цього озвучення є відсутні серії: 7/12'), findsNothing, reason: 'плашку прибрано: застереження вже є в рядку озвучки');
       // Це не збій нумерації: хоч щось, а синхронізувати можна (рівень incomplete, не mismatch)
       expect(find.textContaining('не синхронізуватимуться'), findsNothing);
     });

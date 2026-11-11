@@ -18,7 +18,7 @@ enum PlayerOrientation {
   const PlayerOrientation(this.id, this.label);
 
   static PlayerOrientation parse(String? id) =>
-      PlayerOrientation.values.firstWhere((o) => o.id == id, orElse: () => PlayerOrientation.system);
+      PlayerOrientation.values.firstWhere((o) => o.id == id, orElse: () => PlayerOrientation.landscape);
 
   /// Дозволені орієнтації (`null` — нічого не змінювати)
   List<DeviceOrientation>? get orientations => switch (this) {

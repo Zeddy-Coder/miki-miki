@@ -533,7 +533,7 @@ class SettingsDrawer extends StatelessWidget {
             ),
             SizedBox(height: 6 * scale),
             Text(
-              a.quality.gpuHint,
+              AppPlatform.isMobile ? a.quality.deviceHint : a.quality.gpuHint,
               style: TextStyle(fontFamily: 'Arial', color: uiTheme.colors.textDarkMuted, fontSize: 11.5 * scale),
             ),
           ],

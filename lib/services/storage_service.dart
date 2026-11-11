@@ -45,6 +45,12 @@ class StorageService {
         final content = await _storageFile.readAsString();
         if (content.isNotEmpty) _cache = jsonDecode(content) as Map<String, dynamic>;
       }
+      // Одноразово: автопропуск опенінґів типово вимкнено (раніше міг лишитись увімкненим)
+      if (_cache['auto_skip_default_v2'] != true) {
+        _cache['auto_skip_chapters'] = false;
+        _cache['auto_skip_default_v2'] = true;
+        _isDirty = true;
+      }
     } catch (_) {
       _cache = {};
     } finally {
@@ -144,10 +150,10 @@ class StorageService {
   static ValueListenable<bool> get localLibraryListenable => _localLibrary ??= ValueNotifier<bool>(getLocalLibrary());
 
   // --- Налаштування теми ---
-  static String getThemeMode({String fallback = 'dark'}) => _cache['theme_mode'] as String? ?? fallback;
+  static String getThemeMode({String fallback = 'system'}) => _cache['theme_mode'] as String? ?? fallback;
   static void saveThemeMode(String mode) { _cache['theme_mode'] = mode; _isDirty = true; }
 
-  static String getAccentColorHex({String fallback = '#E46767'}) => _cache['accent_color'] as String? ?? fallback;
+  static String getAccentColorHex({String fallback = '#FFAA00'}) => _cache['accent_color'] as String? ?? fallback;
   static void saveAccentColorHex(String hex) { _cache['accent_color'] = hex; _isDirty = true; }
 
   static String getUiRadius({String fallback = 'MD'}) => _cache['ui_radius'] as String? ?? fallback;
@@ -179,8 +185,12 @@ class StorageService {
   static double getHoldToSpeedRate({double fallback = 2.0}) => (_cache['hold_to_speed_rate'] as num?)?.toDouble() ?? fallback;
   static void saveHoldToSpeedRate(double rate) { _cache['hold_to_speed_rate'] = rate; _isDirty = true; }
 
-  static bool getAutoSkipChapters({bool fallback = true}) => _cache['auto_skip_chapters'] as bool? ?? fallback;
+  static bool getAutoSkipChapters({bool fallback = false}) => _cache['auto_skip_chapters'] as bool? ?? fallback;
   static void saveAutoSkipChapters(bool val) { _cache['auto_skip_chapters'] = val; _isDirty = true; }
+
+  /// Кнопка «Пропустити опенінґ / ендінґ» на плеєрі (типово показується)
+  static bool getShowSkipButton({bool fallback = true}) => _cache['show_skip_button'] as bool? ?? fallback;
+  static void saveShowSkipButton(bool val) { _cache['show_skip_button'] = val; _isDirty = true; }
 
   // --- Anime4K (шейдери апскейлу) ---
   static bool getAnime4kEnabled({bool fallback = false}) => _cache['anime4k_enabled'] as bool? ?? fallback;
@@ -202,6 +212,12 @@ class StorageService {
   /// Мова назв у каталозі: ua | en | ja
   static String getHikkaTitleLang({String fallback = 'ua'}) => _cache['hikka_title_lang'] as String? ?? fallback;
   static void saveHikkaTitleLang(String lang) { _cache['hikka_title_lang'] = lang; _isDirty = true; }
+
+  /// Другорядна назва під заголовком сторінки тайтла: показувати чи ні, і якою мовою (ua | en | ja)
+  static bool getHikkaShowSecondary({bool fallback = true}) => _cache['hikka_show_secondary'] as bool? ?? fallback;
+  static void saveHikkaShowSecondary(bool val) { _cache['hikka_show_secondary'] = val; _isDirty = true; }
+  static String getHikkaSecondaryLang({String fallback = 'en'}) => _cache['hikka_secondary_lang'] as String? ?? fallback;
+  static void saveHikkaSecondaryLang(String lang) { _cache['hikka_secondary_lang'] = lang; _isDirty = true; }
 
   /// Показувати контент 18+ (хентай); за замовчуванням ні
   static bool getHikkaAllowAdult({bool fallback = false}) => _cache['hikka_allow_adult'] as bool? ?? fallback;
@@ -226,7 +242,7 @@ class StorageService {
   static void savePitchCorrection(bool val) { _cache['pitch_correction'] = val; _isDirty = true; }
 
   /// Орієнтація плеєра на телефоні: 'system' | 'landscape' | 'portrait' (див. `PlayerOrientation`)
-  static String getPlayerOrientation({String fallback = 'system'}) => _cache['player_orientation'] as String? ?? fallback;
+  static String getPlayerOrientation({String fallback = 'landscape'}) => _cache['player_orientation'] as String? ?? fallback;
   static void savePlayerOrientation(String v) { _cache['player_orientation'] = v; _isDirty = true; }
 
   /// Детальний журнал (запис майже всіх дій у файл). На час тестування увімкнений за замовчуванням.
@@ -269,7 +285,7 @@ class StorageService {
   static String getDefaultSubLang({String fallback = 'uk'}) => _cache['default_sub_lang'] as String? ?? fallback;
   static void saveDefaultSubLang(String lang) { _cache['default_sub_lang'] = lang; _isDirty = true; }
 
-  static String getSubFont({String fallback = 'Trebuchet MS'}) => _cache['sub_font'] as String? ?? fallback;
+  static String getSubFont({String fallback = 'Arial'}) => _cache['sub_font'] as String? ?? fallback;
   static void saveSubFont(String f) { _cache['sub_font'] = f; _isDirty = true; }
 
   static double getSubFontSize({double fallback = 48.0}) => (_cache['sub_font_size'] as num?)?.toDouble() ?? fallback;

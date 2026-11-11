@@ -576,6 +576,18 @@ class _HikkaWatchSectionState extends State<HikkaWatchSection> {
 
   // Меню «⋮» ---------------------------------------------------------------------
 
+  /// Сторінка тайтла на сайті джерела. У Mikai адреса має вигляд `/anime/<id>-<назва>`: беремо готове посилання
+  /// з даних Hikka (там воно точне), а без нього — `/anime/<id>`
+  String _siteUrl(WatchOffer offer) {
+    if (offer.source.id == 'mikai') {
+      final id = offer.anime.url;
+      for (final l in widget.anime.external) {
+        if (l.isWatch && Uri.tryParse(l.url)?.host.endsWith('mikai.me') == true && RegExp('/anime/$id(-|\$|/)').hasMatch(l.url)) return l.url;
+      }
+    }
+    return offer.webUrl;
+  }
+
   /// Усе другорядне: серії, команда, джерела (з якістю й плеєром за замовчуванням), оновлення, сайт
   Future<void> _openMenu(WatchTitle t, List<WatchGroup> groups) async {
     final scale = _scale;
@@ -616,7 +628,7 @@ class _HikkaWatchSectionState extends State<HikkaWatchSection> {
       case 'refresh':
         _restart();
       case 'site':
-        if (offer != null) HikkaNav.instance.openLink(offer.webUrl);
+        if (offer != null) HikkaNav.instance.openLink(_siteUrl(offer));
     }
   }
 
@@ -654,29 +666,5 @@ class _MenuRow extends StatelessWidget {
   const _MenuRow({required this.scale, required this.icon, required this.label, required this.onTap, this.hint});
 
   @override
-  Widget build(BuildContext context) {
-    final r = uiTheme.borderRadius(10 * scale);
-    return InkWell(
-      borderRadius: r,
-      splashColor: Colors.transparent,
-      highlightColor: uiTheme.touchHighlight,
-      hoverColor: uiTheme.hoverOverlay,
-      onTap: onTap,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(minHeight: AppPlatform.isMobile ? AppPlatform.touchTarget : 42 * scale),
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: 4 * scale, vertical: 6 * scale),
-          child: Row(
-            children: [
-              Icon(icon, color: uiTheme.textMuted, size: 22 * scale, weight: 300),
-              SizedBox(width: 14 * scale),
-              Expanded(child: Text(label, style: hikkaStyle(14 * scale, weight: FontWeight.w600))),
-              if (hint != null) ...[Text(hint!, style: hikkaStyle(12 * scale, color: uiTheme.textDarkMuted)), SizedBox(width: 6 * scale)],
-              Icon(Symbols.chevron_right_rounded, color: uiTheme.textDarkMuted, size: 20 * scale),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => AppMenuRow(scale: scale, icon: icon, title: label, value: hint, onTap: onTap);
 }

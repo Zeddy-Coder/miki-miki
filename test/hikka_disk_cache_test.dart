@@ -34,6 +34,18 @@ void main() {
     expect(HikkaDiskCache.fileName('a'), matches(RegExp(r'^[0-9a-f]{16}\.json$')));
   });
 
+  test('паралельний запис одного ключа й зникла тека не дають помилок запису', () async {
+    final cache = HikkaDiskCache(dir: dir);
+    final writes = [for (var i = 0; i < 5; i++) cache.write('k', {'n': i}, DateTime(2026))];
+    await Future.wait(writes);
+    expect((await cache.read('k'))?.json, isA<Map>());
+    // Систему «почистила» теку під час роботи
+    dir.deleteSync(recursive: true);
+    await cache.write('k2', {'a': 1}, DateTime(2026));
+    expect((await cache.read('k2'))?.json, {'a': 1});
+    expect(dir.listSync().where((e) => e.path.endsWith('.tmp')), isEmpty, reason: 'тимчасових файлів не лишається');
+  });
+
   test('новий запуск бере свіжі дані з диска без мережі', () async {
     final first = make();
     final p1 = await first.searchAnime(const HikkaSearchFilters(), size: 30);

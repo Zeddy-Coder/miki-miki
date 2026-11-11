@@ -306,6 +306,9 @@ class AppSeekBar extends StatefulWidget {
   /// Масштаб підказки з прев'ю кадру (за замовчуванням дорівнює scale)
   final double? bubbleScale;
 
+  /// Палець/курсор почав (true) або закінчив (false) перетягування — щоб панелі не ховались посеред жесту
+  final ValueChanged<bool>? onDragChanged;
+
   const AppSeekBar({
     super.key,
     required this.scale,
@@ -314,6 +317,7 @@ class AppSeekBar extends StatefulWidget {
     this.live = true,
     this.hitHeight,
     this.bubbleScale,
+    this.onDragChanged,
   });
 
   @override
@@ -323,8 +327,11 @@ class AppSeekBar extends StatefulWidget {
 class _AppSeekBarState extends State<AppSeekBar> {
   bool _hover = false;
   bool _drag = false;
+  int? _pointer;
   double _hoverX = 0;
   double? _dragFraction;
+  double _lastDx = 0;
+  double _lastWidth = 1;
   DateTime _lastSeek = DateTime.fromMillisecondsSinceEpoch(0);
   late ClockProgress _progress;
 
@@ -391,15 +398,35 @@ class _AppSeekBarState extends State<AppSeekBar> {
   void _seekTo(double dx, double width, {bool force = false}) {
     if (_total <= Duration.zero) return;
     final f = (dx / width).clamp(0.0, 1.0);
+    _lastDx = dx;
+    _lastWidth = width;
     setState(() {
       _dragFraction = f;
       _hoverX = dx.clamp(0.0, width);
     });
+    // Потік (мережа): під час перетягування рушій не засипаємо перемотками — вони зависають, остання йде при відпусканні.
+    // Локальний файл перемотується «наживо» (з прев'ю кадрів).
+    if (_drag && !force && !SeekPreviewService.supports(_currentUri())) return;
     final now = DateTime.now();
     if (force || now.difference(_lastSeek).inMilliseconds >= 40) {
       _lastSeek = now;
       widget.player.seek(_snap(_timeAt(dx, width)));
     }
+  }
+
+  /// Палець відпущено (або жест скасовано): остаточна перемотка й повне скидання стану перетягування
+  void _finishDrag({bool seek = true}) {
+    if (seek && _drag && _total > Duration.zero) {
+      _lastSeek = DateTime.now();
+      widget.player.seek(_snap(_timeAt(_lastDx, _lastWidth)));
+    }
+    _pointer = null;
+    widget.onDragChanged?.call(false);
+    if (!mounted) return;
+    setState(() {
+      _drag = false;
+      _dragFraction = null;
+    });
   }
 
   void _onHover(double dx, double width) {
@@ -436,29 +463,30 @@ class _AppSeekBarState extends State<AppSeekBar> {
                   },
                   onExit: (_) => setState(() => _hover = false),
                   onHover: (e) => _onHover(e.localPosition.dx, width),
-                  child: GestureDetector(
+                  // Прямі події вказівника замість жестів: перетягування не може «зависнути» через конкуренцію жестів
+                  child: Listener(
                     behavior: HitTestBehavior.opaque,
-                    onTapDown: (d) => _seekTo(d.localPosition.dx, width, force: true),
-                    onTapUp: (_) => setState(() => _dragFraction = null),
-                    onHorizontalDragStart: (d) {
+                    onPointerDown: (e) {
+                      if (_pointer != null) return;
+                      _pointer = e.pointer;
                       SeekPreviewService.prepare(_currentUri(), _total);
                       setState(() => _drag = true);
-                      _seekTo(d.localPosition.dx, width, force: true);
+                      widget.onDragChanged?.call(true);
+                      _seekTo(e.localPosition.dx, width, force: true);
                     },
-                    onHorizontalDragUpdate: (d) {
-                      _seekTo(d.localPosition.dx, width);
-                      SeekPreviewService.request(_snap(_timeAt(d.localPosition.dx, width)));
+                    onPointerMove: (e) {
+                      if (e.pointer != _pointer) return;
+                      _seekTo(e.localPosition.dx, width);
+                      SeekPreviewService.request(_snap(_timeAt(e.localPosition.dx, width)));
                     },
-                    onHorizontalDragEnd: (d) {
-                      setState(() {
-                        _drag = false;
-                        _dragFraction = null;
-                      });
+                    onPointerUp: (e) {
+                      if (e.pointer != _pointer) return;
+                      _finishDrag();
                     },
-                    onHorizontalDragCancel: () => setState(() {
-                      _drag = false;
-                      _dragFraction = null;
-                    }),
+                    onPointerCancel: (e) {
+                      if (e.pointer != _pointer) return;
+                      _finishDrag(seek: false);
+                    },
                     child: AppAnimatedValue(
                       value: active ? 1 : 0,
                       // Позицію й буфер малює сам painter (repaint: _progress) — без перебудови віджетів.

@@ -1,3 +1,4 @@
+import '../../services/app_layers.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
@@ -16,12 +17,12 @@ import 'hikka_article_page.dart';
 import 'hikka_character_page.dart';
 import 'hikka_collection_page.dart';
 import 'hikka_common.dart';
+import 'hikka_page_kit.dart';
 import 'hikka_discover_page.dart';
 import 'hikka_franchise_page.dart';
 import 'hikka_home_page.dart';
 import 'hikka_lists_page.dart';
 import 'hikka_profile_page.dart';
-import 'hikka_settings_dialog.dart';
 
 /// Вміст застосунку на основі Hikka: чотири головні вкладки («Головна», «Огляд», «Списки», «Профіль» — їх
 /// перемикає нижня навігація чи бічне меню `HomeHub`) і стек відкритих сторінок поверх них (аніме, персонаж,
@@ -75,17 +76,26 @@ class _HikkaHubState extends State<HikkaHub> {
     _mounted.add(_nav.main);
     _nav.addListener(_onChanged);
     _prefs.addListener(_onChanged);
+    _nav.refreshAll = _refreshAll;
   }
 
   @override
   void dispose() {
     _nav.removeListener(_onChanged);
     _prefs.removeListener(_onChanged);
+    if (_nav.refreshAll == _refreshAll) _nav.refreshAll = null;
     super.dispose();
   }
 
+  MainTab _shownMain = MainTab.values.first;
+  double _tabDir = 1;
+
   void _onChanged() {
     if (!mounted) return;
+    if (_nav.main != _shownMain) {
+      _tabDir = _nav.main.index > _shownMain.index ? 1 : -1;
+      _shownMain = _nav.main;
+    }
     setState(() => _mounted.add(_nav.main));
   }
 
@@ -120,10 +130,6 @@ class _HikkaHubState extends State<HikkaHub> {
     HikkaApi.instance.clearCache();
     _forget(r);
     setState(() => _routeRefresh++);
-  }
-
-  void _openCatalogSettings() {
-    HikkaSettingsDialog.show(context, scale: _scale, onRefresh: _refreshAll);
   }
 
   // ── Заголовок відкритої сторінки ───────────────────────────────────────────
@@ -199,7 +205,6 @@ class _HikkaHubState extends State<HikkaHub> {
           scale: scale,
           bottomInset: inset,
           onOpenSettings: widget.onOpenSettings,
-          onOpenCatalogSettings: _openCatalogSettings,
         ),
     };
   }
@@ -221,13 +226,15 @@ class _HikkaHubState extends State<HikkaHub> {
       HikkaRouteKind.collection => HikkaCollectionPage(route: r, scale: scale, bottomInset: inset),
       HikkaRouteKind.article => HikkaArticlePage(route: r, scale: scale, bottomInset: inset),
       HikkaRouteKind.localLibrary => widget.localLibraryBuilder(context),
-      HikkaRouteKind.settings => widget.settingsBuilder?.call(context) ?? const SizedBox.shrink(),
+      HikkaRouteKind.settings => AppLayerClaim(child: widget.settingsBuilder?.call(context) ?? const SizedBox.shrink()),
     };
   }
 
   @override
   Widget build(BuildContext context) {
     final top = _nav.top;
+    // Сторінки з прокруткою мають шапку-накладку, що ховається при прокрутці вниз; решта (бібліотека, налаштування) — звичайний рядок
+    final overlayBar = top != null && top.kind != HikkaRouteKind.localLibrary && top.kind != HikkaRouteKind.settings;
 
     return Listener(
       // Бокова кнопка миші «Назад» працює як у браузері
@@ -241,8 +248,8 @@ class _HikkaHubState extends State<HikkaHub> {
           AppFadeSwitcher(
             duration: AppAnim.fast,
             child: KeyedSubtree(
-              key: ValueKey(top == null ? 'no-bar' : 'route-bar'),
-              child: top == null ? const SizedBox.shrink() : _routeBar(top),
+              key: ValueKey(top == null || overlayBar ? 'no-bar' : 'route-bar'),
+              child: top == null || overlayBar ? const SizedBox.shrink() : _routeBar(top),
             ),
           ),
           Expanded(
@@ -255,9 +262,15 @@ class _HikkaHubState extends State<HikkaHub> {
                     Offstage(
                       key: ValueKey('tab-${tab.name}'),
                       offstage: top != null || _nav.main != tab,
-                      child: TickerMode(
-                        enabled: top == null && _nav.main == tab,
-                        child: _root(tab),
+                      // Нова вкладка виїжджає з боку переходу й проявляється (відкриття сторінки поверх цього не чіпає)
+                      child: HikkaTabEnter(
+                        active: _nav.main == tab,
+                        direction: _tabDir,
+                        animateOnMount: _mounted.length > 1,
+                        child: TickerMode(
+                          enabled: top == null && _nav.main == tab,
+                          child: _root(tab),
+                        ),
                       ),
                     ),
                 AppFadeSwitcher(
@@ -268,7 +281,12 @@ class _HikkaHubState extends State<HikkaHub> {
                       ? const SizedBox.shrink(key: ValueKey('no-route'))
                       : KeyedSubtree(
                           key: ValueKey('route-${top.id}-$_routeRefresh'),
-                          child: ColoredBox(color: uiTheme.bgPrimary, child: _withRouteRefresh(top)),
+                          child: ColoredBox(
+                            color: uiTheme.bgPrimary,
+                            child: overlayBar
+                                ? HikkaCollapsingHeader(header: _routeBar(top), body: _withRouteRefresh(top))
+                                : _withRouteRefresh(top),
+                          ),
                         ),
                 ),
               ],

@@ -52,6 +52,9 @@ class MobileControls extends StatelessWidget {
   final VoidCallback onAudio;
   final VoidCallback onEpisodes;
 
+  /// Палець узяв/відпустив повзунок прогресу
+  final ValueChanged<bool>? onSeekDrag;
+
   /// «Попередній / наступний»: типово — файли черги; для серій із сайту задає контролер
   final VoidCallback? onPrevious;
   final VoidCallback? onNext;
@@ -88,6 +91,7 @@ class MobileControls extends StatelessWidget {
     required this.onSubs,
     required this.onAudio,
     required this.onEpisodes,
+    this.onSeekDrag,
     this.onPrevious,
     this.onNext,
     this.showTransport = true,
@@ -345,6 +349,7 @@ class MobileControls extends StatelessWidget {
                 player: player,
                 chapters: chapters,
                 live: visible,
+                onDragChanged: onSeekDrag,
               ),
             ),
             const SizedBox(width: 6),

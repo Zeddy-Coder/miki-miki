@@ -59,3 +59,7 @@ app.*.map.json
 *.log
 /windows/flutter/ephemeral/
 /.vs/ 
+
+# Комерційні шрифти (Trebuchet MS, Impress BT) не публікуємо
+assets/fonts/TrebuchetMS.ttf
+assets/fonts/ImpressBTCyrillic.otf

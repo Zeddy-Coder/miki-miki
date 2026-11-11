@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:media_kit/media_kit.dart';
 import '../models/media_models.dart';
+import '../services/app_log.dart';
 import '../services/playback_clock.dart';
+import '../services/storage_service.dart';
 import '../services/ui_theme_service.dart';
 import '../utils/formatters.dart';
 import 'app_animation_kit.dart';
@@ -40,17 +42,39 @@ class _SkipButtonState extends State<SkipButton> {
   /// позиції, але віджет перебудовується лише коли результат змінюється (раз на розділ).
   late ClockValue<int> _skipIndex;
 
+  /// Розділ, який уже пропустили автоматично (щоб не пропускати повторно, якщо перемотали назад)
+  int _autoSkipped = -1;
+
   @override
   void initState() {
     super.initState();
     _chapters = widget.chapters;
     _flags = ChapterMath.skippableFlags(_chapters);
     _skipIndex = _derive();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _maybeAutoSkip());
   }
 
   ClockValue<int> _derive() {
     final clock = PlaybackClock.of(widget.player);
-    return clock.derive((pos, dur) => ChapterMath.skipIndexAt(_chapters, _flags, pos, dur));
+    final v = clock.derive((pos, dur) => ChapterMath.skipIndexAt(_chapters, _flags, pos, dur));
+    v.addListener(_maybeAutoSkip);
+    return v;
+  }
+
+  /// Автопропуск (налаштування, типово вимкнено): на початку розділу-опенінгу чи ендінгу одразу перемотує до його кінця
+  void _maybeAutoSkip() {
+    final index = _skipIndex.value;
+    if (index < 0) {
+      _autoSkipped = -1;
+      return;
+    }
+    if (!StorageService.getAutoSkipChapters() || index == _autoSkipped || index >= _chapters.length) return;
+    if (widget.dismissedChapterStartTime == _chapters[index].startTime) return;
+    final end = (index + 1 < _chapters.length) ? _chapters[index + 1].startTime : widget.player.state.duration;
+    if (end <= _chapters[index].startTime) return;
+    _autoSkipped = index;
+    AppLog.i('дія', 'автопропуск «${_chapters[index].title}» → ${end.inSeconds} с');
+    widget.player.seek(end);
   }
 
   @override
@@ -59,12 +83,14 @@ class _SkipButtonState extends State<SkipButton> {
     if (!identical(old.chapters, widget.chapters)) {
       _chapters = widget.chapters;
       _flags = ChapterMath.skippableFlags(_chapters);
+      _autoSkipped = -1;
     }
     if (old.player != widget.player) {
       _skipIndex.dispose();
       _skipIndex = _derive();
     } else {
       _skipIndex.refresh();
+      _maybeAutoSkip();
     }
   }
 
@@ -91,7 +117,8 @@ class _SkipButtonState extends State<SkipButton> {
       child: AppClockBuilder<int>(
         listenable: _skipIndex,
         builder: (context, index) {
-          final bool show = index >= 0 &&
+          final bool show = StorageService.getShowSkipButton() &&
+              index >= 0 &&
               index < chapters.length &&
               widget.dismissedChapterStartTime != chapters[index].startTime;
           if (!show) return const AppPresence(visible: false, child: SizedBox.shrink());
@@ -113,7 +140,7 @@ class _SkipButtonState extends State<SkipButton> {
                 onTap: () {
                   if (skippable.endTime != null) player.seek(skippable.endTime!);
                 },
-                borderRadius: BorderRadius.circular(touch ? 24.0 : 20 * scale),
+                borderRadius: uiTheme.borderRadius(touch ? 24.0 : 20 * scale),
                 splashColor: Colors.transparent,
                 highlightColor: uiTheme.touchHighlight,
                 hoverColor: uiTheme.isLight ? Colors.black.withValues(alpha: 0.08) : Colors.white.withValues(alpha: 0.15),
@@ -122,7 +149,7 @@ class _SkipButtonState extends State<SkipButton> {
                   padding: EdgeInsets.symmetric(horizontal: (touch ? 16 : 14) * scale),
                   decoration: BoxDecoration(
                     color: uiTheme.colors.drawerBg.withValues(alpha: uiTheme.isLight ? 0.95 : 0.92),
-                    borderRadius: BorderRadius.circular(touch ? 24.0 : 20 * scale),
+                    borderRadius: uiTheme.borderRadius(touch ? 24.0 : 20 * scale),
                     border: Border.all(color: uiTheme.colors.borderMedium, width: 1.0),
                     boxShadow: [
                       BoxShadow(

@@ -47,6 +47,10 @@ class FakeBackend {
   final List<Map<String, dynamic>> exchanges = [];
   final List<String?> sessions = [];
   String moonKey = '';
+  String tmdbKey = '';
+  int bannersStatus = 200;
+  final List<List<int>> bannerRequests = [];
+  Map<String, dynamic> bannersAnswer = {};
   int configStatus = 200;
   int sessionStatus = 200;
 
@@ -79,7 +83,12 @@ class FakeBackend {
           final (status, j) = await onExchange(b['request_reference'] as String);
           return (status, jsonEncode(j));
         }
-        if (name == 'config') return (configStatus, jsonEncode({'moonKey': moonKey}));
+        if (name == 'config') return (configStatus, jsonEncode({'moonKey': moonKey, if (tmdbKey.isNotEmpty) 'tmdbKey': tmdbKey}));
+        if (name == 'banners') {
+          final b = jsonDecode(body!) as Map<String, dynamic>;
+          bannerRequests.add([for (final i in b['items'] as List) (i as Map)['mal'] as int]);
+          return (bannersStatus, jsonEncode({'banners': bannersAnswer}));
+        }
         return (404, '{}');
       },
     );

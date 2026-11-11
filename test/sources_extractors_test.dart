@@ -31,7 +31,7 @@ void main() {
       expect(page.skips.first.start, closeTo(63.31, 0.001));
       expect(page.skips.first.end, closeTo(153.24, 0.001));
       expect(page.skips.last.start, closeTo(1335.25, 0.001));
-      expect(page.skips.first.name, 'Опенінг');
+      expect(page.skips.first.name, 'Опенінґ');
     });
 
     test('HLS: майстер Moon → 1080/720/480', () {

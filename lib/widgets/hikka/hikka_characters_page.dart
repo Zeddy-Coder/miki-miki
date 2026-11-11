@@ -9,6 +9,7 @@ import '../../services/hikka_pager.dart';
 import '../app_animation_kit.dart';
 import 'hikka_cards.dart';
 import 'hikka_common.dart';
+import 'hikka_page_kit.dart';
 
 /// Вкладка «Персонажі»: пошук за іменем; без запиту — найпопулярніші.
 class HikkaCharactersPage extends StatefulWidget {
@@ -75,23 +76,20 @@ class _HikkaCharactersPageState extends State<HikkaCharactersPage> {
   @override
   Widget build(BuildContext context) {
     final scale = widget.scale;
-    return Column(
-      children: [
-        HikkaSearchBar(scale: scale, controller: _search, hint: 'Пошук персонажа за іменем…', onChanged: _onQuery),
-        Expanded(
-          child: HikkaPagedGrid<HikkaCharacter>(
-            pager: _pager,
-            scale: scale,
-            controller: _scroll,
-            bottomInset: widget.bottomInset,
-            maxTileWidth: 150,
-            header: SizedBox(height: 8 * scale),
-            emptyIcon: Symbols.person_search_rounded,
-            emptyText: 'Персонажів не знайдено',
-            itemBuilder: (context, c) => HikkaCharacterCard(character: c, scale: scale),
-          ),
-        ),
-      ],
+    // Пошук — вкладена шапка: закріплена на верху, ховається разом із прокруткою (як у каталозі)
+    return HikkaCollapsingHeader(
+      header: HikkaSearchBar(scale: scale, controller: _search, hint: 'Пошук персонажа за іменем…', onChanged: _onQuery),
+      body: HikkaPagedGrid<HikkaCharacter>(
+        pager: _pager,
+        scale: scale,
+        controller: _scroll,
+        bottomInset: widget.bottomInset,
+        maxTileWidth: 150,
+        header: SizedBox(height: 8 * scale),
+        emptyIcon: Symbols.person_search_rounded,
+        emptyText: 'Персонажів не знайдено',
+        itemBuilder: (context, c) => HikkaCharacterCard(character: c, scale: scale),
+      ),
     );
   }
 }

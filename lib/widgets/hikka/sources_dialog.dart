@@ -14,7 +14,7 @@ import 'hikka_watch_dialogs.dart';
 
 /// «Джерела перегляду»: які сайти шукають озвучки й субтитри, найбільша якість, плеєр за замовчуванням,
 /// необов'язковий ключ Mikai. Зміни застосовуються одразу; ключ зберігається з невеликою затримкою після набору.
-class SourcesDialog extends StatefulWidget {
+class SourcesDialog extends StatelessWidget {
   final double scale;
   final SourceRegistry registry;
 
@@ -32,10 +32,29 @@ class SourcesDialog extends StatefulWidget {
   static const List<String> hosters = ['', 'Moon'];
 
   @override
-  State<SourcesDialog> createState() => _SourcesDialogState();
+  Widget build(BuildContext context) => WatchDialogFrame(
+        scale: scale,
+        title: 'Джерела перегляду',
+        icon: Symbols.tune_rounded,
+        body: SourcesSettings(scale: scale, registry: registry),
+      );
 }
 
-class _SourcesDialogState extends State<SourcesDialog> {
+/// Сам вміст «Джерел перегляду» без рамки: його показують і вікно [SourcesDialog], і вкладка «Каталог» налаштувань
+class SourcesSettings extends StatefulWidget {
+  final double scale;
+  final SourceRegistry registry;
+
+  /// [heading] — показати заголовок «Сайти» з поясненням (у вкладці налаштувань його немає: сайти й так підписані)
+  final bool heading;
+
+  const SourcesSettings({super.key, required this.scale, required this.registry, this.heading = true});
+
+  @override
+  State<SourcesSettings> createState() => _SourcesSettingsState();
+}
+
+class _SourcesSettingsState extends State<SourcesSettings> {
   late final TextEditingController _key = TextEditingController(text: _prefs.mikaiKey);
   late final TextEditingController _moonKey = TextEditingController(text: _prefs.moonKey);
   Timer? _keyTimer;
@@ -68,7 +87,6 @@ class _SourcesDialogState extends State<SourcesDialog> {
   String _hint(AnimeSource s) {
     final lead = switch (s.id) {
       'mikai' => 'Основне джерело: знає команди озвучення й серії. ',
-      'uakino' => 'Сайт за Cloudflare, тож із деяких мереж може не відкриватися. ',
       _ => '',
     };
     return '$lead${s.about}'.trim();
@@ -95,16 +113,12 @@ class _SourcesDialogState extends State<SourcesDialog> {
   @override
   Widget build(BuildContext context) {
     final scale = _scale;
-    return WatchDialogFrame(
-      scale: scale,
-      title: 'Джерела перегляду',
-      icon: Symbols.tune_rounded,
-      body: ListenableBuilder(
+    return ListenableBuilder(
         listenable: _prefs,
         builder: (context, _) => Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _title('Сайти', hint: 'Де шукати українські озвучки й субтитри. Вимкнені сайти не опитуються.'),
+            if (widget.heading) _title('Сайти', hint: 'Де шукати українські озвучки й субтитри. Вимкнені сайти не опитуються.'),
             for (final s in widget.registry.all) ...[
               HikkaToggleRow(
                 scale: scale,
@@ -152,7 +166,6 @@ class _SourcesDialogState extends State<SourcesDialog> {
             SizedBox(height: 4 * scale),
           ],
         ),
-      ),
     );
   }
 }

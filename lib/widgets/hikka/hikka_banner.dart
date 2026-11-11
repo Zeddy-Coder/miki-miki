@@ -5,6 +5,8 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import '../../models/hikka_models.dart';
 import '../../services/banner_art.dart';
+import '../../services/app_log.dart';
+import '../../services/backend_client.dart';
 import '../../services/hikka_images.dart';
 import '../../services/hikka_nav.dart';
 import '../../services/hikka_prefs.dart';
@@ -64,6 +66,7 @@ class _HikkaBannerCarouselState extends State<HikkaBannerCarousel> {
   void initState() {
     super.initState();
     _timer = Timer.periodic(widget.autoAdvance, (_) => _tick());
+    BackendClient.keyEpoch.addListener(_loadArt);
     _loadArt();
   }
 
@@ -82,18 +85,21 @@ class _HikkaBannerCarouselState extends State<HikkaBannerCarousel> {
     return true;
   }
 
-  /// Підтягує широкі банери; до відповіді (чи при збої) лишається розмитий постер
+  /// Підтягує широкі банери; до відповіді (чи при збої) картка лишається без банера
   void _loadArt() {
     final gen = ++_artGeneration;
     final load = widget.artLoader ?? BannerArt.instance.load;
     load(widget.items).then<void>((map) {
       if (!mounted || gen != _artGeneration) return;
       setState(() => _art = map);
-    }, onError: (Object _) {});
+    }, onError: (Object e) {
+      AppLog.w('banners', 'банери не завантажились: ${e.runtimeType}: $e');
+    });
   }
 
   @override
   void dispose() {
+    BackendClient.keyEpoch.removeListener(_loadArt);
     _timer?.cancel();
     _controller?.dispose();
     super.dispose();
@@ -209,7 +215,7 @@ class _Dots extends StatelessWidget {
               height: 6 * scale,
               decoration: BoxDecoration(
                 color: i == index ? uiTheme.accentColor : uiTheme.textDarkMuted.withValues(alpha: 0.4),
-                borderRadius: BorderRadius.circular(3 * scale),
+                borderRadius: uiTheme.borderRadius(3 * scale),
               ),
             ),
         ],
@@ -252,7 +258,6 @@ class _Banner extends StatelessWidget {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              if (a.image != null) _Backdrop(url: a.image!),
               if (art?.url != null) _WideBackdrop(key: ValueKey(art!.url), url: art!.url!),
               // Затемнення зліва направо: текст читається на будь-якому постері
               const DecoratedBox(
@@ -260,7 +265,7 @@ class _Banner extends StatelessWidget {
                   gradient: LinearGradient(
                     begin: Alignment.centerLeft,
                     end: Alignment.centerRight,
-                    colors: [Color(0xCC000000), Color(0x99000000), Color(0x66000000)],
+                    colors: [Color(0xA6000000), Color(0x73000000), Color(0x40000000)],
                   ),
                 ),
               ),
@@ -271,7 +276,7 @@ class _Banner extends StatelessWidget {
                   children: [
                     SizedBox(
                       width: posterHeight * 0.7,
-                      child: HikkaPoster(url: a.image, scale: scale, radius: 10, icon: Symbols.movie_rounded, border: false),
+                      child: HikkaPoster(url: a.image, malId: a.malId, scale: scale, radius: 10, icon: Symbols.movie_rounded, border: false),
                     ),
                     SizedBox(width: 14 * scale),
                     Expanded(
@@ -342,28 +347,7 @@ class _Banner extends StatelessWidget {
   }
 }
 
-/// Розмитий фон: крихітна копія постера, розтягнута на весь банер
-class _Backdrop extends StatelessWidget {
-  final String url;
-
-  const _Backdrop({required this.url});
-
-  @override
-  Widget build(BuildContext context) {
-    final small = HikkaImages.resized(url, width: 80);
-    return Image(
-      image: ResizeImage.resizeIfNeeded(40, null, HikkaImage(small, fallback: small == url ? null : url)),
-      fit: BoxFit.cover,
-      alignment: Alignment.topCenter,
-      filterQuality: FilterQuality.medium,
-      gaplessPlayback: true,
-      frameBuilder: (context, child, frame, sync) => sync ? child : AppFade(opacity: frame == null ? 0 : 1, child: child),
-      errorBuilder: (context, error, stack) => const SizedBox.shrink(),
-    );
-  }
-}
-
-/// Широкий банер (AniList / TheMovieDB): проявляється поверх розмитого постера, коли завантажиться
+/// Широкий банер (TheMovieDB, запасний — AniList): проявляється, коли завантажиться
 class _WideBackdrop extends StatelessWidget {
   final String url;
 
@@ -381,9 +365,85 @@ class _WideBackdrop extends StatelessWidget {
           filterQuality: FilterQuality.medium,
           gaplessPlayback: true,
           frameBuilder: (context, child, frame, sync) => sync ? child : AppFade(opacity: frame == null ? 0 : 1, duration: AppAnim.long, child: child),
-          errorBuilder: (context, error, stack) => const SizedBox.shrink(),
+          errorBuilder: (context, error, stack) {
+            AppLog.w('banners', 'зображення банера не завантажилось: $url — $error');
+            return const SizedBox.shrink();
+          },
         );
       },
+    );
+  }
+}
+
+/// Підкладка під шапкою сторінки тайтлу: широкий банер, який плавно тоне у фон сторінки (текст лишається читабельним
+/// в будь-якій темі). Адреса береться з тих самих джерел, що й банер на головній; поки її немає — порожнє місце.
+class HikkaTitleBackdrop extends StatefulWidget {
+  final HikkaAnime anime;
+  final HikkaBannerArtLoader? artLoader;
+
+  const HikkaTitleBackdrop({super.key, required this.anime, this.artLoader});
+
+  @override
+  State<HikkaTitleBackdrop> createState() => _HikkaTitleBackdropState();
+}
+
+class _HikkaTitleBackdropState extends State<HikkaTitleBackdrop> {
+  BannerArtwork? _art;
+  int _generation = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    BackendClient.keyEpoch.addListener(_load);
+    _load();
+  }
+
+  @override
+  void didUpdateWidget(HikkaTitleBackdrop old) {
+    super.didUpdateWidget(old);
+    if (old.anime.malId != widget.anime.malId) _load();
+  }
+
+  @override
+  void dispose() {
+    BackendClient.keyEpoch.removeListener(_load);
+    super.dispose();
+  }
+
+  void _load() {
+    final gen = ++_generation;
+    final loader = widget.artLoader ?? BannerArt.instance.load;
+    final a = widget.anime;
+    loader([a]).then<void>((map) {
+      if (!mounted || gen != _generation) return;
+      setState(() => _art = map[a.malId]);
+    }, onError: (Object e) {
+      AppLog.w('banners', 'підкладка «${a.slug}»: ${e.runtimeType}: $e');
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final url = _art?.url;
+    if (url == null) return const SizedBox.shrink();
+    final bg = uiTheme.bgPrimary;
+    return IgnorePointer(
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          _WideBackdrop(key: ValueKey(url), url: url),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [bg.withValues(alpha: 0.66), bg.withValues(alpha: 0.82), bg],
+                stops: const [0.0, 0.55, 1.0],
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

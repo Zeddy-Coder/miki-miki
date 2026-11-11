@@ -4,13 +4,34 @@ import 'package:media_kit/media_kit.dart';
 import '../constants/app_identity.dart';
 import '../models/media_models.dart';
 import '../utils/formatters.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'storage_service.dart';
+import 'system_fonts.dart';
 
 class MpvConfig {
   /// Шрифт субтитрів для libass на Android (Liberation Sans, SIL OFL 1.1; є кирилиця, зокрема і ї є ґ).
   /// У libmpv для Android немає системних шрифтів: без цього шрифту libass не малює жодного рядка.
   static const String androidSubtitleFontAsset = 'assets/fonts/subtitle.ttf';
   static const String androidSubtitleFontName = 'Liberation Sans';
+
+  /// Розкладає вбудовані шрифти (і запасний Liberation Sans) у теку застосунку: libass читає шрифти лише з файлів
+  static Future<String?> ensureEmbeddedFontsDir() async {
+    try {
+      final dir = Directory('${StorageService.appBasePath}/fonts');
+      if (!await dir.exists()) await dir.create(recursive: true);
+      final assets = {...SystemFonts.embedded.values, androidSubtitleFontAsset};
+      for (final a in assets) {
+        final f = File('${dir.path}/${a.split('/').last}');
+        final data = await rootBundle.load(a);
+        if (!await f.exists() || await f.length() != data.lengthInBytes) {
+          await f.writeAsBytes(data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes));
+        }
+      }
+      return dir.path;
+    } catch (_) {
+      return null;
+    }
+  }
 
   static Future<void> configureEngine(Player player, String hwdec) async {
     try {
@@ -105,10 +126,13 @@ class MpvConfig {
         // шрифти й назву з налаштувань для Windows сюди не переносимо, бо вони замінили б його й субтитри зникли б
         final bool android = Platform.isAndroid;
         final customFonts = android ? const <String>[] : StorageService.getCustomFonts();
-        if (customFonts.isNotEmpty) {
-          final customDirs = customFonts.map((p) => File(p).parent.path).toSet().join(';');
-          await platform.setProperty('sub-fonts-dir', customDirs);
+        final embedded = SystemFonts.embedded.containsKey(font);
+        final dirs = <String>{...customFonts.map((p) => File(p).parent.path)};
+        if (!android || embedded) {
+          final own = await ensureEmbeddedFontsDir();
+          if (own != null) dirs.add(own);
         }
+        if (dirs.isNotEmpty) await platform.setProperty('sub-fonts-dir', dirs.join(Platform.isWindows ? ';' : ':'));
 
         // Режими переписування ASS
         if (assMode == 'force') {
@@ -120,7 +144,7 @@ class MpvConfig {
           await platform.setProperty('sub-ass-override', 'no');
         }
 
-        if (!android) await platform.setProperty('sub-font', font);
+        if (!android || embedded) await platform.setProperty('sub-font', font);
         await platform.setProperty('sub-font-size', fontSize.toInt().toString());
         await platform.setProperty('sub-color', color);
         await platform.setProperty('sub-border-size', border.toString());

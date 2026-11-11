@@ -66,7 +66,10 @@ class HikkaAuth extends ChangeNotifier {
     this.exchangeTimeout = const Duration(seconds: 75),
   })  : _apiOverride = api,
         _load = load ?? (() => StorageService.getSection(section)),
-        _save = save ?? ((d) => StorageService.saveSection(section, d)),
+        _save = save ?? ((d) {
+          StorageService.saveSection(section, d);
+          StorageService.flush();
+        }),
         _openUrl = urlOpener ?? SystemControls.openUrl,
         _startLoopback = loopbackFactory ?? HikkaLoopback.start {
     _phase = token.isEmpty ? HikkaAuthPhase.signedOut : HikkaAuthPhase.signedIn;

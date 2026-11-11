@@ -9,24 +9,17 @@ import '../../services/hikka_images.dart';
 import '../../services/hikka_prefs.dart';
 import '../../services/ui_theme_service.dart';
 import '../../services/watch_service.dart';
-import '../../utils/platform_info.dart';
-import '../app_animation_kit.dart';
 import '../app_ui_kit.dart';
+import '../../services/hikka_nav.dart';
 import 'hikka_common.dart';
 import 'sources_dialog.dart';
 
-/// Налаштування каталогу: мова назв, показ 18+, джерела перегляду, оновлення даних та очищення кешу зображень.
-class HikkaSettingsDialog extends StatefulWidget {
+/// Вміст вкладки «Каталог» основних налаштувань: мова назв, друга назва, 18+, джерела перегляду, свій клієнт Hikka,
+/// оновлення даних і кеш зображень. Зміни застосовуються одразу.
+class HikkaCatalogSettings extends StatefulWidget {
   final double scale;
 
-  /// Скинути кеш відповідей API й перезавантажити відкриті сторінки
-  final VoidCallback onRefresh;
-
-  const HikkaSettingsDialog({super.key, required this.scale, required this.onRefresh});
-
-  static Future<void> show(BuildContext context, {required double scale, required VoidCallback onRefresh}) {
-    return AppDialogs.show<void>(context, builder: (ctx) => HikkaSettingsDialog(scale: scale, onRefresh: onRefresh));
-  }
+  const HikkaCatalogSettings({super.key, required this.scale});
 
   /// «12,4 МБ» / «830 КБ» / «0 Б»
   static String formatBytes(int bytes) {
@@ -37,11 +30,10 @@ class HikkaSettingsDialog extends StatefulWidget {
   }
 
   @override
-  State<HikkaSettingsDialog> createState() => _HikkaSettingsDialogState();
+  State<HikkaCatalogSettings> createState() => _HikkaCatalogSettingsState();
 }
 
-class _HikkaSettingsDialogState extends State<HikkaSettingsDialog> {
-  final ScrollController _scroll = AppSmoothScrollController();
+class _HikkaCatalogSettingsState extends State<HikkaCatalogSettings> {
   int? _cacheBytes;
   bool _cleared = false;
   late final TextEditingController _clientRef = TextEditingController(text: HikkaAuth.instance.customReference);
@@ -70,7 +62,6 @@ class _HikkaSettingsDialogState extends State<HikkaSettingsDialog> {
     _commitClient();
     _clientRef.dispose();
     _clientSecret.dispose();
-    _scroll.dispose();
     super.dispose();
   }
 
@@ -113,127 +104,85 @@ class _HikkaSettingsDialogState extends State<HikkaSettingsDialog> {
   @override
   Widget build(BuildContext context) {
     final scale = _scale;
-    final mq = MediaQuery.of(context);
-    final phone = AppPlatform.isMobile;
-    final width = phone ? (mq.size.width - 32).clamp(280.0, 460.0) : 460 * scale;
-    final maxHeight = mq.size.height - (phone ? mq.padding.vertical + 32 : 80);
-    final pad = phone ? 18.0 : 22 * scale;
-
-    return Center(
-      child: Material(
-        color: Colors.transparent,
-        child: Container(
-          width: width,
-          constraints: BoxConstraints(maxHeight: maxHeight),
-          decoration: BoxDecoration(
-            color: uiTheme.bgPrimary,
-            borderRadius: uiTheme.borderRadius(20 * scale),
-            border: Border.all(color: uiTheme.borderSubtle),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: uiTheme.isLight ? 0.12 : 0.70),
-                blurRadius: 36 * scale,
-                offset: Offset(0, 10 * scale),
-              ),
+    return ListenableBuilder(
+      listenable: _prefs,
+      builder: (context, _) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _title('Мова назв', hint: 'Якщо назви потрібною мовою немає, показується наступна доступна'),
+          AppSegmentedBar<HikkaTitleLang>(
+            scale: scale,
+            selectedValue: _prefs.titleLang,
+            options: const [
+              AppSegmentOption(value: HikkaTitleLang.ua, label: 'Українська'),
+              AppSegmentOption(value: HikkaTitleLang.en, label: 'English'),
+              AppSegmentOption(value: HikkaTitleLang.ja, label: 'Ромаджі'),
             ],
+            onSelected: (v) => _prefs.titleLang = v,
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+          SizedBox(height: 22 * scale),
+          HikkaToggleRow(
+            scale: scale,
+            title: 'Другорядна назва',
+            subtitle: 'Одна додаткова назва під заголовком сторінки тайтла. Вимкни, якщо назви задовгі.',
+            value: _prefs.showSecondary,
+            onChanged: (v) => _prefs.showSecondary = v,
+          ),
+          if (_prefs.showSecondary) ...[
+            SizedBox(height: 12 * scale),
+            AppSegmentedBar<HikkaTitleLang>(
+              scale: scale,
+              selectedValue: _prefs.secondaryLang,
+              options: const [
+                AppSegmentOption(value: HikkaTitleLang.ua, label: 'Українська'),
+                AppSegmentOption(value: HikkaTitleLang.en, label: 'English'),
+                AppSegmentOption(value: HikkaTitleLang.ja, label: 'Ромаджі'),
+              ],
+              onSelected: (v) => _prefs.secondaryLang = v,
+            ),
+          ],
+          SizedBox(height: 22 * scale),
+          HikkaToggleRow(
+            scale: scale,
+            title: 'Контент 18+',
+            subtitle: 'Показувати хентай та інші матеріали для дорослих у списках, пошуку й календарі. Лише для повнолітніх.',
+            value: _prefs.allowAdult,
+            onChanged: (v) => _prefs.allowAdult = v,
+          ),
+          SizedBox(height: 22 * scale),
+          SourcesSettings(scale: scale, registry: WatchService.instance.registry, heading: false),
+          SizedBox(height: 22 * scale),
+          _title('Свій клієнт Hikka', hint: 'Необов’язково. У застосунку вже є вбудований клієнт для входу в акаунт; свій (його створюють на hikka.io, в налаштуваннях у розділі «Застосунки») знадобиться, якщо ключ вбудованого перестворили. Зміни діють при наступному вході.'),
+          AppSearchField(scale: scale, controller: _clientRef, icon: Symbols.badge_rounded, hint: 'Референс клієнта', onChanged: _clientChanged),
+          SizedBox(height: 10 * scale),
+          AppSearchField(scale: scale, controller: _clientSecret, icon: Symbols.key_rounded, hint: 'Ключ клієнта', onChanged: _clientChanged),
+          SizedBox(height: 22 * scale),
+          _title('Дані', hint: 'Каталог бере інформацію з hikka.io. Відповіді зберігаються на кілька хвилин, щоб сторінки відкривались швидко.'),
+          Wrap(
+            spacing: 10 * scale,
+            runSpacing: 10 * scale,
             children: [
-              Padding(
-                padding: EdgeInsets.fromLTRB(pad, 8 * scale, pad / 2, 4 * scale),
-                child: Row(
-                  children: [
-                    Expanded(child: Text('Налаштування каталогу', style: hikkaStyle(16 * scale, weight: FontWeight.bold))),
-                    HikkaIconButton(icon: Symbols.close_rounded, tooltip: 'Закрити', scale: scale, onTap: () => Navigator.of(context).pop()),
-                  ],
-                ),
+              AppSecondaryButton(
+                scale: scale,
+                expand: false,
+                icon: Symbols.refresh_rounded,
+                label: 'Оновити дані',
+                onTap: () => HikkaNav.instance.refreshAll?.call(),
               ),
-              Divider(height: 1, color: uiTheme.borderSubtle),
-              Flexible(
-                child: AppScrollbar(
-                  scale: scale,
-                  controller: _scroll,
-                  child: SingleChildScrollView(
-                    controller: _scroll,
-                    padding: EdgeInsets.fromLTRB(pad, 18 * scale, pad, 16 * scale),
-                    child: ListenableBuilder(
-                      listenable: _prefs,
-                      builder: (context, _) => Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _title('Мова назв', hint: 'Якщо назви потрібною мовою немає, показується наступна доступна'),
-                          AppSegmentedBar<HikkaTitleLang>(
-                            scale: scale,
-                            selectedValue: _prefs.titleLang,
-                            options: const [
-                              AppSegmentOption(value: HikkaTitleLang.ua, label: 'Українська'),
-                              AppSegmentOption(value: HikkaTitleLang.en, label: 'English'),
-                              AppSegmentOption(value: HikkaTitleLang.ja, label: 'Ромаджі'),
-                            ],
-                            onSelected: (v) => _prefs.titleLang = v,
-                          ),
-                          SizedBox(height: 22 * scale),
-                          HikkaToggleRow(
-                            scale: scale,
-                            title: 'Контент 18+',
-                            subtitle: 'Показувати хентай та інші матеріали для дорослих у списках, пошуку й календарі. Лише для повнолітніх.',
-                            value: _prefs.allowAdult,
-                            onChanged: (v) => _prefs.allowAdult = v,
-                          ),
-                          SizedBox(height: 22 * scale),
-                          _title('Перегляд', hint: 'Де шукати українські озвучки й субтитри та яка якість відео за замовчуванням.'),
-                          AppSecondaryButton(
-                            scale: scale,
-                            expand: false,
-                            icon: Symbols.tune_rounded,
-                            label: 'Джерела перегляду',
-                            onTap: () => SourcesDialog.show(context, scale: scale, registry: WatchService.instance.registry),
-                          ),
-                          SizedBox(height: 22 * scale),
-                          _title('Свій клієнт Hikka', hint: 'Необов’язково. У застосунку вже є вбудований клієнт для входу в акаунт; свій (його створюють на hikka.io, в налаштуваннях у розділі «Застосунки») знадобиться, якщо ключ вбудованого перестворили. Зміни діють при наступному вході.'),
-                          AppSearchField(scale: scale, controller: _clientRef, icon: Symbols.badge_rounded, hint: 'Референс клієнта', onChanged: _clientChanged),
-                          SizedBox(height: 10 * scale),
-                          AppSearchField(scale: scale, controller: _clientSecret, icon: Symbols.key_rounded, hint: 'Ключ клієнта', onChanged: _clientChanged),
-                          SizedBox(height: 22 * scale),
-                          _title('Дані', hint: 'Каталог бере інформацію з hikka.io. Відповіді зберігаються на кілька хвилин, щоб сторінки відкривались швидко.'),
-                          Wrap(
-                            spacing: 10 * scale,
-                            runSpacing: 10 * scale,
-                            children: [
-                              AppSecondaryButton(
-                                scale: scale,
-                                expand: false,
-                                icon: Symbols.refresh_rounded,
-                                label: 'Оновити дані',
-                                onTap: () {
-                                  widget.onRefresh();
-                                  Navigator.of(context).pop();
-                                },
-                              ),
-                              AppSecondaryButton(
-                                scale: scale,
-                                expand: false,
-                                icon: Symbols.delete_outline_rounded,
-                                label: _cleared
-                                    ? 'Кеш очищено'
-                                    : _cacheBytes == null
-                                        ? 'Очистити кеш зображень'
-                                        : 'Очистити кеш зображень · ${HikkaSettingsDialog.formatBytes(_cacheBytes!)}',
-                                onTap: _clearImages,
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
+              AppSecondaryButton(
+                scale: scale,
+                expand: false,
+                icon: Symbols.delete_outline_rounded,
+                label: _cleared
+                    ? 'Кеш очищено'
+                    : _cacheBytes == null
+                        ? 'Очистити кеш зображень'
+                        : 'Очистити кеш зображень · ${HikkaCatalogSettings.formatBytes(_cacheBytes!)}',
+                onTap: _clearImages,
               ),
             ],
           ),
-        ),
+        ],
       ),
     );
   }

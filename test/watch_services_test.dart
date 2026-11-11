@@ -50,7 +50,7 @@ void main() {
     test('завершений тайтл, не всі серії → incomplete', () {
       final c = checkEpisodes(eps(List.generate(10, (i) => i + 1)), finished);
       expect(c.level, EpisodeCheckLevel.incomplete);
-      expect(c.note, contains('10 з 12'));
+      expect(c.note, contains('10/12'));
       expect(c.syncSafe, isTrue);
     });
 

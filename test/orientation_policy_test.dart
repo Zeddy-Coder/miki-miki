@@ -111,7 +111,7 @@ void main() {
   test('розбір збереженого значення', () {
     expect(PlayerOrientation.parse('landscape'), PlayerOrientation.landscape);
     expect(PlayerOrientation.parse('portrait'), PlayerOrientation.portrait);
-    expect(PlayerOrientation.parse('щось'), PlayerOrientation.system);
-    expect(PlayerOrientation.parse(null), PlayerOrientation.system);
+    expect(PlayerOrientation.parse('щось'), PlayerOrientation.landscape);
+    expect(PlayerOrientation.parse(null), PlayerOrientation.landscape);
   });
 }

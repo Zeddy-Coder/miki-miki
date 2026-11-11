@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../services/osd_message.dart';
 import '../services/ui_theme_service.dart';
+import '../utils/platform_info.dart';
 import 'app_animation_kit.dart';
 
 /// Екранне сповіщення поверх відео (гучність, швидкість, Anime4K, клавіші mpv…).
@@ -115,7 +116,7 @@ class _OsdPill extends StatelessWidget {
                       ],
                     ),
                   ),
-                  if (msg.keys.isNotEmpty) ...[
+                  if (msg.keys.isNotEmpty && !AppPlatform.isMobile) ...[
                     SizedBox(width: 14 * scale),
                     for (int i = 0; i < msg.keys.length; i++) ...[
                       if (i > 0) SizedBox(width: 4 * scale),
@@ -127,7 +128,7 @@ class _OsdPill extends StatelessWidget {
               if (msg.progress != null) ...[
                 SizedBox(height: 8 * scale),
                 ClipRRect(
-                  borderRadius: BorderRadius.circular(2 * scale),
+                  borderRadius: uiTheme.borderRadius(2 * scale),
                   child: SizedBox(
                     height: 3 * scale,
                     child: Stack(

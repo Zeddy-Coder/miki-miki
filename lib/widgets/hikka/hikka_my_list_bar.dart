@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
@@ -115,6 +116,66 @@ class _HikkaMyListBarState extends State<HikkaMyListBar> {
     );
   }
 
+  final GlobalKey _anchor = GlobalKey();
+
+  /// Випадне меню під кнопкою: статуси, «Серії та оцінка…», «Видалити зі списку»
+  Future<void> _menu() async {
+    final scale = _scale;
+    final box = _anchor.currentContext?.findRenderObject();
+    final overlay = Overlay.of(context).context.findRenderObject();
+    if (box is! RenderBox || overlay is! RenderBox) return;
+    final origin = box.localToGlobal(Offset(0, box.size.height + 4 * scale), ancestor: overlay);
+    final entry = _list.cached(_slug);
+    const edit = 'edit';
+    const remove = 'remove';
+    // Як кнопки у «Списках»: контурний значок кольору статусу, назва нейтральна; вибраний — виділена назва й пташка
+    PopupMenuItem<Object> row(Object v, IconData icon, String text, {Color? iconColor, Color? color, bool checked = false}) => PopupMenuItem<Object>(
+          value: v,
+          height: 44 * scale,
+          child: Row(
+            children: [
+              Icon(icon, size: 20 * scale, color: iconColor ?? color ?? uiTheme.colors.textMuted, weight: 300, fill: 0),
+              SizedBox(width: 12 * scale),
+              Expanded(
+                child: Text(
+                  text,
+                  style: hikkaStyle(13.5 * scale, color: color ?? uiTheme.colors.textPrimary, weight: checked ? FontWeight.bold : FontWeight.normal),
+                ),
+              ),
+              if (checked) Icon(Symbols.check_rounded, size: 18 * scale, color: uiTheme.colors.textMuted),
+            ],
+          ),
+        );
+    final picked = await showMenu<Object>(
+      context: context,
+      color: uiTheme.colors.drawerBg,
+      constraints: BoxConstraints(minWidth: box.size.width, maxWidth: math.max(box.size.width, 260 * scale)),
+      shape: RoundedRectangleBorder(
+        borderRadius: uiTheme.borderRadius(12 * scale),
+        side: BorderSide(color: uiTheme.colors.drawerBorder),
+      ),
+      position: RelativeRect.fromLTRB(origin.dx, origin.dy, overlay.size.width - origin.dx - box.size.width, 0),
+      items: [
+        for (final st in HikkaWatchStatus.values) row(st, hikkaStatusIcon(st), st.label, iconColor: hikkaStatusColor(st), checked: entry?.status == st),
+        const PopupMenuDivider(),
+        row(edit, Symbols.tune_rounded, 'Серії та оцінка…'),
+        if (entry != null) row(remove, Symbols.delete_rounded, 'Видалити зі списку', iconColor: _errorColor),
+      ],
+    );
+    if (!mounted || picked == null) return;
+    if (picked == edit) return _edit();
+    try {
+      if (picked == remove) {
+        await _list.remove(_slug);
+      } else if (picked is HikkaWatchStatus) {
+        final total = (widget.anime.episodesTotal ?? 0) > 0 ? widget.anime.episodesTotal : null;
+        await _list.save(_slug, status: picked, total: total, anime: widget.anime);
+      }
+    } on HikkaException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    }
+  }
+
   Future<void> _toggleFavourite() async {
     final now = _list.favouriteCached(_slug) ?? false;
     try {
@@ -124,12 +185,12 @@ class _HikkaMyListBarState extends State<HikkaMyListBar> {
     }
   }
 
-  /// Коротка кнопка статусу: лише значок, назва й олівець (без кількості серій); оцінка окремою плашкою поруч
+  /// Коротка кнопка статусу: лише значок, назва й стрілка випадного меню (без кількості серій); оцінка окремою плашкою поруч
   Widget _entryTile(HikkaWatchEntry e) {
     final scale = _scale;
     final color = hikkaStatusColor(e.status);
     Widget tappable({required Widget child, required Color fill, required Color line}) => InkWell(
-          onTap: _edit,
+          onTap: () => unawaited(_menu()),
           borderRadius: uiTheme.borderRadius(12 * scale),
           splashColor: Colors.transparent,
           highlightColor: uiTheme.touchHighlight,
@@ -162,7 +223,7 @@ class _HikkaMyListBarState extends State<HikkaMyListBar> {
                   child: Text(e.status.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: hikkaStyle(13.5 * scale, weight: FontWeight.bold)),
                 ),
                 SizedBox(width: 10 * scale),
-                Icon(Symbols.edit_rounded, color: uiTheme.textDarkMuted, size: 16 * scale, weight: 300),
+                Icon(Symbols.expand_more_rounded, color: uiTheme.textDarkMuted, size: 20 * scale, weight: 300),
               ],
             ),
           ),
@@ -205,7 +266,7 @@ class _HikkaMyListBarState extends State<HikkaMyListBar> {
             child: IgnorePointer(child: AppSecondaryButton(scale: scale, expand: false, icon: Symbols.bookmark_rounded, label: 'Завантажую список…', onTap: () {})),
           );
         } else if (entry == null) {
-          main = AppSecondaryButton(scale: scale, expand: false, icon: Symbols.bookmark_add_rounded, label: 'Додати в список', onTap: () => unawaited(_edit()));
+          main = AppSecondaryButton(scale: scale, expand: false, icon: Symbols.bookmark_add_rounded, label: 'Додати в список', onTap: () => unawaited(_menu()));
         } else {
           main = _entryTile(entry);
         }
@@ -217,7 +278,7 @@ class _HikkaMyListBarState extends State<HikkaMyListBar> {
             children: [
               Row(
                 children: [
-                  Flexible(child: main),
+                  Flexible(child: KeyedSubtree(key: _anchor, child: main)),
                   if (signedIn && !_loading) ...[
                     SizedBox(width: 6 * scale),
                     HikkaIconButton(

@@ -1,3 +1,4 @@
+import '../../services/anilist_posters.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -56,9 +57,13 @@ class HikkaPoster extends StatelessWidget {
   final Alignment alignment;
   final bool border;
 
+  /// MAL-id тайтлу: якщо задано, постер береться з AniList (якісніший, без тексту), а Hikka лишається запасним
+  final int malId;
+
   const HikkaPoster({
     super.key,
     required this.url,
+    this.malId = 0,
     required this.scale,
     this.aspect = 0.7,
     this.radius = 10,
@@ -71,12 +76,24 @@ class HikkaPoster extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (malId <= 0) return _build(context, url);
+    return ListenableBuilder(
+      listenable: AniListPosters.instance,
+      builder: (context, _) {
+        final found = AniListPosters.instance.lookup(malId);
+        // Поки AniList відповідає — заглушка, щоб не вантажити малий постер Hikka даремно
+        if (found == null) return _build(context, null);
+        return _build(context, found.isEmpty ? url : found);
+      },
+    );
+  }
+
+  Widget _build(BuildContext context, String? src) {
     final r = uiTheme.borderRadius(radius * scale);
     final placeholder = ColoredBox(
       color: uiTheme.bgElevated,
       child: Center(child: Icon(icon, size: 26 * scale, color: uiTheme.textDarkMuted.withValues(alpha: 0.6), weight: 300)),
     );
-    final src = url;
     final Widget picture = src == null
         ? placeholder
         : LayoutBuilder(
@@ -426,7 +443,10 @@ class HikkaLinkButton extends StatelessWidget {
   final double scale;
   final VoidCallback onTap;
 
-  const HikkaLinkButton({super.key, required this.label, required this.scale, required this.onTap});
+  /// Значок перед підписом: тоді це «тиха» дія (як «Скинути» в налаштуваннях), без стрілки й акценту
+  final IconData? icon;
+
+  const HikkaLinkButton({super.key, required this.label, required this.scale, required this.onTap, this.icon});
 
   @override
   Widget build(BuildContext context) {
@@ -446,11 +466,15 @@ class HikkaLinkButton extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
+                if (icon != null) ...[
+                  Icon(icon, color: uiTheme.textMuted, size: 16 * scale),
+                  SizedBox(width: 5 * scale),
+                ],
                 Text(
                   label,
-                  style: TextStyle(fontFamily: 'Arial', color: uiTheme.accentColor, fontSize: 12 * scale, fontWeight: FontWeight.w600),
+                  style: TextStyle(fontFamily: 'Arial', color: icon != null ? uiTheme.textMuted : uiTheme.accentColor, fontSize: 12 * scale, fontWeight: icon != null ? FontWeight.w500 : FontWeight.w600),
                 ),
-                Icon(Symbols.chevron_right_rounded, color: uiTheme.accentColor, size: 16 * scale),
+                if (icon == null) Icon(Symbols.chevron_right_rounded, color: uiTheme.accentColor, size: 16 * scale),
               ],
             ),
           ),
@@ -490,9 +514,9 @@ class HikkaIconButton extends StatelessWidget {
           height: size,
           child: Material(
             color: active ? uiTheme.accentWash : Colors.transparent,
-            shape: const CircleBorder(),
+            shape: RoundedRectangleBorder(borderRadius: uiTheme.borderRadius(size / 2)),
             child: InkWell(
-              customBorder: const CircleBorder(),
+              customBorder: RoundedRectangleBorder(borderRadius: uiTheme.borderRadius(size / 2)),
               splashColor: Colors.transparent,
               highlightColor: uiTheme.touchHighlight,
               hoverColor: uiTheme.hoverOverlay,
@@ -624,7 +648,7 @@ class HikkaCardSkeleton extends StatelessWidget {
   Widget build(BuildContext context) {
     Widget bar(double factor, double height) => FractionallySizedBox(
           widthFactor: factor,
-          child: Container(height: height, decoration: BoxDecoration(color: uiTheme.bgElevated, borderRadius: BorderRadius.circular(4))),
+          child: Container(height: height, decoration: BoxDecoration(color: uiTheme.bgElevated, borderRadius: uiTheme.borderRadius(4))),
         );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -647,7 +671,7 @@ class HikkaCardSkeleton extends StatelessWidget {
 
 /// Смужка-заглушка (рядок тексту)
 Widget hikkaSkeletonBar(double? width, double height, {double? factor}) {
-  final box = Container(height: height, width: width, decoration: BoxDecoration(color: uiTheme.bgElevated, borderRadius: BorderRadius.circular(4)));
+  final box = Container(height: height, width: width, decoration: BoxDecoration(color: uiTheme.bgElevated, borderRadius: uiTheme.borderRadius(4)));
   return factor == null ? box : FractionallySizedBox(widthFactor: factor, alignment: Alignment.centerLeft, child: box);
 }
 
@@ -845,6 +869,7 @@ class _HikkaPagedGridState<T> extends State<HikkaPagedGrid<T>> {
         controller: _controller,
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
+          SliverToBoxAdapter(child: SizedBox(height: AppHeaderInset.of(context))), // місце під шапкою-накладкою
           if (widget.header != null) SliverToBoxAdapter(child: widget.header),
           if (skeleton)
             SliverPadding(
@@ -929,7 +954,7 @@ class HikkaToggleRow extends StatelessWidget {
           padding: EdgeInsets.all(2.5 * scale),
           decoration: BoxDecoration(
             color: value ? accent : (uiTheme.isLight ? const Color(0xFFD4D4DE) : const Color(0xFF28282C)),
-            borderRadius: BorderRadius.circular(12 * scale),
+            borderRadius: uiTheme.borderRadius(12 * scale),
             border: Border.all(
               color: value ? accent : (uiTheme.isLight ? const Color(0xFFC0C0CC) : const Color(0xFF38383E)),
             ),

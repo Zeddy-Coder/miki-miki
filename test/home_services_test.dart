@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:miki_miki/services/app_log.dart';
 import 'package:miki_miki/models/hikka_models.dart';
 import 'package:miki_miki/services/banner_art.dart';
 import 'package:miki_miki/services/continue_watching.dart';
@@ -247,6 +248,32 @@ void main() {
       expect(calls, 0);
     });
 
+    test('stripSeason прибирає позначку сезону з назви', () {
+      expect(TmdbBackdrops.stripSeason('Kekkai Sensen 2nd Season'), 'Kekkai Sensen');
+      expect(TmdbBackdrops.stripSeason('Spy x Family Season 3'), 'Spy x Family');
+      expect(TmdbBackdrops.stripSeason('Attack on Titan: The Final Season'), 'Attack on Titan');
+      expect(TmdbBackdrops.stripSeason('Mob Psycho 100 Part 2'), 'Mob Psycho 100');
+      expect(TmdbBackdrops.stripSeason('Просто назва'), isNull);
+      expect(TmdbBackdrops.stripSeason(null), isNull);
+    });
+
+    test('якщо з роком нічого немає — пошук без року (наступний сезон давнього серіалу)', () async {
+      final calls = <Uri>[];
+      final t = TmdbBackdrops(
+        key: () => 'abc',
+        fetch: (m, u, {body, headers}) async {
+          calls.add(u);
+          return u.queryParameters.containsKey('first_air_date_year')
+              ? {'results': []}
+              : {'results': [{'backdrop_path': '/old.jpg'}]};
+        },
+      );
+      final url = await t.backdropFor(anime(5, year: 2026, titleEn: 'Show 2nd Season'));
+      expect(url, 'https://image.tmdb.org/t/p/w1280/old.jpg');
+      expect(calls.any((u) => u.queryParameters.containsKey('first_air_date_year')), isTrue);
+      expect(calls.last.queryParameters.containsKey('first_air_date_year'), isFalse);
+    });
+
     test('ключ v3 іде параметром; шукає за рідною назвою, тоді за японською; рік і тип у запиті', () async {
       final urls = <Uri>[];
       final t = TmdbBackdrops(
@@ -297,7 +324,7 @@ void main() {
         return {'results': []};
       });
       expect(await t.backdropFor(anime(3)), isNull);
-      expect(calls, 2, reason: 'лише дві перші назви');
+      expect(calls, 6, reason: 'за рік і без року — по три назви (рідна, японська, англійська)');
       calls = 0;
       expect(await t.backdropFor(anime(4, titleJa: null, titleEn: ' ', titleNative: null)), isNull);
       expect(calls, 0);
@@ -375,16 +402,16 @@ void main() {
       expect(anilistCalls, 2, reason: 'п’ятнадцять — застарів');
     });
 
-    test('«банера немає» запам’ятовується лише на 2 дні', () async {
+    test('без ключа TMDB «банера немає» не кешується, а знайдений банер підхоплюється', () async {
       final art = make();
       final out = await art.load([anime(2)]);
       expect(out[2]!.hasImage, isFalse);
       await art.load([anime(2)]);
-      expect(anilistCalls, 1);
+      expect(anilistCalls, 2, reason: 'без ключа TMDB «банера немає» не запам’ятовується: ключ з бекенду може прийти згодом');
       now = now.add(const Duration(days: 3));
       anilistBanners[2] = 'https://s4.anilist.co/2.jpg';
       final later = await art.load([anime(2)]);
-      expect(anilistCalls, 2);
+      expect(anilistCalls, 3);
       expect(later[2]!.url, 'https://s4.anilist.co/2.jpg', reason: 'банер з’явився — підхопили');
     });
 
@@ -419,13 +446,80 @@ void main() {
       now = now.add(const Duration(days: 3)); // негативний запис з минулого кроку застарів
       final art = make(preload: disk);
       final withKey = await art.load([anime(1), anime(2)]);
-      expect(tmdbCalls, 1, reason: 'лише для другого тайтлу');
-      expect(withKey[1]!.url, 'https://s4.anilist.co/1.jpg');
+      expect(tmdbCalls, 2, reason: 'записи, зроблені без TMDB, перевіряються знову, щойно з’явився ключ');
+      expect(withKey[1]!.url, 'https://image.tmdb.org/t/p/w1280/tmdb.jpg', reason: 'TMDB — основне джерело');
       expect(withKey[2]!.url, 'https://image.tmdb.org/t/p/w1280/tmdb.jpg');
       expect(withKey[2]!.color, 0xFF336699, reason: 'колір обкладинки лишається з AniList');
       // Результат TMDB теж кешується
       await art.load([anime(2)]);
-      expect(tmdbCalls, 1);
+      expect(tmdbCalls, 2);
+    });
+
+    BannerArt build(Object? Function(Uri) tmdb, {String? anilistBanner}) => BannerArt(
+          now: () => now,
+          load: () => {},
+          save: (_) {},
+          anilist: AniListBanners(fetch: (m, u, {body, headers}) async => {
+                'data': {'Page': {'media': [{'idMal': 2, 'bannerImage': anilistBanner, 'coverImage': {'color': '#336699'}}]}}
+              }),
+          tmdb: TmdbBackdrops(key: () => 'key', fetch: (m, u, {body, headers}) async => tmdb(u)),
+        );
+
+    test('бекенд банерів — перше джерело: його відповіді вистачає, TMDB і AniList не питаються', () async {
+      var direct = 0;
+      final art = BannerArt(
+        now: () => now,
+        load: () => {},
+        save: (_) {},
+        backend: (items) async => {
+          for (final i in items) i['mal'] as int: ('https://image.tmdb.org/t/p/w1280/${i['mal']}.jpg', 0xFF112233),
+        },
+        anilist: AniListBanners(fetch: (m, u, {body, headers}) async {
+          direct++;
+          return {'data': {'Page': {'media': []}}};
+        }),
+        tmdb: TmdbBackdrops(key: () => 'key', fetch: (m, u, {body, headers}) async {
+          direct++;
+          return {'results': []};
+        }),
+      );
+      final out = await art.load([anime(2), anime(3)]);
+      expect(out[2]!.url, 'https://image.tmdb.org/t/p/w1280/2.jpg');
+      expect(out[3]!.color, 0xFF112233);
+      expect(direct, 0);
+    });
+
+    test('бекенд банерів недоступний — працює прямий пошук', () async {
+      final art = BannerArt(
+        now: () => now,
+        load: () => {},
+        save: (_) {},
+        backend: (items) async => null,
+        anilist: AniListBanners(fetch: (m, u, {body, headers}) async => {
+              'data': {'Page': {'media': [{'idMal': 2, 'bannerImage': 'https://s4.anilist.co/2.jpg', 'coverImage': {'color': '#336699'}}]}}
+            }),
+        tmdb: TmdbBackdrops(key: () => '', fetch: (m, u, {body, headers}) async => null),
+      );
+      final out = await art.load([anime(2)]);
+      expect(out[2]!.url, 'https://s4.anilist.co/2.jpg');
+    });
+
+    test('TMDB — основне джерело: його банер важливіший за банер AniList', () async {
+      final art = build((u) => {'results': [{'backdrop_path': '/tmdb.jpg'}]}, anilistBanner: 'https://s4.anilist.co/2.jpg');
+      final out = await art.load([anime(2)]);
+      expect(out[2]!.url, 'https://image.tmdb.org/t/p/w1280/tmdb.jpg');
+    });
+
+    test('TMDB нічого не дав або видав помилку — береться банер AniList, а помилка потрапляє в журнал', () async {
+      final prev = AppLog.instance;
+      AppLog.instance = AppLog();
+      addTearDown(() => AppLog.instance = prev);
+      final empty = await build((u) => {'results': []}, anilistBanner: 'https://s4.anilist.co/2.jpg').load([anime(2)]);
+      expect(empty[2]!.url, 'https://s4.anilist.co/2.jpg');
+      final broken = await build((u) => throw Exception('HTTP 401'), anilistBanner: 'https://s4.anilist.co/2.jpg').load([anime(2)]);
+      expect(broken[2]!.url, 'https://s4.anilist.co/2.jpg');
+      final warnings = [for (final e in AppLog.instance.entries) if (e.tag == 'banners') e.message];
+      expect(warnings.any((w) => w.contains('TMDB помилка') && w.contains('HTTP 401')), isTrue, reason: 'помилку видно в журналі: $warnings');
     });
 
     test('збій TMDB не псує відповідь AniList', () async {

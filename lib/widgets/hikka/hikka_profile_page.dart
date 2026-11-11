@@ -6,14 +6,12 @@ import '../../services/app_updater.dart';
 import '../../services/hikka_nav.dart';
 import '../../services/storage_service.dart';
 import '../../services/ui_theme_service.dart';
-import '../../services/watch_service.dart';
 import '../app_animation_kit.dart';
 import '../app_settings_dialog.dart';
 import '../app_ui_kit.dart';
 import 'hikka_account_ui.dart';
 import 'hikka_common.dart';
 import 'hikka_page_kit.dart';
-import 'sources_dialog.dart';
 
 /// Вкладка «Профіль»: обліковий запис Hikka (вхід, вихід, синхронізація прогресу) і вхід до налаштувань застосунку,
 /// каталогу, джерел перегляду та «Про застосунок». Прихована локальна медіатека з'являється тут, коли її
@@ -26,13 +24,11 @@ class HikkaProfilePage extends StatefulWidget {
   final void Function({int? tab}) onOpenSettings;
 
   /// Налаштування каталогу (мова назв, 18+, дані)
-  final VoidCallback onOpenCatalogSettings;
 
   const HikkaProfilePage({
     super.key,
     required this.scale,
     required this.onOpenSettings,
-    required this.onOpenCatalogSettings,
     this.bottomInset = 0,
   });
 
@@ -91,22 +87,8 @@ class _HikkaProfilePageState extends State<HikkaProfilePage> {
                             scale: scale,
                             icon: Symbols.settings_rounded,
                             title: 'Налаштування застосунку',
-                            subtitle: 'Вигляд, плеєр, субтитри, звук',
+                            subtitle: 'Вигляд, плеєр, каталог, джерела перегляду',
                             onTap: () => widget.onOpenSettings(),
-                          ),
-                          _MenuRow(
-                            scale: scale,
-                            icon: Symbols.tune_rounded,
-                            title: 'Каталог і дані',
-                            subtitle: 'Мова назв, контент 18+, оновлення даних, кеш',
-                            onTap: widget.onOpenCatalogSettings,
-                          ),
-                          _MenuRow(
-                            scale: scale,
-                            icon: Symbols.play_circle_rounded,
-                            title: 'Джерела перегляду',
-                            subtitle: 'Де шукати українські озвучки й субтитри',
-                            onTap: () => SourcesDialog.show(context, scale: scale, registry: WatchService.instance.registry),
                           ),
                         ]),
                         SizedBox(height: 14 * scale),

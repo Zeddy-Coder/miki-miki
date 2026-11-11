@@ -87,14 +87,19 @@ class _HikkaFilterSheetState extends State<HikkaFilterSheet> {
     );
   }
 
+  /// Той самий вигляд, що й повзунки в налаштуваннях
   SliderThemeData _sliderTheme(BuildContext context) => SliderTheme.of(context).copyWith(
-        trackHeight: 3,
+        trackHeight: 3.0 * _scale,
         activeTrackColor: uiTheme.accentColor,
-        inactiveTrackColor: uiTheme.borderSubtle,
+        inactiveTrackColor: uiTheme.isLight ? const Color(0xFFE2E2E8) : const Color(0xFF202024),
         thumbColor: uiTheme.accentColor,
         overlayColor: uiTheme.accentColor.withValues(alpha: 0.14),
-        rangeThumbShape: const RoundRangeSliderThumbShape(enabledThumbRadius: 9),
+        rangeThumbShape: DotRangeSliderThumbShape(enabledThumbRadius: 6.5 * _scale, innerDotRadius: 2.8 * _scale),
         rangeTrackShape: const RoundedRectRangeSliderTrackShape(),
+        overlayShape: RoundSliderOverlayShape(overlayRadius: 14.0 * _scale),
+        rangeTickMarkShape: const RoundRangeSliderTickMarkShape(tickMarkRadius: 0),
+        activeTickMarkColor: Colors.transparent,
+        inactiveTickMarkColor: Colors.transparent,
       );
 
   Widget _rangeRow({
@@ -223,12 +228,11 @@ class _HikkaFilterSheetState extends State<HikkaFilterSheet> {
                 child: Text('Фільтри', style: TextStyle(fontFamily: 'Arial', color: uiTheme.textPrimary, fontSize: 16 * scale, fontWeight: FontWeight.bold)),
               ),
               if (_hasChanges)
-                HikkaLinkButton(label: 'Скинути', scale: scale, onTap: () => setState(() => _f = HikkaSearchFilters(query: _f.query, sort: widget.defaultSort))),
+                HikkaLinkButton(label: 'Скинути', icon: Symbols.restart_alt_rounded, scale: scale, onTap: () => setState(() => _f = HikkaSearchFilters(query: _f.query, sort: widget.defaultSort))),
               HikkaIconButton(icon: Symbols.close_rounded, tooltip: 'Закрити', scale: scale, onTap: widget.onClose),
             ],
           ),
         ),
-        Divider(height: 1, color: uiTheme.borderSubtle),
         Flexible(
           child: AppScrollbar(
             scale: scale,

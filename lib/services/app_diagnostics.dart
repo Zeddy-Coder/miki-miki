@@ -21,7 +21,7 @@ class AppDiagnostics with WidgetsBindingObserver {
   static final AppDiagnostics instance = AppDiagnostics._();
 
   /// Позначка збірки в журналі
-  static const String build = 'v41';
+  static const String build = 'b52';
 
   bool _installed = false;
   Timer? _sampleTimer;
@@ -133,7 +133,11 @@ class AppDiagnostics with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     AppLog.i('життєвий цикл', state.name);
-    if (state != AppLifecycleState.resumed) unawaited(AppLog.instance.flushNow());
+    if (state != AppLifecycleState.resumed) {
+      unawaited(AppLog.instance.flushNow());
+      // Налаштування й токен входу не мають залежати від того, чи застосунок закрили «правильно»
+      unawaited(StorageService.flush());
+    }
   }
 
   @override

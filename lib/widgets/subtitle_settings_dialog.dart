@@ -1,3 +1,4 @@
+import '../services/system_fonts.dart';
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:file_picker/file_picker.dart';
@@ -42,7 +43,7 @@ class _SubtitleSettingsDialogState extends State<SubtitleSettingsDialog> {
   late String _assMode;
   List<String> _customFonts = [];
 
-  final List<String> _builtInFonts = ['Trebuchet MS', 'Arial', 'Roboto', 'Segoe UI', 'Tahoma', 'Consolas'];
+  final List<String> _builtInFonts = SystemFonts.available;
 
   final Map<String, (String, Color)> _palette = {
     '#FFFFFF': ('Білий', Colors.white),
@@ -94,7 +95,7 @@ class _SubtitleSettingsDialogState extends State<SubtitleSettingsDialog> {
   }
 
   Future<void> _resetDefaults() async {
-    _font = 'Trebuchet MS';
+    _font = SystemFonts.defaultFont;
     _fontSize = 48.0;
     _textColor = '#FFFFFF';
     _borderSize = 5.0;
@@ -136,7 +137,7 @@ class _SubtitleSettingsDialogState extends State<SubtitleSettingsDialog> {
           constraints: BoxConstraints(maxHeight: 680 * scale),
           decoration: BoxDecoration(
             color: const Color(0xFF111111),
-            borderRadius: BorderRadius.circular(uiTheme.radius(20 * scale)),
+            borderRadius: uiTheme.borderRadius(uiTheme.radius(20 * scale)),
             border: Border.all(color: const Color(0xFF222222), width: 1.0),
             boxShadow: [
               BoxShadow(color: Colors.black.withValues(alpha: 0.70), blurRadius: 28 * scale, offset: Offset(0, 10 * scale)),
@@ -160,7 +161,7 @@ class _SubtitleSettingsDialogState extends State<SubtitleSettingsDialog> {
                     const Spacer(),
                     InkWell(
                       onTap: _resetDefaults,
-                      borderRadius: BorderRadius.circular(6 * scale),
+                      borderRadius: uiTheme.borderRadius(6 * scale),
                       child: Padding(
                         padding: EdgeInsets.symmetric(horizontal: 8 * scale, vertical: 4 * scale),
                         child: Row(
@@ -211,7 +212,7 @@ class _SubtitleSettingsDialogState extends State<SubtitleSettingsDialog> {
                           _buildHeaderLabel(scale, 'Гарнітура шрифту'),
                           InkWell(
                             onTap: _pickCustomFontFile,
-                            borderRadius: BorderRadius.circular(6 * scale),
+                            borderRadius: uiTheme.borderRadius(6 * scale),
                             child: Row(
                               children: [
                                 Icon(Symbols.add_rounded, color: uiTheme.accentColor, size: 16 * scale),
@@ -293,7 +294,7 @@ class _SubtitleSettingsDialogState extends State<SubtitleSettingsDialog> {
                         foregroundColor: Colors.white,
                         elevation: 0,
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(uiTheme.radius(10 * scale)),
+                          borderRadius: uiTheme.borderRadius(uiTheme.radius(10 * scale)),
                           side: BorderSide(color: uiTheme.accentBorder),
                         ),
                         padding: EdgeInsets.symmetric(horizontal: 24 * scale, vertical: 11 * scale),
@@ -321,7 +322,7 @@ class _SubtitleSettingsDialogState extends State<SubtitleSettingsDialog> {
       margin: EdgeInsets.symmetric(horizontal: 24 * scale, vertical: 8 * scale),
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(uiTheme.radius(14 * scale)),
+        borderRadius: uiTheme.borderRadius(uiTheme.radius(14 * scale)),
         border: Border.all(color: const Color(0xFF282828)),
         gradient: const LinearGradient(
           colors: [Color(0xFF1E3C72), Color(0xFF2A5298), Color(0xFFE65C00), Color(0xFFF9D423)],
@@ -338,7 +339,7 @@ class _SubtitleSettingsDialogState extends State<SubtitleSettingsDialog> {
               padding: EdgeInsets.only(bottom: 10 * scale, left: 16 * scale, right: 16 * scale),
               child: Container(
                 padding: EdgeInsets.symmetric(horizontal: 10 * scale, vertical: 2 * scale),
-                decoration: BoxDecoration(color: Colors.black.withValues(alpha: _bgOpacity), borderRadius: BorderRadius.circular(4 * scale)),
+                decoration: BoxDecoration(color: Colors.black.withValues(alpha: _bgOpacity), borderRadius: uiTheme.borderRadius(4 * scale)),
                 child: Stack(
                   alignment: Alignment.center,
                   children: [

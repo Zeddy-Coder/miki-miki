@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:miki_miki/models/hikka_models.dart';
+import 'package:miki_miki/services/backend_client.dart';
+import 'package:miki_miki/services/banner_art.dart' show BannerArtwork;
 import 'package:miki_miki/services/hikka_images.dart';
 import 'package:miki_miki/services/hikka_nav.dart';
 import 'package:miki_miki/services/hikka_prefs.dart';
@@ -19,6 +21,7 @@ import 'package:miki_miki/widgets/hikka/hikka_continue_card.dart';
 import 'package:miki_miki/widgets/hikka/hikka_community_cards.dart';
 import 'package:miki_miki/widgets/hikka/hikka_hub.dart';
 import 'package:miki_miki/widgets/hikka/hikka_page_kit.dart';
+import 'package:miki_miki/widgets/hikka/hikka_settings_dialog.dart';
 import 'package:miki_miki/widgets/home_hub.dart';
 
 import 'support/fakes.dart';
@@ -274,7 +277,9 @@ void main() {
       expect(find.byType(HikkaAnimeCard), findsWidgets, reason: 'каталог на загальній сторінці');
       await tester.dragUntilVisible(find.byType(HikkaCollectionCard).first, find.byType(SingleChildScrollView).first, const Offset(0, -300));
       expect(find.byType(HikkaCollectionCard), findsWidgets);
-      await tester.tap(find.text('Колекції').first);
+      await tester.drag(find.byType(SingleChildScrollView).first, const Offset(0, 250)); // шапка повертається
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(HikkaChip, 'Колекції'));
       await load(tester);
       expect(HikkaNav.instance.tab, HikkaTab.collections);
       expect(find.text('Правило 3-ох Епізодів'), findsWidgets);
@@ -551,32 +556,45 @@ void main() {
       expect(HikkaNav.instance.top?.kind, HikkaRouteKind.anime);
     });
 
-    testWidgets('налаштування каталогу з «Профілю»: мова назв і 18+ застосовуються одразу', (tester) async {
+    testWidgets('«Профіль»: лише налаштування застосунку й «Про…»; окремих рядків каталогу та джерел немає (вони у вкладці налаштувань)', (tester) async {
       setScreen(tester, kDesktop);
       await tester.pumpWidget(hub());
       await load(tester, rounds: 4);
       HikkaNav.instance.setMain(MainTab.profile);
       await load(tester, rounds: 6);
-      await tester.tap(find.text('Каталог і дані'));
-      await load(tester, rounds: 8);
+      expect(find.text('Каталог і дані'), findsNothing);
+      expect(find.text('Джерела перегляду'), findsNothing);
+      expect(find.text('Налаштування застосунку'), findsOneWidget);
+      await tester.tap(find.text('Налаштування застосунку'));
+      await load(tester, rounds: 4);
+      expect(settingsOpened.last, isNull);
       expect(tester.takeException(), isNull);
-      expect(find.text('Налаштування каталогу'), findsOneWidget);
+    });
+
+    testWidgets('вкладка «Каталог»: мова назв, друга назва, 18+ застосовуються одразу; джерела прямо тут', (tester) async {
+      setScreen(tester, kDesktop);
+      await tester.pumpWidget(app(const SingleChildScrollView(child: HikkaCatalogSettings(scale: 1.0))));
+      await load(tester, rounds: 6);
+      expect(tester.takeException(), isNull);
       await shot(tester, 'settings_desktop');
 
-      // «Перегляд»: вхід у налаштування джерел; закриття повертає до налаштувань каталогу
-      expect(find.text('Перегляд'), findsOneWidget);
-      await tester.tap(find.widgetWithText(AppSecondaryButton, 'Джерела перегляду'));
-      await load(tester, rounds: 6);
+      // Джерела перегляду вбудовані у вкладку, а не за окремою кнопкою
       expect(find.text('Якість відео'), findsOneWidget);
       expect(find.text('Ключ Mikai API'), findsOneWidget);
-      await tester.tap(find.byTooltip('Закрити').last);
-      await load(tester, rounds: 6);
-      expect(find.text('Якість відео'), findsNothing);
-      expect(find.text('Налаштування каталогу'), findsOneWidget);
 
-      await tester.tap(find.text('English'));
+      await tester.tap(find.text('English').first);
       await load(tester, rounds: 4);
       expect(HikkaPrefs.instance.titleLang, HikkaTitleLang.en);
+
+      // Другорядна назва: мова з'являється лише при ввімкненому перемикачі
+      expect(HikkaPrefs.instance.showSecondary, isTrue);
+      await tester.tap(find.text('Ромаджі').last);
+      await load(tester, rounds: 4);
+      expect(HikkaPrefs.instance.secondaryLang, HikkaTitleLang.ja);
+      await tester.tap(find.text('Другорядна назва'));
+      await load(tester, rounds: 4);
+      expect(HikkaPrefs.instance.showSecondary, isFalse);
+      expect(find.text('Ромаджі'), findsOneWidget);
       await tester.tap(find.text('Контент 18+'));
       await load(tester, rounds: 4);
       expect(HikkaPrefs.instance.allowAdult, isTrue);
@@ -635,6 +653,40 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 900));
       expect(page(), 1, reason: 'після паузи перейшла на другий банер');
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('підкладка сторінки тайтлу: банер зʼявляється, коли адреса відома; без нього — порожньо', (tester) async {
+      setScreen(tester, kDesktop);
+      final anime = HikkaAnime.fromJson(server.animeList.first);
+      Future<Map<int, BannerArtwork>> found(List<HikkaAnime> _) async => {anime.malId: const BannerArtwork(url: 'https://image.tmdb.org/t/p/w1280/x.jpg')};
+      await tester.pumpWidget(app(SizedBox(height: 300, child: HikkaTitleBackdrop(anime: anime, artLoader: (_) async => const {}))));
+      await tester.pump();
+      expect(find.byType(Image), findsNothing);
+      await tester.pumpWidget(app(SizedBox(height: 300, child: HikkaTitleBackdrop(key: const ValueKey('b'), anime: anime, artLoader: found))));
+      await tester.pump();
+      await tester.pump();
+      expect(find.byType(Image), findsOneWidget, reason: 'банер під назвою');
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('щойно з бекенду приходить ключ TMDB, банери завантажуються заново', (tester) async {
+      setScreen(tester, kDesktop);
+      var loads = 0;
+      await tester.pumpWidget(app(HikkaBannerCarousel(
+        items: [for (final a in server.animeList.take(3)) HikkaAnime.fromJson(a)],
+        scale: 1.0,
+        pad: 24,
+        artLoader: (_) async {
+          loads++;
+          return const {};
+        },
+      )));
+      await tester.pump();
+      expect(loads, 1);
+      BackendClient.keyEpoch.value++;
+      await tester.pump();
+      expect(loads, 2, reason: 'ключ прийшов уже після першого завантаження');
       await tester.pumpWidget(const SizedBox());
     });
 
@@ -801,27 +853,20 @@ void main() {
       await shot(tester, 'filters_narrow');
     });
 
-    testWidgets('налаштування каталогу з «Профілю» на телефоні', (tester) async {
+    testWidgets('«Профіль» на телефоні: рядки меню ≥ 48 dp; вкладка «Каталог» вміщується без переповнення', (tester) async {
       phone();
       setScreen(tester, kNarrow);
       await tester.pumpWidget(hub(scale: AppPlatform.mobileScale, pad: const EdgeInsets.fromLTRB(0, 24, 0, 24)));
       await load(tester, rounds: 4);
       HikkaNav.instance.setMain(MainTab.profile);
       await load(tester, rounds: 6);
-      // Рядки меню — зона дотику не менша за 48 dp
-      final row = find.ancestor(of: find.text('Каталог і дані'), matching: find.byType(InkWell)).first;
+      final row = find.ancestor(of: find.text('Налаштування застосунку'), matching: find.byType(InkWell)).first;
       expect(tester.getSize(row).height, greaterThanOrEqualTo(AppPlatform.touchTarget));
-      await tester.tap(find.text('Каталог і дані'));
-      await load(tester, rounds: 8);
-      expect(tester.takeException(), isNull);
-      await shot(tester, 'settings_narrow');
 
-      // Вхід у «Джерела перегляду» з телефона: зона дотику 48 dp, вікно вміщується
-      final entry = find.widgetWithText(AppSecondaryButton, 'Джерела перегляду');
-      expect(tester.getSize(entry).height, greaterThanOrEqualTo(AppPlatform.touchTarget));
-      await tester.tap(entry);
+      await tester.pumpWidget(app(const SingleChildScrollView(child: HikkaCatalogSettings(scale: AppPlatform.mobileScale))));
       await load(tester, rounds: 6);
       expect(tester.takeException(), isNull);
+      await shot(tester, 'settings_narrow');
       expect(find.text('Якість відео'), findsOneWidget);
     });
 
@@ -942,6 +987,24 @@ void main() {
       semantics.dispose();
     });
 
+    testWidgets('перемикання вкладок анімоване: нова вкладка проявляється й виїжджає, пташка в навігації розростається; стан вкладки не губиться', (tester) async {
+      phone();
+      setScreen(tester, kNarrow);
+      await tester.pumpWidget(home(pad: const EdgeInsets.fromLTRB(0, 24, 0, 24)));
+      await load(tester, rounds: 6);
+      HikkaNav.instance.setMain(MainTab.discover);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 60));
+      final enter = find.byType(HikkaTabEnter);
+      expect(enter, findsWidgets);
+      final opacities = tester.widgetList<Opacity>(find.descendant(of: enter, matching: find.byType(Opacity))).map((o) => o.opacity);
+      expect(opacities.any((o) => o < 1), isTrue, reason: 'посеред переходу нова вкладка ще напівпрозора');
+      await tester.pump(const Duration(milliseconds: 400));
+      final after = tester.widgetList<Opacity>(find.descendant(of: enter, matching: find.byType(Opacity))).map((o) => o.opacity);
+      expect(after.every((o) => o == 1), isTrue, reason: 'після переходу — повна видимість');
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('десктоп: бічне меню з назвою, чотирма вкладками, налаштуваннями й версією', (tester) async {
       setScreen(tester, kDesktop);
       await tester.pumpWidget(home());
@@ -952,7 +1015,7 @@ void main() {
       for (final label in ['Головна', 'Огляд', 'Списки', 'Профіль', 'Налаштування']) {
         expect(find.text(label), findsWidgets, reason: label);
       }
-      expect(find.text('v1.1.1'), findsOneWidget);
+      expect(find.text('v1.1.2'), findsOneWidget);
       expect(find.text('MyPlayer'), findsNothing);
       expect(find.text('YouTube Mobile Fork'), findsNothing);
       await shot(tester, 'homehub_desktop_home');

@@ -41,8 +41,18 @@ class _HikkaContinueCardState extends State<HikkaContinueCard> {
   }
 
   Future<void> _menu(Offset at) async {
-    if (await showHikkaRemoveMenu(context, at, widget.scale)) {
-      WatchStore.instance.forgetLast('${ContinueWatching.prefix}${widget.item.anime.slug}');
+    final a = widget.item.anime;
+    final pick = await showHikkaItemMenu(context, at, widget.scale);
+    switch (pick) {
+      case HikkaItemAction.open:
+        HikkaNav.instance.openAnime(a.slug, seed: a);
+      case HikkaItemAction.markWatched:
+        await markHikkaWatched(a);
+        WatchStore.instance.forgetLast('${ContinueWatching.prefix}${a.slug}');
+      case HikkaItemAction.remove:
+        WatchStore.instance.forgetLast('${ContinueWatching.prefix}${a.slug}');
+      case null:
+        break;
     }
   }
 
@@ -79,7 +89,7 @@ class _HikkaContinueCardState extends State<HikkaContinueCard> {
             children: [
               AspectRatio(
                 aspectRatio: 0.7,
-                child: HikkaPoster(url: a.image, scale: scale, radius: 0, icon: Symbols.movie_rounded),
+                child: HikkaPoster(url: a.image, malId: a.malId, scale: scale, radius: 0, icon: Symbols.movie_rounded),
               ),
               Expanded(
                 child: Padding(
@@ -106,7 +116,7 @@ class _HikkaContinueCardState extends State<HikkaContinueCard> {
                   width: 40 * scale,
                   height: 40 * scale,
                   child: DecoratedBox(
-                    decoration: BoxDecoration(shape: BoxShape.circle, color: uiTheme.accentColor),
+                    decoration: BoxDecoration(borderRadius: uiTheme.borderRadius(20 * scale), color: uiTheme.accentColor),
                     child: Center(
                       child: _busy
                           ? SizedBox(

@@ -116,7 +116,7 @@ EpisodeCheck checkEpisodes(List<SEpisode> episodes, HikkaEpisodeInfo info) {
   final expected = info.expected;
   if (episodes.isEmpty) {
     // «0 з 12»: сторінку знайдено, а серій на ній немає (часто їх додано на сторінку іншої частини сезону)
-    if (expected == null || expected <= 0) return const EpisodeCheck(EpisodeCheckLevel.unknown, 0, null, '0', '');
+    if (expected == null || expected <= 0) return const EpisodeCheck(EpisodeCheckLevel.unknown, 0, null, '0 з ?', '');
     return EpisodeCheck(
       info.finished ? EpisodeCheckLevel.incomplete : EpisodeCheckLevel.lag,
       0,
@@ -173,7 +173,7 @@ EpisodeCheck checkEpisodes(List<SEpisode> episodes, HikkaEpisodeInfo info) {
   }
   if (main.isEmpty) main = seen.toList()..sort();
   final count = main.length;
-  final head = expected == null ? '$count' : '$count з $expected';
+  final head = expected == null ? '$count з ?' : '$count з $expected';
 
   if (main.first != 1) {
     final span = main.last - main.first + 1;
@@ -192,7 +192,7 @@ EpisodeCheck checkEpisodes(List<SEpisode> episodes, HikkaEpisodeInfo info) {
     final hint = parts >= 2 ? ' Схоже, тут об’єднано $parts частини підряд — тоді на сторінці наступної частини серій не буде.' : '';
     return mismatch(count, 'Тут $count серій, а на Hikka їх лише $total.$hint');
   }
-  if (!info.known) return EpisodeCheck(EpisodeCheckLevel.unknown, count, null, '$count', '');
+  if (!info.known) return EpisodeCheck(EpisodeCheckLevel.unknown, count, null, '$count з ?', '');
 
   final released = info.released ?? 0;
   final want = expected;
@@ -207,7 +207,7 @@ EpisodeCheck checkEpisodes(List<SEpisode> episodes, HikkaEpisodeInfo info) {
       count,
       want,
       head,
-      'Тут уже $count серій, а Hikka поки знає лише про ${released > 0 ? released : want} вийшлих. Відмітки «переглянуто» зʼявляться на Hikka, коли він оновить дані.',
+      'Кількість епізодів не збігається з Hikka: $count з ${released > 0 ? released : want}. Відмітки «переглянуто» зʼявляться на Hikka, коли він оновить дані.',
     );
   }
 
@@ -228,7 +228,7 @@ EpisodeCheck checkEpisodes(List<SEpisode> episodes, HikkaEpisodeInfo info) {
       count,
       want,
       head,
-      'Не всі серії: тут $count з $want (стільки їх на Hikka).${prefix == null ? '' : ' $prefix'}',
+      'У цього озвучення є відсутні серії: $count/$want.${prefix == null ? '' : ' $prefix'}',
       syncLimit: limit,
     );
   }
@@ -237,7 +237,7 @@ EpisodeCheck checkEpisodes(List<SEpisode> episodes, HikkaEpisodeInfo info) {
     count,
     want,
     head,
-    'Озвучено $count з $want вийшлих серій, решта зʼявиться пізніше.${prefix == null ? '' : ' $prefix'}',
+    'Озвучено $count з $want серій, що вже вийшли; решта зʼявиться пізніше.${prefix == null ? '' : ' $prefix'}',
     syncLimit: limit,
   );
 }

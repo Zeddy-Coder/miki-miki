@@ -126,10 +126,24 @@ class PlayerStateController extends ChangeNotifier {
   Timer? _positionSaveTimer;
   Timer? _liveStatsTimer;
 
+  /// Палець тримає повзунок прогресу: панелі не ховаються, доки перетягування триває
+  bool seekDragging = false;
+
+  void setSeekDragging(bool value) {
+    if (seekDragging == value) return;
+    seekDragging = value;
+    if (value) {
+      _touchHide.cancel();
+      _hideTimer?.cancel();
+    } else if (showControls) {
+      _startHideTimer();
+    }
+  }
+
   /// Сенсорний екран: панелі ховає цей таймер (4 с без дотиків), а не вихід курсора із зони
   late final TouchHideTimer _touchHide = TouchHideTimer(
     shouldStayVisible: () =>
-        _disposed || isHome || !player.state.playing || isSpeeding || activeDrawer != null || activeSidePanel != null || showStatsOverlay,
+        _disposed || isHome || seekDragging || !player.state.playing || isSpeeding || activeDrawer != null || activeSidePanel != null || showStatsOverlay,
     onHide: () {
       if (!showControls) return;
       showControls = false;

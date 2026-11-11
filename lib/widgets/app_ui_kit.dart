@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+import 'package:flutter/physics.dart' show Simulation;
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
@@ -60,6 +62,36 @@ class DotSliderThumbShape extends SliderComponentShape {
       ..color = uiTheme.isLight ? const Color(0xFFFFFFFF) : const Color(0xFF111111)
       ..style = PaintingStyle.fill;
     canvas.drawCircle(center, innerDotRadius, innerPaint);
+  }
+}
+
+/// Ручка діапазону в стилі [DotSliderThumbShape]
+class DotRangeSliderThumbShape extends RangeSliderThumbShape {
+  final double enabledThumbRadius;
+  final double innerDotRadius;
+
+  const DotRangeSliderThumbShape({this.enabledThumbRadius = 7.0, this.innerDotRadius = 3.0});
+
+  @override
+  Size getPreferredSize(bool isEnabled, bool isDiscrete) => Size.fromRadius(enabledThumbRadius);
+
+  @override
+  void paint(
+    PaintingContext context,
+    Offset center, {
+    required Animation<double> activationAnimation,
+    required Animation<double> enableAnimation,
+    bool isDiscrete = false,
+    bool isEnabled = false,
+    bool? isOnTop,
+    TextDirection? textDirection,
+    required SliderThemeData sliderTheme,
+    Thumb? thumb,
+    bool? isPressed,
+  }) {
+    final canvas = context.canvas;
+    canvas.drawCircle(center, enabledThumbRadius, Paint()..color = sliderTheme.thumbColor ?? uiTheme.accentColor);
+    canvas.drawCircle(center, innerDotRadius, Paint()..color = uiTheme.isLight ? const Color(0xFFFFFFFF) : const Color(0xFF111111));
   }
 }
 
@@ -825,7 +857,7 @@ class _AppLanguagePriorityListState extends State<AppLanguagePriorityList> {
                           alignment: Alignment.center,
                           decoration: BoxDecoration(
                             color: isFirst ? uiTheme.accentWash : uiTheme.bgElevated,
-                            borderRadius: BorderRadius.circular(6 * scale),
+                            borderRadius: uiTheme.borderRadius(6 * scale),
                             border: Border.all(
                               color: isFirst ? uiTheme.accentBorder : uiTheme.borderSubtle,
                             ),
@@ -1018,7 +1050,7 @@ class _AppLanguagePriorityListState extends State<AppLanguagePriorityList> {
                             padding: EdgeInsets.symmetric(horizontal: 10 * scale, vertical: 5 * scale),
                             decoration: BoxDecoration(
                               color: uiTheme.bgElevated,
-                              borderRadius: BorderRadius.circular(6 * scale),
+                              borderRadius: uiTheme.borderRadius(6 * scale),
                               border: Border.all(color: uiTheme.borderSubtle),
                             ),
                             child: Text(
@@ -1183,7 +1215,7 @@ class AppSelectableTile extends StatelessWidget {
                         title,
                         style: TextStyle(
                           fontFamily: 'Arial',
-                          color: isSelected ? uiTheme.textPrimary : uiTheme.textMuted,
+                          color: isSelected ? uiTheme.accentColor : uiTheme.textMuted,
                           fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
                           fontSize: 13.5 * scale,
                         ),
@@ -1641,6 +1673,85 @@ class AppEmptyState extends StatelessWidget {
 // Лейаут «сайдбар + контент» (налаштування, головна, статистика)
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// Рядок меню в стилі вікна плеєра: іконка у квадратику, назва, необов'язкове значення-«пігулка» й шеврон.
+class AppMenuRow extends StatelessWidget {
+  final double scale;
+  final IconData icon;
+  final String title;
+  final String? value;
+  final bool chevron;
+  final bool active;
+  final VoidCallback onTap;
+
+  const AppMenuRow({super.key, required this.scale, required this.icon, required this.title, required this.onTap, this.value, this.chevron = true, this.active = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final r = uiTheme.borderRadius(12 * scale);
+    final fg = active ? uiTheme.accentColor : uiTheme.textPrimary;
+    final mobile = AppPlatform.isMobile;
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 2 * scale),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: r,
+        child: InkWell(
+          borderRadius: r,
+          splashColor: Colors.transparent,
+          highlightColor: uiTheme.touchHighlight,
+          hoverColor: uiTheme.hoverOverlay,
+          onTap: onTap,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: mobile ? 52 : 50 * scale),
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 6 * scale, vertical: 5 * scale),
+              child: Row(
+                children: [
+                  Container(
+                    width: 36 * scale,
+                    height: 36 * scale,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: uiTheme.bgElevated,
+                      borderRadius: uiTheme.borderRadius(18 * scale),
+                      border: Border.all(color: uiTheme.borderSubtle),
+                    ),
+                    child: Icon(icon, color: fg, size: 19 * scale, weight: 300, opticalSize: 24),
+                  ),
+                  SizedBox(width: 14 * scale),
+                  Expanded(
+                    child: Text(
+                      title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontFamily: 'Arial', color: fg, fontWeight: active ? FontWeight.w600 : FontWeight.w500, fontSize: 14.5 * scale),
+                    ),
+                  ),
+                  if (value != null) ...[
+                    SizedBox(width: 8 * scale),
+                    ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: 150 * scale),
+                      child: Container(
+                        padding: EdgeInsets.symmetric(horizontal: 10 * scale, vertical: 4 * scale),
+                        decoration: BoxDecoration(color: uiTheme.bgElevated, borderRadius: uiTheme.borderRadius(99), border: Border.all(color: uiTheme.borderSubtle)),
+                        child: Text(value!, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontFamily: 'Arial', color: uiTheme.textMuted, fontSize: 12 * scale)),
+                      ),
+                    ),
+                  ],
+                  if (chevron) ...[
+                    SizedBox(width: 4 * scale),
+                    Icon(Symbols.chevron_right_rounded, color: uiTheme.textDarkMuted, size: 20 * scale, weight: 300, opticalSize: 24),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Модальна оболонка: фон, рамка, радіус і тінь як у вікна налаштувань.
 class AppModalShell extends StatelessWidget {
   final double scale;
@@ -1667,9 +1778,10 @@ class AppModalShell extends StatelessWidget {
         width: width,
         height: height,
         decoration: BoxDecoration(
-          color: uiTheme.bgPrimary,
+          // Поверхня панелі плеєра: усі вікна виглядають однаково
+          color: uiTheme.colors.drawerBg,
           borderRadius: r,
-          border: Border.all(color: uiTheme.borderSubtle, width: 1.0),
+          border: Border.all(color: uiTheme.colors.drawerBorder, width: 1.0),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: uiTheme.isLight ? 0.12 : 0.80),
@@ -1809,7 +1921,7 @@ class AppNavItem extends StatelessWidget {
                     label,
                     style: TextStyle(
                       fontFamily: 'Arial',
-                      color: isSelected ? uiTheme.textPrimary : uiTheme.textMuted,
+                      color: isSelected ? uiTheme.accentColor : uiTheme.textMuted,
                       fontSize: 12.5 * scale,
                       fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
                     ),
@@ -2426,41 +2538,234 @@ class AppScrollBehavior extends MaterialScrollBehavior {
 
 /// Область з оновленням потягом вниз. Верхній край тут показує лише індикатор оновлення (інакше вміст і розтягується,
 /// і тягне індикатор одночасно); нижній край й бічні — «желейне» розтягування як в Android 12.
-class AppPullToRefresh extends StatelessWidget {
+/// Місце вгорі прокрутних вмістів, яке займає шапка-накладка (див. `HikkaCollapsingHeader`). Шапка лежить поверх
+/// вмісту й не змінює ні розмір, ні позицію прокрутки, тож списки самі лишають під нею відступ [inset].
+class AppHeaderInset extends InheritedWidget {
+  final double inset;
+
+  /// Видимість шапки цього рівня (0…1): вкладені шапки сидять під зовнішньою лише поки вона видима
+  final Animation<double>? shown;
+
+  const AppHeaderInset({super.key, required this.inset, this.shown, required super.child});
+
+  /// Відступ зверху для списків (0, якщо шапки немає)
+  static double of(BuildContext context) => context.dependOnInheritedWidgetOfExactType<AppHeaderInset>()?.inset ?? 0;
+
+  static AppHeaderInset? maybeOf(BuildContext context) => context.getInheritedWidgetOfExactType<AppHeaderInset>();
+
+  @override
+  bool updateShouldNotify(AppHeaderInset old) => inset != old.inset;
+}
+
+class AppPullToRefresh extends StatefulWidget {
   final Future<void> Function() onRefresh;
   final Widget child;
 
   const AppPullToRefresh({super.key, required this.onRefresh, required this.child});
 
   @override
+  State<AppPullToRefresh> createState() => _AppPullToRefreshState();
+}
+
+/// Власний «потяг для оновлення»: вміст під час потягу стоїть, стрілка йде за пальцем (і вниз, і назад угору),
+/// лишається, поки тримаєш палець, а поки триває оновлення, прокрутка заблокована.
+class _AppPullToRefreshState extends State<AppPullToRefresh> with SingleTickerProviderStateMixin {
+  /// Видима позиція стрілки (px) відносно початку; потяг пальця стискається цим коефіцієнтом
+  static const double _resistance = 0.5;
+  static const double _maxVisual = 120;
+  static const double _armedVisual = 60;
+  static const double _restVisual = 56;
+
+  final ValueNotifier<double> _visual = ValueNotifier(0);
+  late final AnimationController _settle = AnimationController(vsync: this, duration: AppAnim.medium);
+  double _from = 0;
+  double _to = 0;
+
+  bool _refreshing = false;
+  bool _pulling = false;
+  double _pull = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _settle.addListener(() => _visual.value = _from + (_to - _from) * AppAnim.easeOut.transform(_settle.value));
+  }
+
+  @override
+  void dispose() {
+    _settle.dispose();
+    _visual.dispose();
+    super.dispose();
+  }
+
+  void _animateTo(double v) {
+    _from = _visual.value;
+    _to = v;
+    _settle.forward(from: 0);
+  }
+
+  void _setPull(double pull) {
+    _pull = pull;
+    _settle.stop();
+    _visual.value = (pull * _resistance).clamp(0.0, _maxVisual);
+  }
+
+  void _startPull(double amount) {
+    if (_pulling || _refreshing) return;
+    _pulling = true;
+    _setPull(amount);
+  }
+
+  /// Рух пальця [offset] (> 0 — униз) під час потягу. Повертає, скільки з нього застосувати до прокрутки
+  double _userOffset(ScrollMetrics m, double offset) {
+    if (!_pulling) return offset;
+    final next = _pull + offset;
+    if (next <= 0) {
+      // Стрілку повернули на місце: потяг скасовано, лишок руху — звичайна прокрутка
+      _pulling = false;
+      _setPull(0);
+      return next;
+    }
+    _setPull(next);
+    return 0;
+  }
+
+  Future<void> _release({required bool allowRefresh}) async {
+    if (!_pulling) return;
+    _pulling = false;
+    final armed = _visual.value >= _armedVisual;
+    _pull = 0;
+    if (allowRefresh && armed && !_refreshing) {
+      _refreshing = true;
+      _animateTo(_restVisual);
+      try {
+        await widget.onRefresh();
+      } finally {
+        _refreshing = false;
+        if (mounted) _animateTo(0);
+      }
+    } else {
+      _animateTo(0);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return RefreshIndicator(
-      color: uiTheme.accentColor,
-      backgroundColor: uiTheme.bgElevated,
-      onRefresh: onRefresh,
-      // Builder дає контекст усередині індикатора: звідти верхнє «перетягування» передається йому далі
-      child: Builder(
-        builder: (inside) => ScrollConfiguration(
-          behavior: _TopEdgeToRefreshBehavior(ScrollConfiguration.of(inside), inside),
-          child: child,
-        ),
+    final edge = AppHeaderInset.of(context);
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerUp: (_) => _release(allowRefresh: true),
+      onPointerCancel: (_) => _release(allowRefresh: false),
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: ScrollConfiguration(
+              behavior: _TopEdgeToRefreshBehavior(ScrollConfiguration.of(context), () => _refreshing, _startPull, _userOffset, () => _pulling),
+              child: widget.child,
+            ),
+          ),
+          Positioned(
+            top: edge,
+            left: 0,
+            right: 0,
+            child: IgnorePointer(
+              child: ValueListenableBuilder<double>(
+                valueListenable: _visual,
+                builder: (context, v, _) {
+                  if (v <= 0.5) return const SizedBox.shrink();
+                  return Align(
+                    alignment: Alignment.topCenter,
+                    child: Transform.translate(
+                      offset: Offset(0, v - 40),
+                      child: Opacity(
+                        opacity: (v / 16).clamp(0.0, 1.0),
+                        child: Material(
+                          type: MaterialType.circle,
+                          elevation: 3,
+                          color: uiTheme.bgElevated,
+                          child: SizedBox(
+                            width: 40,
+                            height: 40,
+                            child: Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.all(5),
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.5,
+                                    color: uiTheme.accentColor,
+                                    backgroundColor: uiTheme.borderSubtle,
+                                    // Кільце заповнюється за потягом; під час оновлення крутиться
+                                    value: _refreshing ? null : (v / _armedVisual).clamp(0.0, 1.0),
+                                  ),
+                                ),
+                                if (!_refreshing)
+                                  Transform.rotate(
+                                    // Стрілка вниз розвертається вгору, коли потяг «заряджений»
+                                    angle: (v / _armedVisual).clamp(0.0, 1.0) * math.pi,
+                                    child: Icon(Symbols.arrow_downward_rounded, size: 18, color: uiTheme.accentColor),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        ],
       ),
     );
+  }
+}
+
+/// Фізика: поки [locked] (оновлення) — прокрутки немає; під час потягу рух пальця йде в [onOffset], а вміст стоїть
+class _LockPhysics extends ScrollPhysics {
+  final bool Function() locked;
+  final double Function(ScrollMetrics, double) onOffset;
+  final bool Function() pulling;
+
+  const _LockPhysics(this.locked, this.onOffset, this.pulling, {super.parent});
+
+  @override
+  _LockPhysics applyTo(ScrollPhysics? ancestor) => _LockPhysics(locked, onOffset, pulling, parent: buildParent(ancestor));
+
+  // Блокування й потяг стосуються лише вертикальної прокрутки сторінки. Горизонтальні каруселі не чіпаємо:
+  // `shouldAcceptUserOffset` обчислюється один раз (при розкладці) і назавжди вимикав жест у списків,
+  // що перебудувалися під час оновлення.
+  @override
+  double applyPhysicsToUserOffset(ScrollMetrics position, double offset) {
+    if (position.axis != Axis.vertical) return super.applyPhysicsToUserOffset(position, offset);
+    if (locked()) return 0.0;
+    if (pulling()) return onOffset(position, offset);
+    return super.applyPhysicsToUserOffset(position, offset);
+  }
+
+  @override
+  Simulation? createBallisticSimulation(ScrollMetrics position, double velocity) {
+    if (position.axis != Axis.vertical) return super.createBallisticSimulation(position, velocity);
+    return locked() || pulling() ? null : super.createBallisticSimulation(position, velocity);
   }
 }
 
 /// Верхнє перетягування вертикального списку не розтягує вміст, а лише передається індикатору оновлення
 class _TopEdgeToRefreshBehavior extends ScrollBehavior {
   final ScrollBehavior base;
-  final BuildContext refreshContext;
+  final bool Function() locked;
+  final void Function(double amount) onTopPull;
+  final double Function(ScrollMetrics, double) onOffset;
+  final bool Function() pulling;
 
-  const _TopEdgeToRefreshBehavior(this.base, this.refreshContext);
+  const _TopEdgeToRefreshBehavior(this.base, this.locked, this.onTopPull, this.onOffset, this.pulling);
 
   @override
   Widget buildScrollbar(BuildContext context, Widget child, ScrollableDetails details) => base.buildScrollbar(context, child, details);
 
   @override
-  ScrollPhysics getScrollPhysics(BuildContext context) => base.getScrollPhysics(context);
+  ScrollPhysics getScrollPhysics(BuildContext context) => _LockPhysics(locked, onOffset, pulling, parent: base.getScrollPhysics(context));
 
   @override
   Set<PointerDeviceKind> get dragDevices => base.dragDevices;
@@ -2468,15 +2773,14 @@ class _TopEdgeToRefreshBehavior extends ScrollBehavior {
   @override
   Widget buildOverscrollIndicator(BuildContext context, Widget child, ScrollableDetails details) {
     final vertical = axisDirectionToAxis(details.direction) == Axis.vertical;
-    final stretch = base.buildOverscrollIndicator(context, vertical ? _gate(child) : child, details);
-    return stretch;
+    return base.buildOverscrollIndicator(context, vertical ? _gate(child) : child, details);
   }
 
   Widget _gate(Widget child) => NotificationListener<OverscrollNotification>(
         onNotification: (n) {
           if (n.overscroll < 0 && n.depth == 0) {
-            // Верх: стоп для розтягування, але індикатор оновлення має це побачити
-            if (refreshContext.mounted) n.dispatch(refreshContext);
+            // Верх: без розтягування; початок потягу передаємо індикатору оновлення
+            if (n.dragDetails != null) onTopPull(-n.overscroll);
             return true;
           }
           return false;

@@ -37,7 +37,7 @@ class HikkaPageFrame extends StatelessWidget {
       child: SingleChildScrollView(
         controller: controller,
         physics: refresh == null ? null : const AlwaysScrollableScrollPhysics(),
-        padding: EdgeInsets.only(top: 6 * scale, bottom: 28 * scale + bottomInset),
+        padding: EdgeInsets.only(top: 6 * scale + AppHeaderInset.of(context), bottom: 28 * scale + bottomInset),
         child: Align(
           alignment: Alignment.topCenter,
           child: ConstrainedBox(
@@ -153,7 +153,10 @@ class HikkaSwipeTabs extends StatefulWidget {
   /// Вимкнути жест (внутрішні вкладки, щоб свайп лишався зовнішнім вкладкам); анімація зміни лишається
   final bool swipe;
 
-  const HikkaSwipeTabs({super.key, required this.index, required this.count, required this.onChanged, required this.child, this.swipe = true});
+  /// Вимкнути власну анімацію зміни вкладки (коли вміст уже сам анімує перехід, як у налаштуваннях)
+  final bool animate;
+
+  const HikkaSwipeTabs({super.key, required this.index, required this.count, required this.onChanged, required this.child, this.swipe = true, this.animate = true});
 
   @override
   State<HikkaSwipeTabs> createState() => _HikkaSwipeTabsState();
@@ -167,7 +170,7 @@ class _HikkaSwipeTabsState extends State<HikkaSwipeTabs> with SingleTickerProvid
   @override
   void didUpdateWidget(HikkaSwipeTabs old) {
     super.didUpdateWidget(old);
-    if (old.index != widget.index) {
+    if (old.index != widget.index && widget.animate) {
       _dir = widget.index > old.index ? 1 : -1;
       _ctl.forward(from: 0);
     }
@@ -189,7 +192,7 @@ class _HikkaSwipeTabsState extends State<HikkaSwipeTabs> with SingleTickerProvid
         if (v < -300 && widget.index < widget.count - 1) widget.onChanged(widget.index + 1);
         if (v > 300 && widget.index > 0) widget.onChanged(widget.index - 1);
       },
-      child: AnimatedBuilder(
+      child: !widget.animate ? widget.child : AnimatedBuilder(
         animation: _curve,
         child: widget.child,
         builder: (context, child) {
@@ -204,14 +207,76 @@ class _HikkaSwipeTabsState extends State<HikkaSwipeTabs> with SingleTickerProvid
   }
 }
 
-/// Шапка, що ховається при прокрутці вмісту вниз і повертається при прокрутці вгору (або на самому верху).
-/// [header] стоїть над [body]; реагує на вертикальну прокрутку будь-якого списку всередині [body]. Вкладені
-/// шапки (наприклад, дні календаря в «Огляді») ховаються разом із зовнішньою. [resetOn] — значення, зміна якого
-/// знову показує шапку (перехід на іншу вкладку).
-///
-/// Щоб поява/зникнення шапки не «підштовхувала» вміст (відчувається як прискорення прокрутки), разом зі зміною
-/// висоти шапки зсувається позиція прокрутки на таку саму величину: вміст лишається на місці, а шапка немов
-/// з'їжджає поверх нього. Додатково є «мертва зона»: шапка реагує лише після помітного руху в один бік.
+/// Поява вкладки: коли [active] стає true, вміст коротко виїжджає з боку [direction] (1 — справа, -1 — зліва) і
+/// проявляється. Решту часу нічого не змінює, тож перше відображення вкладки й закриття сторінки поверх неї без анімації.
+class HikkaTabEnter extends StatefulWidget {
+  final bool active;
+  final double direction;
+  final Widget child;
+
+  /// Анімувати й саме створення (вкладка вперше відкрита вже активною); для першої вкладки застосунку — false
+  final bool animateOnMount;
+
+  const HikkaTabEnter({super.key, required this.active, required this.direction, required this.child, this.animateOnMount = false});
+
+  @override
+  State<HikkaTabEnter> createState() => _HikkaTabEnterState();
+}
+
+class _HikkaTabEnterState extends State<HikkaTabEnter> with SingleTickerProviderStateMixin {
+  late final AnimationController _ctl = AnimationController(vsync: this, duration: AppAnim.medium, value: 1);
+  late final CurvedAnimation _curve = CurvedAnimation(parent: _ctl, curve: AppAnim.easeOut);
+  double _dir = 1;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.active && widget.animateOnMount) {
+      _dir = widget.direction;
+      _ctl.forward(from: 0);
+    }
+  }
+
+  @override
+  void didUpdateWidget(HikkaTabEnter old) {
+    super.didUpdateWidget(old);
+    if (widget.active && !old.active) {
+      _dir = widget.direction;
+      _ctl.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _curve.dispose();
+    _ctl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _curve,
+      child: widget.child,
+      builder: (context, child) {
+        // Структура дерева стала, щоб не губити стан вкладки, коли анімація закінчується
+        final t = _curve.value;
+        return Opacity(
+          opacity: t >= 1 ? 1 : 0.2 + 0.8 * t,
+          child: FractionalTranslation(translation: Offset(_dir * 0.08 * (1 - t), 0), child: child),
+        );
+      },
+    );
+  }
+}
+
+/// Шапка, що закріплена на самому верху сторінки й ховається при прокрутці вмісту вниз. [header] лежить ПОВЕРХ
+/// [body] (як у YouTube) і лише зсувається вгору/вниз: вона не змінює ні розмір, ні позицію прокрутки вмісту, тож не
+/// додає прискорення чи зміщення. Щоб на самому верху вміст не опинявся під шапкою, списки всередині [body] лишають
+/// зверху відступ `AppHeaderInset.of(context)` (див. `HikkaPageFrame`, `HikkaPagedList`). Вкладені шапки (дні
+/// календаря в «Огляді») сидять під зовнішньою й ховаються разом із нею.
+/// Повертається шапка на самому верху сторінки або після помітного руху вгору: повільний рух рахується з меншою
+/// вагою, тож випадковий посмик її не показує. [resetOn] — значення, зміна якого знову показує шапку.
 class HikkaCollapsingHeader extends StatefulWidget {
   final Widget header;
   final Widget body;
@@ -224,52 +289,45 @@ class HikkaCollapsingHeader extends StatefulWidget {
 }
 
 class _HikkaCollapsingHeaderState extends State<HikkaCollapsingHeader> with SingleTickerProviderStateMixin {
-  /// Скільки пікселів треба проскролити вниз, щоб шапка сховалась, і вгору, щоб з'явилась
+  /// Скільки пікселів треба проскролити вниз, щоб шапка сховалась, і вгору, щоб з'явилась («мертва зона»)
   static const double _hideAfter = 24;
-  static const double _showAfter = 40;
+  static const double _showAfter = 150;
+
+  /// Швидкість (px/мс), від якої рух угору враховується повністю; повільніший рахується з меншою вагою
+  static const double _fullSpeed = 1.2;
+  static const double _slowWeight = 0.3;
 
   final GlobalKey _headerKey = GlobalKey();
   late final AnimationController _c = AnimationController(vsync: this, duration: AppAnim.medium, value: 1);
   late final Animation<double> _factor = CurvedAnimation(parent: _c, curve: AppAnim.easeOut, reverseCurve: AppAnim.easeOut);
-  ScrollPosition? _pos;
-  double _lastFactor = 1;
+  double _height = 0;
   double _acc = 0;
   bool _shown = true;
+  Duration? _lastStamp;
 
   @override
   void initState() {
     super.initState();
-    _factor.addListener(_onTick);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _measure());
   }
 
   @override
   void didUpdateWidget(HikkaCollapsingHeader old) {
     super.didUpdateWidget(old);
-    if (old.resetOn != widget.resetOn && !_shown) {
-      _pos = null; // інший список — позицію не коригуємо
-      _setShown(true);
-    }
+    if (old.resetOn != widget.resetOn && !_shown) _setShown(true);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _measure());
   }
 
   @override
   void dispose() {
-    _factor.removeListener(_onTick);
     _c.dispose();
     super.dispose();
   }
 
-  double get _headerHeight => (_headerKey.currentContext?.size?.height) ?? 0;
-
-  /// Висота шапки змінюється — зсуваємо прокрутку на стільки ж, щоб вміст не рухався
-  void _onTick() {
-    final f = _factor.value;
-    final delta = (f - _lastFactor) * _headerHeight;
-    _lastFactor = f;
-    final pos = _pos;
-    if (pos == null || !pos.hasPixels || delta == 0) return;
-    if (delta > 0 && pos.pixels <= 1) return; // шапка повертається на верху списку — вміст природно зсувається вниз
-    final correction = delta < 0 ? math.max(delta, -pos.pixels) : delta;
-    pos.correctBy(correction);
+  void _measure() {
+    if (!mounted) return;
+    final h = _headerKey.currentContext?.size?.height;
+    if (h != null && (h - _height).abs() > 0.5) setState(() => _height = h);
   }
 
   void _setShown(bool v) {
@@ -284,49 +342,73 @@ class _HikkaCollapsingHeaderState extends State<HikkaCollapsingHeader> with Sing
   }
 
   bool _onScroll(ScrollNotification n) {
-    if (n.metrics.axis != Axis.vertical) return false;
-    if (n is ScrollStartNotification || n is ScrollUpdateNotification) {
-      final ctx = n.context;
-      if (ctx != null) {
-        final st = Scrollable.maybeOf(ctx);
-        if (st != null && st.position.axis == Axis.vertical) _pos = st.position;
-      }
-    }
-    if (n is! ScrollUpdateNotification) return false;
+    if (n.metrics.axis != Axis.vertical || n is! ScrollUpdateNotification) return false;
     final delta = n.scrollDelta ?? 0;
     final m = n.metrics;
     if (delta == 0) return false;
-    // Накопичуємо рух в один бік; зміна напряму скидає лічильник
-    _acc = (_acc != 0 && (_acc > 0) != (delta > 0)) ? delta : _acc + delta;
+    // Підписаний накопичувач із допуском: дрібні посмики назад не скидають рух, а лише зменшують його.
+    // Повільний рух угору враховується з меншою вагою: шапка з'являється пізніше, а різкий порух показує її швидко
+    var weight = 1.0;
+    final stamp = n.dragDetails?.sourceTimeStamp;
+    if (delta < 0 && stamp != null && _lastStamp != null) {
+      final dt = (stamp - _lastStamp!).inMicroseconds / 1000.0;
+      if (dt > 0) weight = ((-delta / dt) / _fullSpeed).clamp(_slowWeight, 1.0);
+    }
+    _lastStamp = stamp;
+    _acc = (_acc + delta * (delta < 0 ? weight : 1.0)).clamp(-_showAfter, _hideAfter);
     if (m.pixels <= 1 && !_shown) {
       _setShown(true);
     } else if (_acc <= -_showAfter && !_shown) {
       _setShown(true);
-    } else if (_acc >= _hideAfter && _shown && m.pixels > 24) {
-      // Без запасу прокрутки шапка не повернулася б: після її приховування вміст міг би перестати скролитись
-      if (m.maxScrollExtent - _headerHeight > 48) _setShown(false);
+    } else if (_acc >= _hideAfter && _shown && m.pixels > 24 && m.maxScrollExtent > _height) {
+      _setShown(false);
     }
     return false;
   }
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        AnimatedBuilder(
-          animation: _factor,
-          builder: (context, child) => ClipRect(
-            child: Align(
-              alignment: Alignment.topCenter,
-              heightFactor: _factor.value.clamp(0.0, 1.0),
-              child: Opacity(opacity: _factor.value.clamp(0.0, 1.0), child: child),
+    final outer = AppHeaderInset.maybeOf(context);
+    final outerInset = outer?.inset ?? 0;
+    final bg = uiTheme.bgPrimary;
+    final header = AnimatedBuilder(
+      animation: Listenable.merge([_factor, if (outer?.shown != null) outer!.shown!]),
+      builder: (context, child) {
+        final f = _factor.value.clamp(0.0, 1.0);
+        // Під зовнішньою шапкою: її видима частина, а власне приховування — зсув угору на висоту шапки
+        final base = outer == null ? 0.0 : outerInset * (outer.shown?.value.clamp(0.0, 1.0) ?? 1.0);
+        return Transform.translate(
+          offset: Offset(0, base - (1 - f) * _height),
+          child: IgnorePointer(ignoring: f < 0.05, child: child),
+        );
+      },
+      // Фон лише малюється й не перехоплює дотики поза вмістом шапки
+      child: CustomPaint(
+        painter: _HeaderBg(bg),
+        child: NotificationListener<SizeChangedLayoutNotification>(
+          onNotification: (_) {
+            WidgetsBinding.instance.addPostFrameCallback((_) => _measure());
+            return false;
+          },
+          // Column(min) дає шапці необмежену висоту: інакше її Column(max) розтягнувся б на весь екран і ловив дотики
+          child: SizeChangedLayoutNotifier(child: Column(mainAxisSize: MainAxisSize.min, children: [KeyedSubtree(key: _headerKey, child: Padding(padding: const EdgeInsets.only(bottom: 8), child: widget.header))])),
+        ),
+      ),
+    );
+    // ClipRect: прихована шапка не має виглядати з-під краю (наприклад, у зоні рядка стану)
+    return ClipRect(
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: AppHeaderInset(
+              inset: outerInset + _height,
+              shown: _factor,
+              child: NotificationListener<ScrollNotification>(onNotification: _onScroll, child: widget.body),
             ),
           ),
-          child: KeyedSubtree(key: _headerKey, child: widget.header),
-        ),
-        Expanded(child: NotificationListener<ScrollNotification>(onNotification: _onScroll, child: widget.body)),
-      ],
+          Positioned(top: 0, left: 0, right: 0, child: header),
+        ],
+      ),
     );
   }
 }
@@ -387,4 +469,19 @@ class _HikkaLazyState extends State<HikkaLazy> {
     if (_shown) return widget.builder(context);
     return SizedBox(height: widget.height);
   }
+}
+
+/// Суцільний фон шапки-накладки, прозорий для дотиків
+class _HeaderBg extends CustomPainter {
+  final Color color;
+  const _HeaderBg(this.color);
+
+  @override
+  void paint(Canvas canvas, Size size) => canvas.drawRect(Offset.zero & size, Paint()..color = color);
+
+  @override
+  bool shouldRepaint(_HeaderBg old) => old.color != color;
+
+  @override
+  bool? hitTest(Offset position) => false;
 }

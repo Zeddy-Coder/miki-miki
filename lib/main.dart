@@ -68,7 +68,9 @@ void main() async {
     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   }
 
-  runApp(MaterialApp(
+  runApp(ListenableBuilder(
+    listenable: uiTheme,
+    builder: (context, _) => MaterialApp(
     title: AppIdentity.name,
     debugShowCheckedModeBanner: false,
     navigatorObservers: [AppNavObserver()],
@@ -82,8 +84,20 @@ void main() async {
       );
     },
     scrollBehavior: const AppScrollBehavior(),
+    // Стандартні віджети Material (виділення тексту, індикатори, курсор) беруть колір акценту з теми застосунку
     theme: ThemeData.dark().copyWith(
       scaffoldBackgroundColor: Colors.black,
+      colorScheme: ThemeData.dark().colorScheme.copyWith(
+            primary: uiTheme.accentColor,
+            onPrimary: uiTheme.onAccent,
+            secondary: uiTheme.accentColor,
+          ),
+      textSelectionTheme: TextSelectionThemeData(
+        cursorColor: uiTheme.accentColor,
+        selectionColor: uiTheme.accentColor.withValues(alpha: 0.35),
+        selectionHandleColor: uiTheme.accentColor,
+      ),
+      progressIndicatorTheme: ProgressIndicatorThemeData(color: uiTheme.accentColor),
       textTheme: const TextTheme().apply(
         fontFamily: 'Arial',
         bodyColor: Colors.white,
@@ -91,5 +105,5 @@ void main() async {
       ),
     ),
     home: const PlayerScreen(),
-  ));
+  )));
 }

@@ -274,8 +274,8 @@ class MoonExtractor extends VideoExtractor {
       _ => ChapterType.other,
     };
     final label = switch (t) {
-      'opening' || 'mixed_opening' => 'Опенінг',
-      'ending' || 'mixed_ending' => 'Ендінг',
+      'opening' || 'mixed_opening' => 'Опенінґ',
+      'ending' || 'mixed_ending' => 'Ендінґ',
       'recap' => 'Рекап',
       _ => name ?? 'Пропуск',
     };

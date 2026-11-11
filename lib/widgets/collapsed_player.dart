@@ -68,11 +68,12 @@ class CollapsedPlayer extends StatelessWidget {
                 highlightColor: uiTheme.touchHighlight,
                 hoverColor: uiTheme.hoverOverlay,
                 child: Padding(
-                  padding: EdgeInsets.all(8 * scale),
+                  // Відео впритул до країв картки (без рамки навколо), решта — з відступами
+                  padding: EdgeInsets.only(right: 8 * scale),
                   child: Row(
                     children: [
                       ClipRRect(
-                        borderRadius: uiTheme.borderRadius(8 * scale),
+                        borderRadius: BorderRadius.zero,
                         child: Container(
                           width: videoW,
                           height: videoH,
@@ -89,7 +90,9 @@ class CollapsedPlayer extends StatelessWidget {
                       ),
                       SizedBox(width: 12 * scale),
                       Expanded(
-                        child: Column(
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(vertical: 8 * scale),
+                          child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
@@ -113,6 +116,7 @@ class CollapsedPlayer extends StatelessWidget {
                               ),
                             ),
                           ],
+                        ),
                         ),
                       ),
                       SizedBox(width: 8 * scale),

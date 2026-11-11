@@ -290,8 +290,8 @@ void main() {
       await settle(tester);
       expect(find.text('Команда А'), findsOneWidget);
       expect(find.text('Команда Б'), findsOneWidget);
-      expect(find.text('Озвучення · 3 сер. · src'), findsOneWidget);
-      expect(find.text('Субтитри · 2 сер. · src'), findsOneWidget);
+      expect(find.text('Озвучення · 3 з ? сер. · src'), findsOneWidget);
+      expect(find.text('Субтитри · 2 з ? сер. · src'), findsOneWidget);
 
       await tester.tap(find.text('Команда Б'));
       await settle(tester);

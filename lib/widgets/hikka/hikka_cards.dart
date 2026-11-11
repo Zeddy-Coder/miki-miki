@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../../models/hikka_models.dart';
+import '../../models/hikka_user_models.dart';
 import '../../services/hikka_lists.dart';
 import '../../services/hikka_nav.dart';
 import '../../services/hikka_prefs.dart';
@@ -10,10 +11,25 @@ import '../app_ui_kit.dart';
 import 'hikka_common.dart';
 import 'hikka_my_list_bar.dart';
 
-/// Контекстне меню з одним пунктом «Прибрати зі списку»; `true` — людина його вибрала
-Future<bool> showHikkaRemoveMenu(BuildContext context, Offset at, double scale) async {
+/// Дії контекстного меню тайтла
+enum HikkaItemAction { open, markWatched, remove }
+
+/// Контекстне меню тайтла (довгий дотик / права кнопка миші): «Відкрити», «Позначити як переглянуте» (лише коли
+/// людина ввійшла) і, якщо [canRemove], «Прибрати зі списку». Повертає вибрану дію або null.
+Future<HikkaItemAction?> showHikkaItemMenu(BuildContext context, Offset at, double scale, {bool canRemove = true}) async {
   final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
-  final picked = await showMenu<bool>(
+  PopupMenuItem<HikkaItemAction> item(HikkaItemAction v, IconData icon, String text) => PopupMenuItem<HikkaItemAction>(
+        value: v,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 20 * scale, color: uiTheme.colors.textMuted),
+            SizedBox(width: 10 * scale),
+            Text(text, style: hikkaStyle(13.5 * scale, color: uiTheme.colors.textPrimary)),
+          ],
+        ),
+      );
+  return showMenu<HikkaItemAction>(
     context: context,
     color: uiTheme.colors.drawerBg,
     shape: RoundedRectangleBorder(
@@ -22,20 +38,18 @@ Future<bool> showHikkaRemoveMenu(BuildContext context, Offset at, double scale) 
     ),
     position: RelativeRect.fromRect(at & const Size(1, 1), Offset.zero & overlay.size),
     items: [
-      PopupMenuItem<bool>(
-        value: true,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Symbols.playlist_remove_rounded, size: 20 * scale, color: uiTheme.colors.textMuted),
-            SizedBox(width: 10 * scale),
-            Text('Прибрати зі списку', style: hikkaStyle(13.5 * scale, color: uiTheme.colors.textPrimary)),
-          ],
-        ),
-      ),
+      item(HikkaItemAction.open, Symbols.open_in_new_rounded, 'Відкрити'),
+      if (HikkaMyList.instance.signedIn) item(HikkaItemAction.markWatched, Symbols.check_circle_rounded, 'Позначити як переглянуте'),
+      if (canRemove) item(HikkaItemAction.remove, Symbols.playlist_remove_rounded, 'Прибрати зі списку'),
     ],
   );
-  return picked == true;
+}
+
+/// «Позначити як переглянуте»: статус «Переглянуто», лічильник серій добивається до кінця
+Future<void> markHikkaWatched(HikkaAnime a) async {
+  try {
+    await HikkaMyList.instance.save(a.slug, status: HikkaWatchStatus.completed, total: a.episodesTotal, anime: a);
+  } catch (_) {}
 }
 
 /// Картка аніме: постер з оцінкою, назва в два рядки, тип і рік. Натискання відкриває сторінку аніме.
@@ -53,7 +67,7 @@ class HikkaAnimeCard extends StatelessWidget {
   final Color? pillColor;
   final VoidCallback? onTap;
 
-  /// Контекстне меню (довгий дотик / права кнопка миші) з одним пунктом «Прибрати зі списку»
+  /// Якщо задано, у контекстному меню (довгий дотик / права кнопка миші) є ще «Прибрати зі списку»
   final VoidCallback? onRemove;
 
   /// Смужка зі статусом зі «Списків» унизу постера (лише коли людина ввійшла й тайтл у її списках)
@@ -72,7 +86,21 @@ class HikkaAnimeCard extends StatelessWidget {
   });
 
   Future<void> _menu(BuildContext context, Offset at) async {
-    if (await showHikkaRemoveMenu(context, at, scale)) onRemove?.call();
+    final pick = await showHikkaItemMenu(context, at, scale, canRemove: onRemove != null);
+    switch (pick) {
+      case HikkaItemAction.open:
+        if (onTap != null) {
+          onTap!();
+        } else {
+          HikkaNav.instance.openAnime(anime.slug, seed: anime);
+        }
+      case HikkaItemAction.markWatched:
+        await markHikkaWatched(anime);
+      case HikkaItemAction.remove:
+        onRemove?.call();
+      case null:
+        break;
+    }
   }
 
   Offset _centerOf(BuildContext context) {
@@ -99,8 +127,8 @@ class HikkaAnimeCard extends StatelessWidget {
       excludeSemantics: true,
       child: InkWell(
         onTap: onTap ?? () => HikkaNav.instance.openAnime(anime.slug, seed: anime),
-        onLongPress: onRemove == null ? null : () => _menu(context, _centerOf(context)),
-        onSecondaryTapDown: onRemove == null ? null : (d) => _menu(context, d.globalPosition),
+        onLongPress: () => _menu(context, _centerOf(context)),
+        onSecondaryTapDown: (d) => _menu(context, d.globalPosition),
         borderRadius: r,
         splashColor: Colors.transparent,
         highlightColor: uiTheme.touchHighlight,
@@ -110,6 +138,7 @@ class HikkaAnimeCard extends StatelessWidget {
           children: [
             HikkaPoster(
               url: anime.image,
+              malId: anime.malId,
               scale: scale,
               icon: Symbols.movie_rounded,
               overlay: ListenableBuilder(
@@ -272,7 +301,7 @@ class HikkaAnimeRow extends StatelessWidget {
         children: [
           SizedBox(
             width: posterW,
-            child: HikkaPoster(url: anime.image, scale: scale, radius: 7, icon: Symbols.movie_rounded),
+            child: HikkaPoster(url: anime.image, malId: anime.malId, scale: scale, radius: 7, icon: Symbols.movie_rounded),
           ),
           SizedBox(width: 12 * scale),
           Expanded(

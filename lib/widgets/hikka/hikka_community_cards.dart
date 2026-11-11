@@ -139,7 +139,7 @@ class HikkaCollectionCard extends StatelessWidget {
                   if (i > 0) SizedBox(width: gap),
                   Expanded(
                     child: i < shown.length
-                        ? HikkaPoster(url: shown[i].anime.image, scale: scale, aspect: 0.72, radius: 8, icon: Symbols.movie_rounded)
+                        ? HikkaPoster(url: shown[i].anime.image, malId: shown[i].anime.malId, scale: scale, aspect: 0.72, radius: 8, icon: Symbols.movie_rounded)
                         : AspectRatio(
                             aspectRatio: 0.72,
                             child: DecoratedBox(

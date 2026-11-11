@@ -557,7 +557,7 @@ class AppActivePillIndicator extends StatelessWidget {
         height: activeHeight * scale,
         decoration: BoxDecoration(
           color: color ?? uiTheme.accentColor,
-          borderRadius: BorderRadius.circular(2.0 * scale),
+          borderRadius: uiTheme.borderRadius(2.0 * scale),
         ),
       ),
     );

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
@@ -111,9 +113,9 @@ class _HomeHubState extends State<HomeHub> {
       scale: scale,
       bottomInset: widget.reserveBottom,
       onOpenSettings: ({int? tab}) {
-        // Телефон у портреті: «Налаштування» без розділу — сторінка поверх вкладки (навігація видима), інакше вікно
-        if (compact && tab == null && widget.settingsBuilder != null) {
-          _nav.openSettings();
+        // Телефон у портреті: налаштування (за потреби — з потрібного розділу) — сторінка поверх вкладки, навігація видима; інакше вікно
+        if (compact && widget.settingsBuilder != null) {
+          _nav.openSettings(tab: tab ?? 0);
         } else {
           widget.onOpenSettings(tab: tab);
         }
@@ -152,7 +154,6 @@ class _HomeHubState extends State<HomeHub> {
   Widget _buildBottomNav(double bottomInset) {
     Widget item(MainTab tab) {
       final bool selected = _nav.main == tab;
-      final Color fg = selected ? uiTheme.accentColor : uiTheme.textMuted;
       return Expanded(
         child: Semantics(
           button: true,
@@ -165,33 +166,54 @@ class _HomeHubState extends State<HomeHub> {
             highlightColor: uiTheme.touchHighlight,
             child: SizedBox(
               height: HomeHub.bottomNavHeight,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  AppAnimatedContainer(
-                    duration: AppAnim.fast,
-                    width: 58,
-                    height: 30,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: selected ? uiTheme.accentWash : Colors.transparent,
-                      borderRadius: BorderRadius.circular(15),
-                    ),
-                    child: Icon(HomeHub.iconOf(tab), color: fg, size: 25, fill: selected ? 1 : 0, weight: 300, opticalSize: 24),
-                  ),
-                  const SizedBox(height: 3),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 2),
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                        tab.label,
-                        maxLines: 1,
-                        style: TextStyle(fontFamily: 'Arial', color: fg, fontSize: 11.5, fontWeight: selected ? FontWeight.w700 : FontWeight.w500),
+              // 0 → 1 при виборі: плашка розростається з центру, значок і підпис плавно міняють колір, значок «підстрибує»
+              child: TweenAnimationBuilder<double>(
+                tween: Tween<double>(end: selected ? 1 : 0),
+                duration: AppAnim.medium,
+                curve: AppAnim.easeOut,
+                builder: (context, t, _) {
+                  final Color fg = Color.lerp(uiTheme.textMuted, uiTheme.accentColor, t)!;
+                  final double pop = 1 + 0.14 * math.sin(math.pi * t.clamp(0.0, 1.0));
+                  return Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        width: 58,
+                        height: 30,
+                        alignment: Alignment.center,
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            Container(
+                              width: 22 + 36 * t,
+                              height: 30,
+                              decoration: BoxDecoration(
+                                color: uiTheme.accentWash.withValues(alpha: uiTheme.accentWash.a * t),
+                                borderRadius: uiTheme.borderRadius(15),
+                              ),
+                            ),
+                            Transform.scale(
+                              scale: pop,
+                              child: Icon(HomeHub.iconOf(tab), color: fg, size: 25, fill: t > 0.5 ? 1 : 0, weight: 300, opticalSize: 24),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ),
-                ],
+                      const SizedBox(height: 3),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 2),
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            tab.label,
+                            maxLines: 1,
+                            style: TextStyle(fontFamily: 'Arial', color: fg, fontSize: 11.5, fontWeight: selected ? FontWeight.w700 : FontWeight.w500),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
             ),
           ),

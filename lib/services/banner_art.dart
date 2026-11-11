@@ -11,6 +11,7 @@ import 'dart:io';
 import '../constants/app_identity.dart';
 import '../models/hikka_models.dart';
 import 'app_log.dart';
+import 'backend_client.dart';
 import 'storage_service.dart';
 
 /// Знайдений банер тайтлу
@@ -43,6 +44,9 @@ class BannerArtwork {
 }
 
 /// Запит JSON-API: повертає розібране тіло або кидає виняток (мережа, не 2xx)
+/// Запит банерів у бекенду (MAL-id → адреса й колір); `null` — бекенд недоступний
+typedef BackendBanners = Future<Map<int, (String?, int?)>?> Function(List<Map<String, Object?>> items);
+
 typedef JsonFetcher = Future<Object?> Function(String method, Uri url, {Object? body, Map<String, String>? headers});
 
 /// Справжній `JsonFetcher` на `dart:io`
@@ -128,7 +132,7 @@ class TmdbBackdrops {
 
   TmdbBackdrops({JsonFetcher? fetch, String Function()? key})
       : _fetch = fetch ?? ioJsonFetch,
-        _key = key ?? StorageService.getTmdbKey;
+        _key = key ?? BackendClient.effectiveTmdbKey;
 
   bool get enabled => _key().trim().isNotEmpty;
 
@@ -137,24 +141,63 @@ class TmdbBackdrops {
     final key = _key().trim();
     if (key.isEmpty) return null;
     final isMovie = a.mediaType == 'movie';
-    final queries = <String>[
-      for (final t in [a.titleNative, a.titleJa, a.titleEn])
-        if (t != null && t.trim().isNotEmpty) t.trim(),
-    ];
+    final queries = searchQueries(a);
     // Ключ v4 («read access token») починається з eyJ і передається заголовком, v3 — параметром
     final bearer = key.startsWith('eyJ');
-    for (final q in queries.take(2)) {
+    Future<Object?> search(String q, {required bool withYear}) {
       final url = Uri.parse('$api/search/${isMovie ? 'movie' : 'tv'}').replace(queryParameters: {
         if (!bearer) 'api_key': key,
         'query': q,
         'include_adult': 'false',
-        if (a.year != null) (isMovie ? 'primary_release_year' : 'first_air_date_year'): '${a.year}',
+        if (withYear && a.year != null) (isMovie ? 'primary_release_year' : 'first_air_date_year'): '${a.year}',
       });
-      final json = await _fetch('GET', url, headers: bearer ? {'Authorization': 'Bearer $key'} : null);
-      final path = pickBackdrop(json);
-      if (path != null) return '$images$path';
+      return _fetch('GET', url, headers: bearer ? {'Authorization': 'Bearer $key'} : null);
+    }
+
+    // Спершу з роком; далі без нього: наступний сезон давнього серіалу вийшов пізніше за перший, і TMDB знає лише серіал
+    for (final withYear in [true, false]) {
+      if (!withYear && (isMovie || a.year == null)) break;
+      for (final q in queries.take(4)) {
+        final path = pickBackdrop(await search(q, withYear: withYear));
+        if (path != null) return '$images$path';
+      }
     }
     return null;
+  }
+
+  /// Назви для пошуку: оригінальні, а також без позначки сезону («2nd Season», «Part 2», «Final Season», «2期»):
+  /// банер потрібного сезону беремо від серіалу, тобто від попередніх сезонів
+  static List<String> searchQueries(HikkaAnime a) {
+    final out = <String>[];
+    void add(String? t) {
+      final v = t?.trim() ?? '';
+      if (v.isNotEmpty && !out.contains(v)) out.add(v);
+    }
+
+    final titles = [a.titleNative, a.titleJa, a.titleEn];
+    for (final t in titles) {
+      add(t);
+    }
+    for (final t in titles) {
+      add(stripSeason(t));
+    }
+    return out;
+  }
+
+  static final RegExp _seasonTail = RegExp(
+    r'(\s*[:\-–]?\s*(\d+(st|nd|rd|th)\s+season|season\s*\d+|part\s*\d+|cour\s*\d+|final\s+season|the\s+final\s+season|\d+期|第\d+期|[ⅡⅢⅣ]|\s+(II|III|IV)))\s*$',
+    caseSensitive: false,
+  );
+
+  static String? stripSeason(String? t) {
+    if (t == null) return null;
+    var r = t.trim();
+    for (var i = 0; i < 3; i++) {
+      final n = r.replaceFirst(_seasonTail, '').trim();
+      if (n == r) break;
+      r = n;
+    }
+    return r == t.trim() || r.length < 2 ? null : r;
   }
 
   /// Перший результат із банером (результати вже впорядковані за релевантністю)
@@ -172,7 +215,7 @@ class TmdbBackdrops {
 /// Джерело банерів із дисковим кешем
 class BannerArt {
   /// Спільний екземпляр (у тестах підміняється)
-  static BannerArt instance = BannerArt();
+  static BannerArt instance = BannerArt(backend: (items) => BackendClient.instance.banners(items));
 
   /// Знайдений банер вважається актуальним так довго
   static const Duration foundTtl = Duration(days: 14);
@@ -180,18 +223,20 @@ class BannerArt {
   /// «Банера немає» перевіряється частіше: його могли додати згодом
   static const Duration missingTtl = Duration(days: 2);
 
-  static const String section = 'banner_art';
+  static const String section = 'banner_art2';
   static const int _maxEntries = 400;
 
   final AniListBanners _anilist;
   final TmdbBackdrops _tmdb;
+  final BackendBanners? _backend;
   final SectionLoader _load;
   final SectionSaver _save;
   final DateTime Function() _now;
   late final Map<String, dynamic> _data = Map<String, dynamic>.of(_load());
 
-  BannerArt({AniListBanners? anilist, TmdbBackdrops? tmdb, SectionLoader? load, SectionSaver? save, DateTime Function()? now})
-      : _anilist = anilist ?? AniListBanners(),
+  BannerArt({AniListBanners? anilist, TmdbBackdrops? tmdb, SectionLoader? load, SectionSaver? save, DateTime Function()? now, BackendBanners? backend})
+      : _backend = backend,
+        _anilist = anilist ?? AniListBanners(),
         _tmdb = tmdb ?? TmdbBackdrops(),
         _load = load ?? (() => StorageService.getSection(section)),
         _save = save ?? ((d) => StorageService.saveSection(section, d)),
@@ -202,12 +247,14 @@ class BannerArt {
     if (e is! Map) return null;
     final art = BannerArtwork.fromJson(e.cast<String, dynamic>());
     final t = DateTime.fromMillisecondsSinceEpoch((e['t'] as num?)?.toInt() ?? 0);
+    // Запис, зроблений без TMDB (ключа ще не було), перевіряється знову, щойно ключ з'явився
+    if (!allowStale && _tmdb.enabled && e['tm'] != true) return null;
     final ttl = art.hasImage ? foundTtl : missingTtl;
     return allowStale || _now().difference(t) < ttl ? art : null;
   }
 
-  void _store(int malId, BannerArtwork art) {
-    _data['$malId'] = {...art.toJson(), 't': _now().millisecondsSinceEpoch};
+  void _store(int malId, BannerArtwork art, {required bool viaTmdb}) {
+    _data['$malId'] = {...art.toJson(), 't': _now().millisecondsSinceEpoch, 'tm': viaTmdb};
   }
 
   void _trim() {
@@ -234,6 +281,46 @@ class BannerArt {
     }
     if (missing.isEmpty) return out;
 
+    // Спершу бекенд: він кешує адреси для всіх користувачів і сам питає TMDB та AniList
+    final backend = _backend;
+    if (backend != null) {
+      Map<int, (String?, int?)>? got;
+      try {
+        got = await backend([
+          for (final a in missing)
+            {
+              'mal': a.malId,
+              'titles': [for (final t in [a.titleNative, a.titleJa, a.titleEn]) if (t != null && t.trim().isNotEmpty) t.trim()],
+              if (a.year != null) 'year': a.year,
+              if (a.mediaType == 'movie') 'movie': true,
+            }
+        ]);
+      } catch (e) {
+        AppLog.w('banners', 'бекенд банерів не відповів: $e');
+      }
+      if (got != null) {
+        var served = 0;
+        for (final a in missing.toList()) {
+          final e = got[a.malId];
+          if (e == null && !got.containsKey(a.malId)) continue; // бекенд про цей тайтл промовчав — шукаємо самі
+          final art = e?.$1 == null ? BannerArtwork.none : BannerArtwork(url: e!.$1, color: e.$2);
+          out[a.malId] = art;
+          _store(a.malId, art, viaTmdb: true);
+          missing.remove(a);
+          served++;
+        }
+        AppLog.i('banners', 'бекенд: $served із ${served + missing.length} тайтлів, з банером ${out.values.where((x) => x.hasImage).length}');
+        if (missing.isEmpty) {
+          _trim();
+          _save(_data);
+          return out;
+        }
+      } else {
+        AppLog.w('banners', 'бекенд банерів недоступний — шукаємо напряму');
+      }
+    }
+
+    // AniList — одним запитом на всіх: колір теми й банер для запасного варіанта
     final fresh = <int, BannerArtwork>{};
     var anilistOk = true;
     try {
@@ -241,30 +328,46 @@ class BannerArt {
     } catch (e) {
       anilistOk = false;
       AppLog.w('banners', 'AniList не відповів: $e');
-      for (final a in missing) {
-        final stale = _cached(a.malId, allowStale: true);
-        if (stale != null) out[a.malId] = stale;
-      }
     }
 
-    if (anilistOk) {
-      // Запасний варіант для тих, у кого в AniList немає банера
-      for (final a in missing) {
-        var art = fresh[a.malId] ?? BannerArtwork.none;
-        if (!art.hasImage && _tmdb.enabled) {
-          try {
-            final url = await _tmdb.backdropFor(a);
-            if (url != null) art = BannerArtwork(url: url, color: art.color);
-          } catch (e) {
-            AppLog.w('banners', 'TMDB не відповів для «${a.slug}»: $e');
+    final tmdbOn = _tmdb.enabled;
+    if (!tmdbOn) AppLog.w('banners', 'TMDB: ключа немає (ні власного, ні з бекенду) — беремо банери AniList');
+    var tmdbFailed = false;
+    for (final a in missing) {
+      var art = fresh[a.malId] ?? BannerArtwork.none;
+      var tmdbOk = !tmdbOn; // без ключа TMDB «не питали», результат AniList остаточний
+      // Основне джерело — TheMovieDB; AniList лише коли TMDB нічого не дав або видав помилку
+      if (tmdbOn) {
+        try {
+          final url = await _tmdb.backdropFor(a);
+          if (url != null) {
+            art = BannerArtwork(url: url, color: art.color);
+            tmdbOk = true;
+          } else {
+            tmdbOk = true;
+            AppLog.i('banners', 'TMDB: для «${a.slug}» банера не знайдено${art.hasImage ? ', беремо AniList' : ''}');
           }
+        } catch (e) {
+          tmdbFailed = true;
+          AppLog.w('banners', 'TMDB помилка для «${a.slug}»: ${e.runtimeType}: $e${art.hasImage ? ' — беремо AniList' : ''}');
         }
-        out[a.malId] = art;
-        _store(a.malId, art);
       }
-      _trim();
-      _save(_data);
+      if (!anilistOk && !art.hasImage) {
+        final stale = _cached(a.malId, allowStale: true);
+        if (stale != null) out[a.malId] = stale;
+        continue;
+      }
+      out[a.malId] = art;
+      // Збій TMDB не кешуємо як «банера немає» (наступного разу спробуємо знову)
+      // Без ключа «банера немає» теж не запам'ятовуємо: ключ з бекенду може прийти трохи згодом
+      if (tmdbOk && (anilistOk || art.hasImage) && (tmdbOn || art.hasImage)) _store(a.malId, art, viaTmdb: tmdbOn && tmdbOk);
     }
+    final withImage = out.values.where((x) => x.hasImage).length;
+    final viaTmdb = out.values.where((x) => x.url?.contains('image.tmdb.org') ?? false).length;
+    AppLog.i('banners', 'банери: ${missing.length} тайтлів без кешу → з банером $withImage (TMDB $viaTmdb, AniList ${withImage - viaTmdb}), без банера ${out.length - withImage}');
+    if (tmdbFailed) AppLog.w('banners', 'Були помилки TMDB — такі тайтли перевіримо знову при наступному оновленні');
+    _trim();
+    _save(_data);
     return out;
   }
 }

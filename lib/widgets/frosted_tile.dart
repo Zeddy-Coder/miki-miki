@@ -30,7 +30,7 @@ class FrostedTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final effectiveRadius = uiTheme.radius(borderRadius);
-    final radiusObj = BorderRadius.circular(effectiveRadius);
+    final radiusObj = uiTheme.borderRadius(effectiveRadius);
 
     final defaultBg = uiTheme.isLight
         ? uiTheme.colors.tileBg.withValues(alpha: opacity.clamp(0.60, 0.95))

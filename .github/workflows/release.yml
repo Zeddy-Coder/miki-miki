@@ -56,9 +56,16 @@ jobs:
           cp build/app/outputs/flutter-apk/app-release.apk "$name"
           echo "APK_NAME=$name" >> "$GITHUB_ENV"
 
+      - name: Нотатки релізу з CHANGELOG.md
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          ver="${GITHUB_REF_NAME#v}"
+          awk -v v="$ver" '/^## /{f=($2==v)} f' CHANGELOG.md | sed '1d' > "$RUNNER_TEMP/notes.md"
+          if [ ! -s "$RUNNER_TEMP/notes.md" ]; then echo "У CHANGELOG.md немає розділу ## $ver"; exit 1; fi
+
       - name: Реліз на GitHub
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: ${{ env.APK_NAME }}
-          generate_release_notes: true
+          body_path: ${{ runner.temp }}/notes.md

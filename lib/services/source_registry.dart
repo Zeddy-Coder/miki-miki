@@ -8,8 +8,6 @@ import 'source_prefs.dart';
 import 'sources/anime_source.dart';
 import 'sources/source_http.dart';
 import 'sources/ua/mikai_source.dart';
-import 'sources/ua/uakino_source.dart';
-import 'sources/ua/ufdub_source.dart';
 
 class SourceRegistry extends ChangeNotifier {
   final SourcePrefs prefs;
@@ -23,7 +21,7 @@ class SourceRegistry extends ChangeNotifier {
     this.prefs.addListener(_onPrefs);
   }
 
-  /// Стандартний набір: Mikai (основне), UFDub, UAKino
+  /// Стандартний набір: Mikai (UFDub і UAKino прибрано: не працюють)
   factory SourceRegistry.standard({SourcePrefs? prefs, SourceHttp? http}) {
     final p = prefs ?? SourcePrefs.instance;
     final h = http ?? SourceHttp();
@@ -33,8 +31,6 @@ class SourceRegistry extends ChangeNotifier {
       http: h,
       sources: [
         MikaiSource(http: h, apiKey: key.isEmpty ? null : key),
-        UfDubSource(http: h),
-        UaKinoSource(http: h),
       ],
     );
   }

@@ -161,7 +161,7 @@ class _HikkaCatalogPageState extends State<HikkaCatalogPage> {
                 constraints: const BoxConstraints(minWidth: 17, minHeight: 17),
                 padding: const EdgeInsets.symmetric(horizontal: 4),
                 alignment: Alignment.center,
-                decoration: BoxDecoration(color: uiTheme.accentColor, borderRadius: BorderRadius.circular(9)),
+                decoration: BoxDecoration(color: uiTheme.accentColor, borderRadius: uiTheme.borderRadius(9)),
                 child: Text('$count', style: TextStyle(fontFamily: 'Arial', color: uiTheme.onAccent, fontSize: 10.5, fontWeight: FontWeight.bold)),
               ),
             ),

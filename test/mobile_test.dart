@@ -1206,6 +1206,7 @@ void main() {
       ('Відео & GPU', 'video'),
       ('Anime4K', 'anime4k'),
       ('Звук', 'audio'),
+      ('Каталог', 'catalog'),
       ('Розробник', 'dev'),
       ('Про програму', 'about'),
     ];
@@ -1226,6 +1227,27 @@ void main() {
       await tester.tap(find.text(label).first);
       await tick(tester, 600);
     }
+
+    testWidgets('портрет: свайп убік перегортає вкладки (Вигляд → Субтитри → назад)', (tester) async {
+      await openDialog(tester, kPortrait, const EdgeInsets.fromLTRB(0, 30, 0, 18));
+      expect(find.text('Оформлення та вигляд'), findsOneWidget);
+      await tester.flingFrom(const Offset(220, 500), const Offset(-300, 0), 1500);
+      await tick(tester, 700);
+      expect(find.text('Стилізація субтитрів'), findsOneWidget, reason: 'свайп ліворуч — наступна вкладка');
+      await tester.flingFrom(const Offset(120, 500), const Offset(300, 0), 1500);
+      await tick(tester, 700);
+      expect(find.text('Оформлення та вигляд'), findsOneWidget, reason: 'свайп праворуч — назад');
+
+      // Рядок вкладок слідує за активною: після кількох свайпів «Каталог» опиняється в полі зору
+      for (var i = 0; i < 8; i++) {
+        await tester.flingFrom(const Offset(220, 500), const Offset(-300, 0), 1500);
+        await tick(tester, 700);
+      }
+      final strip = tester.getRect(find.byType(ListView).first);
+      final active = tester.getRect(find.text('Каталог').first);
+      expect(strip.contains(active.center), isTrue, reason: 'активна вкладка не втрачається за краєм рядка');
+      expect(tester.takeException(), isNull);
+    });
 
     testWidgets('портрет: вкладки рядком, без бічного меню й «Гарячих клавіш»', (tester) async {
       await openDialog(tester, kPortrait, const EdgeInsets.fromLTRB(0, 30, 0, 18));
@@ -1283,7 +1305,8 @@ void main() {
       await goTab(tester, 'Розробник');
 
       final library = find.text('Локальна медіатека');
-      await tester.ensureVisible(library);
+      // Поле посеред екрана: згортна шапка накладена зверху й може перекрити край
+      await Scrollable.ensureVisible(tester.element(library), alignment: 0.5);
       await tester.pump(const Duration(milliseconds: 200));
       await tester.tap(library);
       await tick(tester, 300);

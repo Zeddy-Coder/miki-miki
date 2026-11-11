@@ -80,6 +80,11 @@ void main() {
       expect(a.title(HikkaTitleLang.en), "Frieren: Beyond Journey's End");
       expect(a.title(HikkaTitleLang.ja), 'Sousou no Frieren');
       expect(a.otherTitles(HikkaTitleLang.ua), ["Frieren: Beyond Journey's End", 'Sousou no Frieren', '葬送のフリーレン']);
+      // Одна другорядна назва: вибраною мовою, без повтору основної
+      expect(a.secondaryTitle(HikkaTitleLang.ua, HikkaTitleLang.en), "Frieren: Beyond Journey's End");
+      expect(a.secondaryTitle(HikkaTitleLang.ua, HikkaTitleLang.ja), 'Sousou no Frieren');
+      expect(a.secondaryTitle(HikkaTitleLang.ua, HikkaTitleLang.ua), isNull);
+      expect(a.secondaryTitle(HikkaTitleLang.en, HikkaTitleLang.en), isNull);
       expect(a.typeLabel, 'TV Серіал');
       expect(a.statusLabel, 'Завершено');
       expect(a.seasonLabel, 'Осінь 2023');

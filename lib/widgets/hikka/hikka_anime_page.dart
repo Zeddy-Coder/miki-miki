@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
@@ -9,12 +11,14 @@ import '../../services/hikka_prefs.dart';
 import '../../services/ui_theme_service.dart';
 import '../app_animation_kit.dart';
 import '../app_ui_kit.dart';
+import 'hikka_banner.dart';
 import 'hikka_cards.dart';
 import 'hikka_common.dart';
 import 'hikka_markdown_view.dart';
 import 'hikka_my_list_bar.dart';
 import 'hikka_page_kit.dart';
 import 'hikka_shelf.dart';
+import 'hikka_watch_dialogs.dart';
 import 'hikka_watch_section.dart';
 
 /// Сторінка аніме: шапка (з даних списку — одразу), опис, інформація, персонажі, франшиза,
@@ -92,22 +96,23 @@ class _HikkaAnimePageState extends State<HikkaAnimePage> {
 
   double get _scale => widget.scale;
 
-  Widget _poster(HikkaAnime a) => HikkaPoster(url: a.image, scale: _scale, radius: 12, icon: Symbols.movie_rounded);
+  Widget _poster(HikkaAnime a) => HikkaPoster(url: a.image, malId: a.malId, scale: _scale, radius: 12, icon: Symbols.movie_rounded);
 
   Widget _titleBlock(HikkaAnime a, {required bool wide}) {
     final scale = _scale;
     final lang = HikkaPrefs.instance.titleLang;
-    final others = a.otherTitles(lang).take(3).toList();
+    final prefs = HikkaPrefs.instance;
+    final second = prefs.showSecondary ? a.secondaryTitle(lang, prefs.secondaryLang) : null;
     final meta = [a.typeLabel, a.seasonLabel, a.episodesLabel].where((s) => s.isNotEmpty).join(' · ');
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(a.title(lang), style: hikkaStyle((wide ? 24 : 19) * scale, weight: FontWeight.bold, height: 1.2)),
-        if (others.isNotEmpty)
+        if (second != null)
           Padding(
             padding: EdgeInsets.only(top: 6 * scale),
-            child: Text(others.join('\n'), style: hikkaStyle(12.5 * scale, color: uiTheme.textMuted, height: 1.35)),
+            child: Text(second, maxLines: 2, overflow: TextOverflow.ellipsis, style: hikkaStyle(12.5 * scale, color: uiTheme.textMuted, height: 1.35)),
           ),
         SizedBox(height: 10 * scale),
         Wrap(
@@ -347,8 +352,24 @@ class _HikkaAnimePageState extends State<HikkaAnimePage> {
     }
     final posterW = hikkaHeaderPosterWidth(scale, wide: wide);
     final shown = _full ?? a;
+    final pad = HikkaLayout.sidePad(context, scale);
+    // Банер лише під постером і назвою (до рядка оцінок), а не під усією шапкою: до країв екрана й трохи вище, під панель
+    // Також лізе вгору під шапку-накладку: коли вона сховалась, на її місці не лишається порожнього тла
+    final inset = AppHeaderInset.of(context);
+    Widget backdrop({double? height}) => Positioned(
+          left: -pad,
+          right: -pad,
+          top: -(4 * scale + inset),
+          height: height == null ? null : height + inset,
+          bottom: height == null ? -12 * scale : null,
+          child: HikkaTitleBackdrop(anime: shown),
+        );
     if (wide) {
-      return Row(
+      return Stack(
+        clipBehavior: Clip.none,
+        children: [
+          backdrop(height: posterW / 0.7 + 16 * scale),
+          Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
@@ -377,21 +398,34 @@ class _HikkaAnimePageState extends State<HikkaAnimePage> {
             ),
           ),
         ],
+          ),
+        ],
       );
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        Stack(
+          clipBehavior: Clip.none,
           children: [
-            SizedBox(width: posterW, child: _poster(shown)),
-            SizedBox(width: 14 * scale),
-            Expanded(child: _titleBlock(shown, wide: false)),
+            backdrop(),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(width: posterW, child: _poster(shown)),
+                    SizedBox(width: 14 * scale),
+                    Expanded(child: _titleBlock(shown, wide: false)),
+                  ],
+                ),
+                SizedBox(height: 16 * scale),
+                _scores(shown),
+              ],
+            ),
           ],
         ),
-        SizedBox(height: 16 * scale),
-        _scores(shown),
         _myList(shown),
         _watch(),
         _genres(shown),
@@ -472,22 +506,21 @@ class _HikkaAnimePageState extends State<HikkaAnimePage> {
     if (usable.isEmpty) return const SizedBox.shrink();
     // Спершу «Де дивитися», потім решта
     usable.sort((x, y) => (y.isWatch ? 1 : 0).compareTo(x.isWatch ? 1 : 0));
-    return HikkaSection(
-      scale: scale,
-      pad: pad,
-      title: 'Посилання',
-      child: Wrap(
-        spacing: 8 * scale,
-        runSpacing: 8 * scale,
-        children: [
-          for (final l in usable)
-            HikkaChip(
-              label: l.text.isEmpty ? (Uri.tryParse(l.url)?.host ?? l.url) : l.text,
-              scale: scale,
-              icon: l.isWatch ? Symbols.play_circle_rounded : Symbols.open_in_new_rounded,
-              onTap: () => HikkaNav.instance.openLink(l.url),
-            ),
-        ],
+    // Самі посилання будуються лише при відкритті вікна: на сторінці лишається одна кнопка
+    return Padding(
+      padding: EdgeInsets.fromLTRB(pad, 0, pad, 22 * scale),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: AppSecondaryButton(
+          scale: scale,
+          expand: false,
+          icon: Symbols.link_rounded,
+          label: 'Посилання · ${usable.length}',
+          onTap: () => unawaited(AppDialogs.show<void>(
+            context,
+            builder: (_) => HikkaLinksDialog(links: usable, scale: scale),
+          )),
+        ),
       ),
     );
   }
@@ -528,7 +561,7 @@ class _HikkaAnimePageState extends State<HikkaAnimePage> {
       scale: scale,
       pad: pad,
       title: 'Музика',
-      subtitle: 'Опенінги та ендінги',
+      subtitle: 'Опенінґи та ендінґи',
       trailing: items.length > 6
           ? HikkaLinkButton(label: _ostExpanded ? 'Згорнути' : 'Показати всі', scale: scale, onTap: () => _toggle('ost'))
           : null,
@@ -544,7 +577,7 @@ class _HikkaAnimePageState extends State<HikkaAnimePage> {
                   SizedBox(
                     width: 96 * scale,
                     child: Text(
-                      '${o.isOpening ? 'Опенінг' : 'Ендінг'}${o.index > 0 ? ' ${o.index}' : ''}',
+                      '${o.isOpening ? 'Опенінґ' : 'Ендінґ'}${o.index > 0 ? ' ${o.index}' : ''}',
                       style: hikkaStyle(12 * scale, color: uiTheme.textDarkMuted, height: 1.35),
                     ),
                   ),
@@ -651,6 +684,36 @@ class _HikkaAnimePageState extends State<HikkaAnimePage> {
         ),
         if (!gated && full != null) ..._sections(full, pad),
       ],
+    );
+  }
+}
+
+/// Вікно «Посилання»: спершу «Де дивитися», потім решта. Вміст будується лише при відкритті.
+class HikkaLinksDialog extends StatelessWidget {
+  final List<HikkaLink> links;
+  final double scale;
+
+  const HikkaLinksDialog({super.key, required this.links, required this.scale});
+
+  @override
+  Widget build(BuildContext context) {
+    return WatchDialogFrame(
+      scale: scale,
+      title: 'Посилання',
+      icon: Symbols.link_rounded,
+      body: Wrap(
+        spacing: 8 * scale,
+        runSpacing: 8 * scale,
+        children: [
+          for (final l in links)
+            HikkaChip(
+              label: l.text.isEmpty ? (Uri.tryParse(l.url)?.host ?? l.url) : l.text,
+              scale: scale,
+              icon: l.isWatch ? Symbols.play_circle_rounded : Symbols.open_in_new_rounded,
+              onTap: () => HikkaNav.instance.openLink(l.url),
+            ),
+        ],
+      ),
     );
   }
 }

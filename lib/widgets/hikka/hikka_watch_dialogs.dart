@@ -91,7 +91,7 @@ class _WatchDialogFrameState extends State<WatchDialogFrame> {
     final phone = AppPlatform.isMobile;
     final width = phone ? (mq.size.width - 32).clamp(280.0, 480.0) : 480 * scale;
     final maxHeight = mq.size.height - (phone ? mq.padding.vertical + 32 : 80);
-    final pad = phone ? 18.0 : 22 * scale;
+    final pad = phone ? 22.0 : 26 * scale;
 
     return Center(
       child: Material(
@@ -100,13 +100,14 @@ class _WatchDialogFrameState extends State<WatchDialogFrame> {
           width: width,
           constraints: BoxConstraints(maxHeight: maxHeight),
           decoration: BoxDecoration(
-            color: uiTheme.bgPrimary,
-            borderRadius: uiTheme.borderRadius(20 * scale),
-            border: Border.all(color: uiTheme.borderSubtle),
+            // Як вікно в плеєрі: поверхня панелі, великий радіус, без розділювачів
+            color: uiTheme.colors.drawerBg,
+            borderRadius: uiTheme.borderRadius(22 * scale),
+            border: Border.all(color: uiTheme.colors.drawerBorder),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: uiTheme.isLight ? 0.12 : 0.70),
-                blurRadius: 36 * scale,
+                color: Colors.black.withValues(alpha: uiTheme.isLight ? 0.14 : 0.60),
+                blurRadius: 32 * scale,
                 offset: Offset(0, 10 * scale),
               ),
             ],
@@ -116,24 +117,21 @@ class _WatchDialogFrameState extends State<WatchDialogFrame> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Padding(
-                padding: EdgeInsets.fromLTRB(pad, 8 * scale, pad / 2, 4 * scale),
+                padding: EdgeInsets.fromLTRB(pad, 10 * scale, pad / 2, 2 * scale),
                 child: Row(
                   children: [
-                    Icon(widget.icon, color: uiTheme.accentColor, size: 22 * scale, weight: 300),
-                    SizedBox(width: 10 * scale),
-                    Expanded(child: Text(widget.title, style: hikkaStyle(16 * scale, weight: FontWeight.bold))),
+                    Expanded(child: Text(widget.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: hikkaStyle(17 * scale, weight: FontWeight.bold))),
                     HikkaIconButton(icon: Symbols.close_rounded, tooltip: 'Закрити', scale: scale, onTap: () => Navigator.of(context).pop()),
                   ],
                 ),
               ),
-              Divider(height: 1, color: uiTheme.borderSubtle),
               Flexible(
                 child: AppScrollbar(
                   scale: scale,
                   controller: _scroll,
                   child: SingleChildScrollView(
                     controller: _scroll,
-                    padding: EdgeInsets.fromLTRB(pad, 16 * scale, pad, 12 * scale),
+                    padding: EdgeInsets.fromLTRB(pad, 8 * scale, pad, 12 * scale),
                     child: widget.body,
                   ),
                 ),

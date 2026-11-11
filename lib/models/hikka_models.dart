@@ -513,6 +513,17 @@ class HikkaAnime {
     return slug;
   }
 
+  /// Одна другорядна назва вибраною мовою; `null`, якщо її немає або вона збігається з основною
+  String? secondaryTitle(HikkaTitleLang main, HikkaTitleLang secondary) {
+    final t = switch (secondary) {
+      HikkaTitleLang.ua => titleUa,
+      HikkaTitleLang.en => titleEn,
+      HikkaTitleLang.ja => titleJa ?? titleNative,
+    };
+    if (t == null || t.trim().isEmpty || t.toLowerCase() == title(main).toLowerCase()) return null;
+    return t;
+  }
+
   /// Решта назв, відмінних від основної (для шапки сторінки): англійська, ромаджі, оригінал
   List<String> otherTitles(HikkaTitleLang lang) {
     final main = title(lang);

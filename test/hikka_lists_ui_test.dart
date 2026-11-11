@@ -501,10 +501,9 @@ void main() {
       await shot(tester, 'anime_my_list_empty_desktop');
       await tester.tap(find.text('Додати в список'));
       await load(tester, rounds: 4);
-      expect(find.text('Додати в список'), findsNWidgets(2), reason: 'кнопка й заголовок вікна');
+      expect(find.text('Серії та оцінка…'), findsOneWidget, reason: 'випадне меню, а не вікно');
+      expect(find.text('Видалити зі списку'), findsNothing, reason: 'запису ще немає');
       await tester.tap(find.text('Дивлюсь'));
-      await tester.pump();
-      await tester.tap(find.text('Зберегти'));
       await load(tester, rounds: 10);
 
       expect(account.mine[frieren]?['status'], 'watching');
@@ -520,7 +519,9 @@ void main() {
 
       // Змінити: «Переглянуто» добиває лічильник до кінця, оцінка 9
       await tester.tap(find.text('Дивлюсь'));
-      await load(tester, rounds: 4);
+      await load(tester, rounds: 12);
+      await tester.tap(find.text('Серії та оцінка…'));
+      await load(tester, rounds: 10);
       expect(find.text('Мій список'), findsOneWidget);
       await tester.tap(find.text('Переглянуто'));
       await tester.pump();
@@ -536,7 +537,7 @@ void main() {
 
       // Прибрати
       await tester.tap(find.text('Переглянуто'));
-      await load(tester, rounds: 4);
+      await load(tester, rounds: 12);
       await tester.tap(find.text('Видалити зі списку'));
       await load(tester, rounds: 10);
       expect(account.mine.containsKey(frieren), isFalse);
@@ -553,19 +554,21 @@ void main() {
       expect(find.text('Додати в список'), findsNothing);
     });
 
-    testWidgets('збій мережі при збереженні: помилка у вікні, запис не загублено', (tester) async {
+    testWidgets('збій мережі при виборі статусу: запису немає, кнопка лишається; потім спрацьовує', (tester) async {
       signIn();
       account.mine.clear();
       await openAnime(tester);
       await tester.tap(find.text('Додати в список'));
-      await load(tester, rounds: 4);
+      await load(tester, rounds: 12);
       env.server.offline = true;
-      await tester.tap(find.text('Зберегти'));
+      await tester.tap(find.text('У планах'));
       await load(tester, rounds: 10);
-      expect(find.text('Додати в список'), findsNWidgets(2), reason: 'вікно не закрилось');
       expect(account.mine, isEmpty);
+      expect(find.text('Додати в список'), findsOneWidget);
       env.server.offline = false;
-      await tester.tap(find.text('Зберегти'));
+      await tester.tap(find.text('Додати в список'));
+      await load(tester, rounds: 12);
+      await tester.tap(find.text('У планах'));
       await load(tester, rounds: 10);
       expect(account.mine[frieren]?['status'], 'planned');
       expect(tester.takeException(), isNull);

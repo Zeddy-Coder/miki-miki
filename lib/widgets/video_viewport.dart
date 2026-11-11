@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:media_kit_video/media_kit_video.dart';
+import '../services/video_zoom.dart';
 import 'app_animation_kit.dart';
 import 'app_ui_kit.dart';
 
@@ -15,6 +16,9 @@ class VideoViewport extends StatefulWidget {
   final String doubleTapLabel;
   final List<Widget> overlays;
 
+  /// Збільшення щипком (телефон); null — без збільшення
+  final VideoZoomController? zoom;
+
   const VideoViewport({
     super.key,
     required this.scale,
@@ -26,6 +30,7 @@ class VideoViewport extends StatefulWidget {
     this.onDoubleTapSide,
     this.doubleTapLabel = '',
     required this.overlays,
+    this.zoom,
   });
 
   @override
@@ -66,12 +71,17 @@ class _VideoViewportState extends State<VideoViewport> {
               onDoubleTapDown: widget.onDoubleTapSide == null ? null : (d) => _tapPos = d.localPosition,
               onDoubleTap: widget.onDoubleTapSide == null ? null : () => _doubleTap(width),
               child: RepaintBoundary(
-                  child: Center(
-                    child: Video(
-                      controller: controller,
-                      controls: NoVideoControls,
-                      fit: BoxFit.contain,
-                      subtitleViewConfiguration: const SubtitleViewConfiguration(visible: false),
+                  child: ClipRect(
+                    child: VideoZoomTransform(
+                      zoom: widget.zoom,
+                      child: Center(
+                        child: Video(
+                          controller: controller,
+                          controls: NoVideoControls,
+                          fit: BoxFit.contain,
+                          subtitleViewConfiguration: const SubtitleViewConfiguration(visible: false),
+                        ),
+                      ),
                     ),
                   ),
                 ),

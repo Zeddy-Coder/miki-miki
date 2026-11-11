@@ -84,10 +84,14 @@ class UiThemeService extends ChangeNotifier {
     '#A667E4': ('Фіолетовий', Color(0xFFA667E4)),
     '#00E5FF': ('Блакитний', Color(0xFF00E5FF)),
     '#00FF66': ('Смарагдовий', Color(0xFF00FF66)),
-    '#FFAA00': ('Помаранчевий', Color(0xFFFFAA00)),
+    '#FFAA00': ('Жовтий', Color(0xFFFFAA00)),
     '#FF3366': ('Рожевий', Color(0xFFFF3366)),
     '#FF0000': ('Класичний червоний', Color(0xFFFF0000)),
   };
+
+  /// Типові значення: жовтий акцент і системна тема
+  static const String defaultAccentHex = '#FFAA00';
+  static const String defaultThemeMode = 'system';
 
   static const Map<String, double> radiusMultipliers = {
     'Без': 0.0,
@@ -98,18 +102,18 @@ class UiThemeService extends ChangeNotifier {
     'XL': 1.8,
   };
 
-  String _accentHex = '#E46767';
+  String _accentHex = defaultAccentHex;
   String _radiusKey = 'MD';
-  String _themeMode = 'dark'; // 'system', 'dark', 'light'
+  String _themeMode = defaultThemeMode; // 'system', 'dark', 'light'
 
   // Акценти, підігнані під світлу/темну тему (рахуються один раз при зміні кольору)
   Color _accentForLight = const Color(0xFFCF2525);
   Color _accentForDark = const Color(0xFFE46767);
 
   void init() {
-    _accentHex = StorageService.getAccentColorHex(fallback: '#E46767');
+    _accentHex = StorageService.getAccentColorHex(fallback: defaultAccentHex);
     _radiusKey = StorageService.getUiRadius(fallback: 'MD');
-    _themeMode = StorageService.getThemeMode(fallback: 'dark');
+    _themeMode = StorageService.getThemeMode(fallback: defaultThemeMode);
     _rebuildAccents();
     notifyListeners();
   }
@@ -200,7 +204,8 @@ class UiThemeService extends ChangeNotifier {
   /// Підганяє [base] під світлий або темний фон, зберігаючи відтінок.
   static Color adaptAccent(Color base, {required bool forLight}) {
     final ref = forLight ? _lightRef : _darkRef;
-    const minContrast = 4.5;
+    // Світла тема: насичений акцент має лишатись яскравим (3:1 для крупних елементів), темна — суворіше
+    final minContrast = forLight ? 3.0 : 4.5;
     final maxContrast = forLight ? 8.0 : 10.0;
 
     final hsl = HSLColor.fromColor(base);
@@ -272,9 +277,9 @@ class UiThemeService extends ChangeNotifier {
   }
 
   void reset() {
-    setAccentHex('#E46767');
+    setAccentHex(defaultAccentHex);
     setRadiusKey('MD');
-    setThemeMode('dark');
+    setThemeMode(defaultThemeMode);
   }
 }
 

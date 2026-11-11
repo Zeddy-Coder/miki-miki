@@ -1,3 +1,4 @@
+import '../services/app_layers.dart';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
@@ -67,7 +68,9 @@ class MobileSheetFrame extends StatelessWidget {
     }
 
     return Positioned.fill(
-      child: IgnorePointer(
+      child: AppLayerClaim(
+        active: open,
+        child: IgnorePointer(
         ignoring: !open,
         child: Stack(
           children: [
@@ -85,6 +88,7 @@ class MobileSheetFrame extends StatelessWidget {
             panel,
           ],
         ),
+      ),
       ),
     );
   }
@@ -148,7 +152,7 @@ class _GrabHandle extends StatelessWidget {
             height: 4,
             decoration: BoxDecoration(
               color: uiTheme.colors.textDarkMuted.withValues(alpha: 0.55),
-              borderRadius: BorderRadius.circular(2),
+              borderRadius: uiTheme.borderRadius(2),
             ),
           ),
         ),

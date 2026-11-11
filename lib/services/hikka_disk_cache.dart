@@ -22,6 +22,7 @@ class HikkaDiskCache {
   final Directory? _dirOverride;
   Directory? _dir;
   bool _pruned = false;
+  int _seq = 0;
 
   HikkaDiskCache({Directory? dir}) : _dirOverride = dir;
 
@@ -68,7 +69,9 @@ class HikkaDiskCache {
     if (dir == null) return;
     try {
       final f = File('${dir.path}/${fileName(key)}');
-      final tmp = File('${f.path}.tmp');
+      // Однакові запити йдуть паралельно: у кожного свій тимчасовий файл, інакше другий rename падає
+      final tmp = File('${f.path}.${DateTime.now().microsecondsSinceEpoch}.${_seq++}.tmp');
+      if (!await dir.exists()) await dir.create(recursive: true);
       await tmp.writeAsString(jsonEncode({'k': key, 'at': at.millisecondsSinceEpoch, 'j': json}), flush: false);
       await tmp.rename(f.path);
       if (!_pruned) {

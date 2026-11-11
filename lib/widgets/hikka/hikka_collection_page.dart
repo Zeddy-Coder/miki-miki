@@ -256,6 +256,7 @@ class _HikkaCollectionPageState extends State<HikkaCollectionPage> {
         controller: _scroll,
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
+          SliverToBoxAdapter(child: SizedBox(height: AppHeaderInset.of(context))), // місце під шапкою-накладкою
           SliverToBoxAdapter(child: _header(c, pad)),
           body,
           SliverToBoxAdapter(child: SizedBox(height: 28 * scale + widget.bottomInset)),
@@ -289,7 +290,7 @@ class _EntryRow extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(width: 64 * scale, child: HikkaPoster(url: a.image, scale: scale, radius: 8, icon: Symbols.movie_rounded)),
+          SizedBox(width: 64 * scale, child: HikkaPoster(url: a.image, malId: a.malId, scale: scale, radius: 8, icon: Symbols.movie_rounded)),
           SizedBox(width: 12 * scale),
           Expanded(
             child: Column(
