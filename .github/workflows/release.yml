@@ -23,6 +23,8 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          # Версія зафіксована: Flutter 3.50 вимагає Gradle 9.3.1, а проєкт зібраний на 8.14.3
+          flutter-version: '3.47.9'
           cache: true
 
       - name: Перевірка версії
