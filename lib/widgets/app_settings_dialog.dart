@@ -33,13 +33,13 @@ class AppSettingsDialog extends StatefulWidget {
   final double scale;
   final PlayerStateController controller;
 
-  /// Вкладка, з якої відкривається вікно (див. [tabDeveloper], [tabAbout])
+  /// The tab the window opens on (see [tabDeveloper], [tabAbout])
   final int initialTab;
 
-  /// Вкладка навігації замість вікна: заповнює відведене місце, без «Закрити» і «Готово»
+  /// A navigation tab instead of a window: fills the given space, without "Закрити" and "Готово"
   final bool embedded;
 
-  /// Індекси вкладок, до яких можна перейти з інших екранів
+  /// Tab indices reachable from other screens
   static const int tabDeveloper = 5;
   static const int tabAbout = 6;
   static const int tabCatalog = 9;
@@ -78,11 +78,11 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
   final TextEditingController _tmdbKey = TextEditingController(text: StorageService.getTmdbKey());
   bool _isResetting = false;
 
-  // Вигляд
+  // Appearance
   late String _themeMode;
   late String _initialThemeMode;
 
-  // Субтитри
+  // Subtitles
   late String _font;
   late double _fontSize;
   late String _textColor;
@@ -95,7 +95,7 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
   late bool _subtitlesEnabled;
   late List<String> _subLangPriorities;
 
-  // Відтворення
+  // Playback
   late bool _autoplayNext;
   late double _defaultSpeed;
   late int _seekStep;
@@ -108,7 +108,7 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
   late bool _showSkipButton;
   late PlayerOrientation _playerOrientation;
 
-  // Звук
+  // Sound
   late bool _pitchCorrection;
   late String _defaultAudioLang;
   late List<String> _audioLangPriorities;
@@ -119,12 +119,12 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
   late Anime4kQuality _a4kQuality;
   late int _a4kSkipHeight;
 
-  // Гарячі клавіші
+  // Hotkeys
   late KeyScheme _keyScheme;
   final TextEditingController _hotkeysSearch = TextEditingController();
   String _hotkeysQuery = '';
 
-  // Початкові знімки для відстеження змін
+  // Initial snapshots for change tracking
   late String _initialFont;
   late double _initialFontSize;
   late String _initialTextColor;
@@ -183,8 +183,8 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
 
   final Set<String> _loadedFonts = {};
 
-  /// Копіює шрифти в теку застосунку (вибрані файли можуть бути тимчасовими) і додає їх до списку.
-  /// Повертає назву останнього доданого або null.
+  /// Copies fonts into the app folder (the chosen files may be temporary) and adds them to the list.
+  /// Returns the name of the last one added, or null.
   Future<String?> _importFonts(Iterable<String> paths) async {
     String? last;
     try {
@@ -205,7 +205,7 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
     return last;
   }
 
-  /// Власні шрифти не відомі рушію самі: без завантаження зразок субтитрів лишається системним шрифтом
+  /// The engine does not know custom fonts by itself: without loading, the subtitle sample stays in the system font
   Future<void> _ensureFont(String name) async {
     if (_loadedFonts.contains(name)) return;
     for (final path in StorageService.getCustomFonts()) {
@@ -258,7 +258,7 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
     _defaultAudioLang = StorageService.getDefaultAudioLang();
     _audioLangPriorities = StorageService.getAudioLangPriorities();
 
-    // Anime4K і схема клавіш можуть змінюватися поза діалогом (меню, Ctrl+1…6) — беремо живий стан
+    // Anime4K and the key scheme can change outside the dialog (menu, Ctrl+1…6), so we take the live state
     final a4k = widget.controller.anime4k;
     _a4kEnabled = a4k.enabled;
     _a4kMode = a4k.mode;
@@ -535,7 +535,7 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
     HikkaAuth.instance.setCustomClient(_clientRef.text, _clientSecret.text);
   }
 
-  /// Вкладки для вузького екрана телефона: (індекс вкладки, значок, підпис). «Гарячі клавіші» без клавіатури зайві.
+  /// Tabs for a narrow phone screen: (tab index, icon, label). "Гарячі клавіші" is pointless without a keyboard.
   static const List<(int, IconData, String)> _phoneTabs = [
     (0, Symbols.palette_rounded, 'Вигляд'),
     (1, Symbols.subtitles_rounded, 'Субтитри'),
@@ -548,8 +548,8 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
     (6, Symbols.info_rounded, 'Про програму'),
   ];
 
-  /// Рядок вкладок під шапкою (вузький екран): прокручується вбік, кожна вкладка ≥ 48 dp заввишки
-  /// Ключі кнопок вкладок і остання вкладка, до якої прокручено рядок: активна вкладка завжди в полі зору
+  /// The tab row under the header (narrow screen): scrolls sideways, each tab is at least 48 dp tall
+  /// Keys of the tab buttons and the last tab the row was scrolled to: the active tab is always in view
   final Map<int, GlobalKey> _tabKeys = {};
   int? _centeredTab;
 
@@ -619,7 +619,7 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
   Widget build(BuildContext context) {
     final scale = widget.scale;
     final mq = MediaQuery.of(context);
-    // Телефон: налаштування на весь екран (портрет — вкладки рядком, альбомна — бічне меню)
+    // Phone: settings full screen (portrait: tabs in a row, landscape: a side menu)
     final bool phone = AppPlatform.isMobile;
     final bool compact = phone && AppLayout(mq.size).isCompactWidth;
     final EdgeInsets safe = phone ? mq.padding : EdgeInsets.zero;
@@ -734,7 +734,7 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
                         ],
                       ),
                     );
-    // Телефон: свайп убік перегортає вкладки, як у «Списках» і каталозі (порядок — як у рядку вкладок)
+    // Phone: a sideways swipe flips tabs, as in "Списки" and the catalog (the order follows the tab row)
     Widget swipeable(Widget child) {
       if (!compact) return child;
       final index = _phoneTabs.indexWhere((t) => t.$1 == _activeTab);
@@ -742,7 +742,7 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
       return HikkaSwipeTabs(
         index: index,
         count: _phoneTabs.length,
-        animate: false, // перехід уже анімує AppFadeSlideSwitcher
+        animate: false, // the transition is already animated by AppFadeSlideSwitcher
         onChanged: (i) => setState(() => _activeTab = _phoneTabs[i].$1),
         child: child,
       );
@@ -873,7 +873,7 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
                         bottom: (compact ? 12 : 16) * scale,
                         top: 8 * scale,
                       ),
-                      // Вузький екран: три кнопки не вміщаються в рядок — рядок трохи стискається
+                      // Narrow screen: three buttons do not fit in a row, so the row shrinks a bit
                       child: _footerFit(
                         compact,
                         Row(
@@ -970,7 +970,7 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
       ? SizedBox(width: double.infinity, child: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerRight, child: row))
       : row;
 
-  /// Універсальна обгортка для вкладок зі скролом із м'якими тінями зверху та знизу
+  /// A universal wrapper for scrollable tabs with soft shadows at the top and bottom
   Widget _buildScrollableTabWithShadows(double scale, Widget content) {
     return Builder(builder: (context) => Stack(
       children: [
@@ -997,12 +997,12 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
       ..._builtInFonts,
       ...StorageService.getCustomFonts().map((p) => p.split(RegExp(r'[/\\]')).last.split('.').first),
     ];
-    // Вибраного шрифту може не бути серед доступних (немає на пристрої): показуємо його, а не падаємо
+    // The chosen font may be missing among the available ones (not on the device): we show it instead of crashing
     if (!names.contains(_font)) names.insert(0, _font);
     final fontOptions = names.map((f) => AppDropdownOption(value: f, label: f)).toList();
 
-    // Зразок лежить поверх прокрутки й їде за шапкою (зсув від її видимості), а розмір області прокрутки не
-    // змінюється: інакше згортання шапки міняло б висоту вікна й прокрутка смикалась
+    // The sample sits over the scroll and moves with the header (an offset from its visibility), while the scroll area's size
+    // does not change: otherwise collapsing the header would change the window height and the scroll would jerk
     return Builder(builder: (context) {
       final inset = AppHeaderInset.of(context);
       final shown = AppHeaderInset.maybeOf(context)?.shown;
@@ -1121,7 +1121,7 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
                             onTap: () async {
                               final paths = <String>[];
                               if (Platform.isAndroid) {
-                                // Android не дає читати теки напряму: вибираємо одразу кілька файлів
+                                // Android does not let us read folders directly: we pick several files at once
                                 final res = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: ['ttf', 'otf'], allowMultiple: true);
                                 paths.addAll([for (final f in res?.files ?? const <PlatformFile>[]) if (f.path != null) f.path!]);
                               } else {
@@ -1206,7 +1206,7 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
               ],
             ),
             SizedBox(height: 12 * scale),
-            // Wrap: на вузькому екрані телефона кольори переходять на другий рядок
+            // Wrap: on a narrow phone screen the colors go to a second row
             Wrap(
               runSpacing: 4 * scale,
               children: UiThemeService.presets.entries.map((e) {
@@ -1607,7 +1607,7 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
             SizedBox(height: 12 * scale),
             Row(
               children: [
-                // Провідник є лише на Windows; на телефоні кнопки немає
+                // The file explorer exists only on Windows; the phone has no such button
                 if (Platform.isWindows) ...[
                   Expanded(
                     child: _buildActionPill(
@@ -1731,7 +1731,7 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
     }
   }
 
-  // ───────── Оновлення ─────────
+  // ───────── Updates ─────────
 
   Widget _buildUpdateBlock(double scale) {
     return ValueListenableBuilder<UpdateState>(
@@ -1891,7 +1891,7 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
         SizedBox(height: 28 * scale),
         _buildAnime4kStatus(scale),
         SizedBox(height: 12 * scale),
-        // Комбінації клавіш Ctrl + цифра — лише для клавіатури; на телефоні їх не показуємо
+        // Ctrl + digit key combinations are keyboard-only; we do not show them on a phone
         if (!AppPlatform.isMobile) ...[
           _buildAnime4kKeys(scale),
           SizedBox(height: 14 * scale),
@@ -2052,7 +2052,7 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
     );
   }
 
-  // ───────── Гарячі клавіші ─────────
+  // ───────── Hotkeys ─────────
 
   Widget _buildHotkeysTab(double scale) {
     return Column(
@@ -2317,7 +2317,7 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
     );
   }
 
-  // ── Журнал ────────────────────────────────────────────────────────────────
+  // ── Log ────────────────────────────────────────────────────────────────
 
   String? _logStatus;
   bool _logStatusError = false;
@@ -2461,7 +2461,7 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
         ),
       ],
     );
-    // Телефон: перемикач завеликий для пальця лише візуально — тапом по всьому рядку (≥ 48 dp) він перемикається
+    // Phone: the switch is too small for a finger only visually: tapping the whole row (≥ 48 dp) toggles it
     if (!phone) return row;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,

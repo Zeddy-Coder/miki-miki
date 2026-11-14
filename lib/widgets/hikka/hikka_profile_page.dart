@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../../constants/app_identity.dart';
+import '../../models/hikka_profile_models.dart';
 import '../../services/app_updater.dart';
+import '../../services/hikka_auth.dart';
 import '../../services/hikka_nav.dart';
 import '../../services/storage_service.dart';
 import '../../services/ui_theme_service.dart';
@@ -12,24 +14,32 @@ import '../app_ui_kit.dart';
 import 'hikka_account_ui.dart';
 import 'hikka_common.dart';
 import 'hikka_page_kit.dart';
+import 'hikka_user_profile.dart';
 
-/// Вкладка «Профіль»: обліковий запис Hikka (вхід, вихід, синхронізація прогресу) і вхід до налаштувань застосунку,
-/// каталогу, джерел перегляду та «Про застосунок». Прихована локальна медіатека з'являється тут, коли її
-/// ввімкнено в «Розробник».
+/// The "Профіль" tab. After sign-in, the Hikka profile as on `hikka.io/u/<name>` ([HikkaUserProfile]: header, "Список",
+/// "Активність", favorites, articles, collections, "Історія"), below it "Акаунт" (progress sync, sign-out).
+/// A guest sees a sign-in card. Then app settings and "Про застосунок"; the hidden local media library
+/// appears here when enabled in "Розробник".
 class HikkaProfilePage extends StatefulWidget {
   final double scale;
   final double bottomInset;
 
-  /// Налаштування застосунку (за потреби — з певної вкладки, див. `AppSettingsDialog.tabAbout`)
+  /// App settings (from a specific tab if needed, see `AppSettingsDialog.tabAbout`)
   final void Function({int? tab}) onOpenSettings;
 
-  /// Налаштування каталогу (мова назв, 18+, дані)
+  /// Another value means the profile loads anew ("Оновити дані")
+  final int refreshToken;
+
+  /// Pull-down refresh (phone)
+  final Future<void> Function()? onRefresh;
 
   const HikkaProfilePage({
     super.key,
     required this.scale,
     required this.onOpenSettings,
     this.bottomInset = 0,
+    this.refreshToken = 0,
+    this.onRefresh,
   });
 
   @override
@@ -46,6 +56,7 @@ class _HikkaProfilePageState extends State<HikkaProfilePage> {
   }
 
   Widget _group(double scale, List<Widget> rows) {
+    if (rows.isEmpty) return const SizedBox.shrink();
     return AppCard(
       scale: scale,
       radius: 14,
@@ -64,15 +75,74 @@ class _HikkaProfilePageState extends State<HikkaProfilePage> {
   Widget build(BuildContext context) {
     final scale = widget.scale;
     final pad = HikkaLayout.sidePad(context, scale);
+    final auth = HikkaAuth.instance;
     return HikkaCollapsingHeader(
-      header: HikkaTabHeader(scale: scale, title: 'Профіль', subtitle: AppIdentity.tagline),
-      body: HikkaPageFrame(
+      header: ListenableBuilder(
+        listenable: Listenable.merge([auth, AppUpdater.instance.state]),
+        builder: (context, _) {
+          final signedIn = auth.signedIn && auth.username.isNotEmpty;
+          final update = AppUpdater.instance.state.value is UpdateAvailable;
+          // After sign-in, settings, "Про застосунок" and the account are icons in the header: the page is taken by the profile only
+          return HikkaTabHeader(
+            scale: scale,
+            title: 'Профіль',
+            subtitle: AppIdentity.tagline,
+            actions: [
+              if (signedIn) ...[
+                HikkaIconButton(
+                  icon: Symbols.manage_accounts_rounded,
+                  tooltip: 'Акаунт',
+                  scale: scale,
+                  onTap: () => HikkaAccountDialog.show(context, scale: scale),
+                ),
+                // "Про застосунок" is a tab in settings; a dot on the gear when an update exists
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    HikkaIconButton(
+                      icon: Symbols.settings_rounded,
+                      tooltip: update ? 'Налаштування застосунку · є оновлення' : 'Налаштування застосунку',
+                      scale: scale,
+                      onTap: () => widget.onOpenSettings(tab: update ? AppSettingsDialog.tabAbout : null),
+                    ),
+                    if (update)
+                      Positioned(
+                        right: 8 * scale,
+                        top: 8 * scale,
+                        child: Container(width: 9 * scale, height: 9 * scale, decoration: BoxDecoration(color: uiTheme.accentColor, shape: BoxShape.circle)),
+                      ),
+                  ],
+                ),
+              ],
+            ],
+          );
+        },
+      ),
+      body: ListenableBuilder(
+        listenable: auth,
+        builder: (context, _) {
+          final me = auth.signedIn ? auth.me : null;
+          final name = me?.username ?? '';
+          final profile = name.isNotEmpty;
+          return HikkaPageFrame(
             scale: scale,
             controller: _scroll,
             bottomInset: widget.bottomInset,
+            onRefresh: profile ? widget.onRefresh : null,
             children: [
+              if (profile) ...[
+                HikkaUserProfile(
+                  key: ValueKey('me-$name'),
+                  username: name,
+                  seed: HikkaUser.fromMe(me!),
+                  scale: scale,
+                  own: true,
+                  reloadKey: widget.refreshToken,
+                ),
+                SizedBox(height: 6 * scale),
+              ],
               Padding(
-                padding: EdgeInsets.fromLTRB(pad, 8 * scale, pad, 16 * scale),
+                padding: EdgeInsets.fromLTRB(pad, profile ? 0 : 8 * scale, pad, 16 * scale),
                 child: Align(
                   alignment: Alignment.centerLeft,
                   child: ConstrainedBox(
@@ -80,18 +150,20 @@ class _HikkaProfilePageState extends State<HikkaProfilePage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        HikkaAccountCard(scale: scale),
-                        SizedBox(height: 18 * scale),
-                        _group(scale, [
-                          _MenuRow(
-                            scale: scale,
-                            icon: Symbols.settings_rounded,
-                            title: 'Налаштування застосунку',
-                            subtitle: 'Вигляд, плеєр, каталог, джерела перегляду',
-                            onTap: () => widget.onOpenSettings(),
-                          ),
-                        ]),
-                        SizedBox(height: 14 * scale),
+                        if (!profile) ...[
+                          HikkaAccountCard(scale: scale),
+                          SizedBox(height: 18 * scale),
+                          _group(scale, [
+                            _MenuRow(
+                              scale: scale,
+                              icon: Symbols.settings_rounded,
+                              title: 'Налаштування застосунку',
+                              subtitle: 'Вигляд, плеєр, каталог, джерела перегляду',
+                              onTap: () => widget.onOpenSettings(),
+                            ),
+                          ]),
+                          SizedBox(height: 14 * scale),
+                        ],
                         ValueListenableBuilder<bool>(
                           valueListenable: StorageService.localLibraryListenable,
                           builder: (context, localLibrary, _) => _group(scale, [
@@ -103,34 +175,39 @@ class _HikkaProfilePageState extends State<HikkaProfilePage> {
                                 subtitle: 'Відкрити файл чи посилання, історія й плейлисти',
                                 onTap: HikkaNav.instance.openLocalLibrary,
                               ),
-                            ValueListenableBuilder<UpdateState>(
-                              valueListenable: AppUpdater.instance.state,
-                              builder: (context, up, _) => _MenuRow(
-                                scale: scale,
-                                icon: Symbols.info_rounded,
-                                title: 'Про ${AppIdentity.name}',
-                                subtitle: up is UpdateAvailable
-                                    ? 'Версія ${AppIdentity.version} · доступна ${up.info.version}'
-                                    : 'Версія ${AppIdentity.version}',
-                                onTap: () => widget.onOpenSettings(tab: AppSettingsDialog.tabAbout),
+                            if (!profile)
+                              ValueListenableBuilder<UpdateState>(
+                                valueListenable: AppUpdater.instance.state,
+                                builder: (context, up, _) => _MenuRow(
+                                  scale: scale,
+                                  icon: Symbols.info_rounded,
+                                  title: 'Про ${AppIdentity.name}',
+                                  subtitle: up is UpdateAvailable
+                                      ? 'Версія ${AppIdentity.version} · доступна ${up.info.version}'
+                                      : 'Версія ${AppIdentity.version}',
+                                  onTap: () => widget.onOpenSettings(tab: AppSettingsDialog.tabAbout),
+                                ),
                               ),
-                            ),
                           ]),
                         ),
-                        SizedBox(height: 18 * scale),
-                        Center(
-                          child: Text(
-                            'Дані: Hikka · зображення: AniList',
-                            style: hikkaStyle(11 * scale, color: uiTheme.textDarkMuted),
+                        if (!profile) ...[
+                          SizedBox(height: 18 * scale),
+                          Center(
+                            child: Text(
+                              'Дані: Hikka · зображення: AniList',
+                              style: hikkaStyle(11 * scale, color: uiTheme.textDarkMuted),
+                            ),
                           ),
-                        ),
+                        ],
                       ],
                     ),
                   ),
                 ),
               ),
             ],
-          ),
+          );
+        },
+      ),
     );
   }
 }

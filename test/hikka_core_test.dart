@@ -15,13 +15,13 @@ import 'support/hikka_fakes.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  // ── Підписи й дати ─────────────────────────────────────────────────────────
+  // ── Labels and dates ─────────────────────────────────────────────────────────
 
   group('HikkaText', () {
     test('сезони: поточний за правилом сайту й наступний', () {
-      // 1 листопада 00:00 ще належить до літа... ні: день, що минув, — 31 жовтня, тобто осінь
+      // November 1, 00:00 still belongs to summer... no: the day that has passed is October 31, i.e. autumn
       expect(HikkaText.currentSeason(DateTime(2026, 11, 3, 12)), ('fall', 2026));
-      // Перший день сезону ще належить попередньому
+      // The first day of a season still belongs to the previous one
       expect(HikkaText.currentSeason(DateTime(2026, 10, 1, 8)), ('summer', 2026));
       expect(HikkaText.currentSeason(DateTime(2026, 1, 1, 8)), ('fall', 2025));
       expect(HikkaText.nextSeason('fall', 2026), ('winter', 2027));
@@ -70,7 +70,7 @@ void main() {
     });
   });
 
-  // ── Моделі ─────────────────────────────────────────────────────────────────
+  // ── Models ─────────────────────────────────────────────────────────────────
 
   group('Моделі', () {
     test('повна сторінка аніме з реальної відповіді', () {
@@ -80,7 +80,7 @@ void main() {
       expect(a.title(HikkaTitleLang.en), "Frieren: Beyond Journey's End");
       expect(a.title(HikkaTitleLang.ja), 'Sousou no Frieren');
       expect(a.otherTitles(HikkaTitleLang.ua), ["Frieren: Beyond Journey's End", 'Sousou no Frieren', '葬送のフリーレン']);
-      // Одна другорядна назва: вибраною мовою, без повтору основної
+      // One secondary title: in the chosen language, without repeating the main one
       expect(a.secondaryTitle(HikkaTitleLang.ua, HikkaTitleLang.en), "Frieren: Beyond Journey's End");
       expect(a.secondaryTitle(HikkaTitleLang.ua, HikkaTitleLang.ja), 'Sousou no Frieren');
       expect(a.secondaryTitle(HikkaTitleLang.ua, HikkaTitleLang.ua), isNull);
@@ -172,7 +172,7 @@ void main() {
       expect({for (final v in voices.items) v.languageLabel}, {'Англійська', 'Японська'});
       final groups = HikkaCharacterVoice.groupByLanguage(voices.items);
       expect([for (final g in groups) g.$1], ['Японська', 'Англійська']);
-      // Танедзакі Ацумі озвучила у двох аніме, але названа один раз
+      // Tanezaki Atsumi voiced in two anime but is named once
       expect(groups.first.$2, ['Танедзакі Ацумі']);
 
       HikkaCharacterVoice v(String lang, String name) => HikkaCharacterVoice(
@@ -189,10 +189,10 @@ void main() {
         v('xx', 'Невідомий'),
         v('', 'Без мови'),
       ]);
-      // Повні назви зводяться до кодів; решта — за українською абеткою, невідомі коди й «без мови» — наприкінці
+      // Full names are reduced to codes; the rest by the Ukrainian alphabet, unknown codes and "no language" at the end
       expect([for (final g in mixed) g.$1], ['Японська', 'Українська', 'Англійська', 'Корейська', 'Німецька', 'XX', 'Інша мова']);
       expect(mixed[2].$2, ['Еймі']);
-      // «І» стоїть за «Б» в абетці, хоч у Unicode — перед нею
+      // "І" stands after "Б" in the alphabet, though in Unicode it is before it
       final alpha = HikkaCharacterVoice.groupByLanguage([v('it', 'А'), v('br', 'Б'), v('fr', 'В')]);
       expect([for (final g in alpha) g.$1], ['Бразильська', 'Італійська', 'Французька']);
     });
@@ -214,7 +214,7 @@ void main() {
     });
   });
 
-  // ── Умови пошуку ───────────────────────────────────────────────────────────
+  // ── Search conditions ───────────────────────────────────────────────────────
 
   group('HikkaSearchFilters', () {
     test('за замовчуванням: сортування за оцінкою, лише безпечні рейтинги', () {
@@ -396,7 +396,7 @@ void main() {
         },
       );
       await expectLater(flaky.anime('sousou-no-frieren-ad4e3e'), throwsA(isA<HikkaException>()));
-      // Користувач натиснув «Повторити»: помилка не закешована, запит іде в мережу заново
+      // The user pressed "Повторити": the error is not cached, the request goes to the network again
       expect((await flaky.anime('sousou-no-frieren-ad4e3e')).slug, isNotEmpty);
     });
 
@@ -413,12 +413,12 @@ void main() {
       final timed = HikkaApi(sender: server.call, retryDelay: Duration.zero, now: () => clock);
       final fresh = await timed.anime('sousou-no-frieren-ad4e3e');
       server.offline = true;
-      // Кеш ще свіжий — мережа взагалі не потрібна
+      // The cache is still fresh: the network is not needed at all
       expect((await timed.anime('sousou-no-frieren-ad4e3e')).slug, fresh.slug);
-      // Кеш протух, мережі немає — показуємо те, що було
+      // The cache is stale, no network: we show what there was
       clock = clock.add(const Duration(hours: 5));
       expect((await timed.anime('sousou-no-frieren-ad4e3e')).slug, fresh.slug);
-      // А для того, чого не було, — зрозуміла помилка
+      // And for what there was not, a clear error
       await expectLater(
         timed.anime('another-one'),
         throwsA(isA<HikkaException>().having((e) => e.kind, 'kind', HikkaErrorKind.network).having((e) => e.message, 'message', contains('Немає зв’язку'))),
@@ -466,7 +466,7 @@ void main() {
     });
   });
 
-  // ── Пагінація ──────────────────────────────────────────────────────────────
+  // ── Pagination ──────────────────────────────────────────────────────────────
 
   group('HikkaPager', () {
     test('накопичує сторінки й зупиняється наприкінці', () async {
@@ -482,7 +482,7 @@ void main() {
       await pager.loadMore();
       expect(pager.items.length, 100);
       expect(pager.hasMore, isFalse);
-      await pager.loadMore(); // нічого не робить
+      await pager.loadMore(); // does nothing
       expect(server.count((r) => r.url.path == '/anime'), 3);
       pager.dispose();
     });
@@ -538,7 +538,7 @@ void main() {
     });
   });
 
-  // ── Навігація ──────────────────────────────────────────────────────────────
+  // ── Navigation ──────────────────────────────────────────────────────────────
 
   group('HikkaNav', () {
     late HikkaNav nav;
@@ -716,7 +716,7 @@ void main() {
     });
   });
 
-  // ── Налаштування ───────────────────────────────────────────────────────────
+  // ── Settings ───────────────────────────────────────────────────────────────
 
   group('HikkaPrefs', () {
     test('зміна сповіщає слухачів один раз; те саме значення — ні', () {
@@ -739,7 +739,7 @@ void main() {
     });
   });
 
-  // ── Зображення ─────────────────────────────────────────────────────────────
+  // ── Images ─────────────────────────────────────────────────────────────────
 
   group('Зображення', () {
     test('зменшена копія лише для cdn.hikka.io; кроки ширини', () {
@@ -769,7 +769,7 @@ void main() {
       expect(a, b);
       expect(fetched, 1);
       expect(store.downloads, 1);
-      // Інший екземпляр на тій самій теці бере файл із диска
+      // Another instance on the same folder takes the file from disk
       final again = HikkaImageStore(dir: dir, fetcher: (url) async => throw StateError('мережа не потрібна'));
       expect(await again.load('https://x/a.jpg'), a);
       expect(await store.diskSize(), a.length);

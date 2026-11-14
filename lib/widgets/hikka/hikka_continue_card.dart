@@ -12,16 +12,17 @@ import '../../services/watch_store.dart';
 import '../../utils/platform_info.dart';
 import 'hikka_cards.dart';
 import 'hikka_common.dart';
+import '../../utils/app_clock.dart';
 
-/// Горизонтальна картка «Продовжити перегляд»: мініатюра, назва, серія й коли дивились. Тап одразу відкриває плеєр
-/// на тій серії, де людина зупинилась; якщо озвучку не знайдено, відкривається сторінка тайтлу.
+/// A horizontal "Продовжити перегляд" card: a thumbnail, title, episode and when watched. A tap opens the player right away
+/// on the episode where the person stopped; if the dub is not found, the title page opens.
 class HikkaContinueCard extends StatefulWidget {
   final ContinueItem item;
   final double scale;
 
   const HikkaContinueCard({super.key, required this.item, required this.scale});
 
-  /// Розміри картки (ширина, висота) для полиці
+  /// Card sizes (width, height) for a shelf
   static double width(double scale) => AppPlatform.isMobile ? 286 : 320 * scale;
   static double height(double scale) => AppPlatform.isMobile ? 104 : 112 * scale;
 
@@ -68,7 +69,7 @@ class _HikkaContinueCardState extends State<HikkaContinueCard> {
     final title = a.title(HikkaPrefs.instance.titleLang);
     final sub = [
       if (it.episodeLabel != null) it.episodeLabel!,
-      HikkaText.dayName(it.at, DateTime.now()),
+      HikkaText.dayName(it.at, AppClock.now()),
     ].join(' · ');
     final tag = it.hasNew ? (it.dubName.isEmpty ? 'Нова серія' : 'Нова серія · ${it.dubName}') : (it.notInList ? 'Не в списку' : null);
     final r = uiTheme.borderRadius(14 * scale);

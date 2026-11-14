@@ -11,14 +11,14 @@ import 'watch_callout.dart';
 
 enum _RemoteTab { episodes, voices, player }
 
-/// Вміст бічної панелі / шторки для серій із сайтів: список серій із позначками «переглянуто»,
-/// вибір озвучки чи субтитрів, плеєра (Moon, Ashdi …) і якості. Усе перемикається на льоту, з того ж місця.
-/// Черга файлів тут не редагується (це не файли), тому кнопок «додати / видалити / впорядкувати» немає.
+/// Content of the side panel / sheet for site episodes: a list of episodes with "watched" marks,
+/// a choice of dub or subtitles, player (Moon, Ashdi …) and quality. Everything switches on the fly, from the same place.
+/// The file queue is not editable here (they are not files), so there are no "add / remove / reorder" buttons.
 class RemotePanelBody extends StatefulWidget {
   final double scale;
   final RemoteDriver driver;
 
-  /// Телефон: вищі рядки під дотик
+  /// Phone: taller rows for touch
   final bool sheet;
   final ValueChanged<int> onEpisodeSelected;
 
@@ -60,7 +60,7 @@ class _RemotePanelBodyState extends State<RemotePanelBody> {
     super.dispose();
   }
 
-  /// Поточна серія — на 30% висоти списку, як у черзі файлів
+  /// The current episode at 30% of the list height, as in the file queue
   void _scrollToCurrent({bool animate = false}) {
     _shownIndex = widget.driver.index;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -105,7 +105,7 @@ class _RemotePanelBodyState extends State<RemotePanelBody> {
     );
   }
 
-  /// Що зараз грає: «Озвучення: Amanogawa · Moon · 1080p»
+  /// What is playing now: "Озвучення: Amanogawa · Moon · 1080p"
   Widget _caption(double scale) {
     final d = widget.driver;
     final g = d.group;
@@ -140,7 +140,7 @@ class _RemotePanelBodyState extends State<RemotePanelBody> {
     }
   }
 
-  /// Тонкий скролбар у стилі решти панелей
+  /// A thin scrollbar in the style of the other panels
   Widget _scrollArea(double scale, Widget child) {
     return ScrollConfiguration(
       behavior: const AppScrollBehavior().copyWith(scrollbars: false),
@@ -150,7 +150,7 @@ class _RemotePanelBodyState extends State<RemotePanelBody> {
     );
   }
 
-  // ── Серії ───────────────────────────────────────────────────────────────────
+  // ── Episodes ───────────────────────────────────────────────────────────────
 
   static String _num(RemoteEntry e, int i) => episodeLabel(e.episode, i);
 
@@ -266,7 +266,7 @@ class _RemotePanelBodyState extends State<RemotePanelBody> {
     }
   }
 
-  // ── Озвучки й субтитри ──────────────────────────────────────────────────────
+  // ── Dubs and subtitles ──────────────────────────────────────────────────────
 
   Widget _voices(double scale) {
     final d = widget.driver;
@@ -274,13 +274,13 @@ class _RemotePanelBodyState extends State<RemotePanelBody> {
     if (groups.isEmpty) {
       return AppEmptyState(scale: scale, icon: Symbols.record_voice_over_rounded, text: 'Інших озвучок для цього аніме немає');
     }
-    // Поточний варіант з розбіжністю серій відносно Hikka: пояснення над списком (відмітки з ним не синхронізуватимуться)
+    // The current variant with an episode mismatch against Hikka: an explanation above the list (marks will not sync with it)
     EpisodeCheck? currentCheck;
     for (final g in groups) {
       if (g.id == d.groupId) currentCheck = d.checkOf(g);
     }
     final note = currentCheck != null && currentCheck.hasNote ? currentCheck : null;
-    final lead = note == null ? 1 : 2; // заголовок, за ним (за потреби) пояснення
+    final lead = note == null ? 1 : 2; // a heading, followed (if needed) by an explanation
     return _scrollArea(
       scale,
       ListView.builder(
@@ -317,7 +317,7 @@ class _RemotePanelBodyState extends State<RemotePanelBody> {
     );
   }
 
-  // ── Плеєр і якість ──────────────────────────────────────────────────────────
+  // ── Player and quality ──────────────────────────────────────────────────────
 
   Widget _player(double scale) {
     final d = widget.driver;

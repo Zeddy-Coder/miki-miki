@@ -10,15 +10,15 @@ import 'app_animation_kit.dart';
 import 'app_dock_widgets.dart';
 import 'app_ui_kit.dart';
 
-/// Елементи керування відтворенням для телефона (портрет і альбомна).
+/// Playback controls for a phone (portrait and landscape).
 ///
-/// Розкладка, звична для мобільних плеєрів:
-/// - угорі: «Назад», назва, PiP, поворот екрана, налаштування;
-/// - по центру: попередній / −N с / пауза / +N с / наступний;
-/// - унизу: повзунок із часом, а під ним швидкість, Anime4K, субтитри, звук, епізоди.
-/// Усі цілі дотику не менші за 48 dp. Розміри задано в dp (не залежать від `scale`).
+/// A layout familiar from mobile players:
+/// - at the top: "Back", the title, PiP, screen rotation, settings;
+/// - in the center: previous / −N s / pause / +N s / next;
+/// - at the bottom: a slider with the time, and under it speed, Anime4K, subtitles, sound, episodes.
+/// All touch targets are at least 48 dp. Sizes are in dp (independent of `scale`).
 class MobileControls extends StatelessWidget {
-  /// Панелі показано (інакше вони прозорі й не ловлять дотики)
+  /// The panels are shown (otherwise they are transparent and catch no touches)
   final bool visible;
   final Player player;
   final String title;
@@ -33,10 +33,10 @@ class MobileControls extends StatelessWidget {
   final String? drawerOwner;
   final bool isEpisodesOpen;
 
-  /// Крок перемотки, секунди (налаштування «Крок перемотки»)
+  /// Seek step, seconds (the "Крок перемотки" setting)
   final int seekStep;
 
-  /// Кнопки ±крок поруч із паузою (налаштування «Кнопки перемотки на екрані»)
+  /// The ±step buttons next to pause (the "Кнопки перемотки на екрані" setting)
   final bool seekButtons;
 
   final VoidCallback onBack;
@@ -52,14 +52,14 @@ class MobileControls extends StatelessWidget {
   final VoidCallback onAudio;
   final VoidCallback onEpisodes;
 
-  /// Палець узяв/відпустив повзунок прогресу
+  /// A finger grabbed / released the progress slider
   final ValueChanged<bool>? onSeekDrag;
 
-  /// «Попередній / наступний»: типово — файли черги; для серій із сайту задає контролер
+  /// "Previous / next": by default queue files; for site episodes the controller sets it
   final VoidCallback? onPrevious;
   final VoidCallback? onNext;
 
-  /// false — перемотка й пауза ховаються (серія ще не запустилась, замість них екран стану)
+  /// false: seek and pause are hidden (the episode has not started yet, a state screen replaces them)
   final bool showTransport;
 
   const MobileControls({
@@ -118,7 +118,7 @@ class MobileControls extends StatelessWidget {
             ignoring: !visible,
             child: Stack(
               children: [
-                // Затемнення під панелями — лише оздоблення, дотики пропускає до відео
+                // The darkening under the panels is decoration only, it passes touches to the video
                 Positioned(top: 0, left: 0, right: 0, child: IgnorePointer(child: _shade(pad.top + 110, true))),
                 Positioned(bottom: 0, left: 0, right: 0, child: IgnorePointer(child: _shade(pad.bottom + 170, false))),
                 Positioned(
@@ -169,7 +169,7 @@ class MobileControls extends StatelessWidget {
     );
   }
 
-  // ── Верхня панель ──────────────────────────────────────────────────────────
+  // ── Top bar ──────────────────────────────────────────────────────────
 
   Widget _topBar() {
     return Row(
@@ -223,10 +223,10 @@ class MobileControls extends StatelessWidget {
     );
   }
 
-  // ── Центр: перемотка й пауза ───────────────────────────────────────────────
+  // ── Center: seek and pause ───────────────────────────────────────────────
 
   Widget _transport(double width) {
-    // Вузький екран (≈360 dp): кнопки трохи менші, щоб ряд не впирався в краї
+    // Narrow screen (≈360 dp): the buttons are a bit smaller so the row does not touch the edges
     final bool narrow = width < 400;
     final double small = narrow ? 50 : _centerSmall;
     final double big = narrow ? 68 : _centerBig;
@@ -282,7 +282,7 @@ class MobileControls extends StatelessWidget {
     );
   }
 
-  /// Кнопка перемотки на крок: для 5 / 10 / 30 с є готові значки, для інших — стрілки з числом
+  /// A step-seek button: ready icons exist for 5 / 10 / 30 s, arrows with a number for the others
   Widget _seekButton(bool forward, double size) {
     final step = seekStep;
     final Duration d = Duration(seconds: step);
@@ -324,7 +324,7 @@ class MobileControls extends StatelessWidget {
     );
   }
 
-  // ── Нижня панель: повзунок і швидкі кнопки ─────────────────────────────────
+  // ── Bottom bar: slider and quick buttons ─────────────────────────────────
 
   Widget _bottomBar() {
     final clock = PlaybackClock.of(player);
@@ -425,7 +425,7 @@ class MobileControls extends StatelessWidget {
     );
   }
 
-  /// Кругла скляна кнопка із цілью дотику ≥ 48 dp
+  /// A round glass button with a touch target ≥ 48 dp
   Widget _round(
     IconData icon,
     VoidCallback? onTap, {

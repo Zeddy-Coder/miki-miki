@@ -11,7 +11,7 @@ import 'package:miki_miki/services/sources/source_http.dart';
 String fx(String name) => File('test/data/sources/$name').readAsStringSync();
 
 void main() {
-  // Без вбудованого ключа: тести не залежать від того, що лежить у застосунку
+  // Without a built-in key: tests do not depend on what is in the app
 
   group('Moon', () {
     test('розбір сторінки плеєра: посилання на відео з двох шарів кодування', () {
@@ -59,7 +59,7 @@ void main() {
       final vids = await VideoExtractors.forUrl('https://moonanime.net/iframe/ne17f39gtidf642')!.extract(http, 'https://moonanime.net/iframe/ne17f39gtidf642', referer: 'https://anitube.in.ua/');
       expect(vids.map((e) => e.title), ['Авто', '1080p', '720p', '480p']);
       expect(calls.length, greaterThanOrEqualTo(2));
-      // CDN Moon відповідає 403 без Accept-Language (ffmpeg його не шле): заголовки відео мають його містити
+      // Moon's CDN answers 403 without Accept-Language (ffmpeg does not send it): the video headers must include it
       expect(vids.every((v) => v.headers['Accept-Language']!.isNotEmpty && v.headers['Accept'] == '*/*'), isTrue);
     });
   });

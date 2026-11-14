@@ -16,7 +16,7 @@ class ControlsOverlay extends StatelessWidget {
   final String currentTitle;
   final Player player;
   final double currentSpeed;
-  /// Гучність і «mute» — окремим нотифікатором, щоб їх зміна не перебудовувала всю панель
+  /// Volume and "mute" via a separate notifier so their change does not rebuild the whole panel
   final ValueListenable<VolumeState> volume;
   final bool isFullscreen;
   final String? activeDrawer;
@@ -67,7 +67,7 @@ class ControlsOverlay extends StatelessWidget {
   final ValueChanged<String> onHwdecSelected;
   final VoidCallback onOpenStats;
 
-  /// «Попередній / наступний» у доці (див. [BottomDock.onPrevious])
+  /// "Previous / next" in the dock (see [BottomDock.onPrevious])
   final VoidCallback? onPrevious;
   final VoidCallback? onNext;
 
@@ -133,7 +133,7 @@ class ControlsOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Панель видно лише тоді, коли вона має слідкувати за відтворенням
+    // The panel is visible only when it should follow playback
     final bool visible = showControls && !isSpeeding && !isDraggingFile;
     return Positioned.fill(
       child: RepaintBoundary(

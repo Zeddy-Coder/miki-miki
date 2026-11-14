@@ -1,6 +1,6 @@
-/// Глобальна діагностика: помилки Flutter, життєвий цикл застосунку, зміни розміру вікна, повільні кадри,
-/// памʼять, стан пристрою (енергозбереження, нагрів, маршрут звуку) і навігація діалогами.
-/// Усе пишеться в [AppLog]; налагоджувальні рядки лише в детальному режимі.
+/// Global diagnostics: Flutter errors, app lifecycle, window resizes, slow frames,
+/// memory, device state (power saving, heat, audio route) and dialog navigation.
+/// Everything is written to [AppLog]; debug lines only in verbose mode.
 library;
 
 import 'dart:async';
@@ -12,6 +12,9 @@ import 'package:flutter/widgets.dart';
 
 import '../utils/platform_info.dart';
 import 'app_log.dart';
+import 'episode_alerts.dart';
+import 'push_notifications.dart';
+import 'settings_sync.dart';
 import 'storage_service.dart';
 import 'system_controls.dart';
 
@@ -20,8 +23,8 @@ class AppDiagnostics with WidgetsBindingObserver {
 
   static final AppDiagnostics instance = AppDiagnostics._();
 
-  /// Позначка збірки в журналі
-  static const String build = 'b74';
+  /// Build marker in the log
+  static const String build = 'b93';
 
   bool _installed = false;
   Timer? _sampleTimer;
@@ -30,7 +33,7 @@ class AppDiagnostics with WidgetsBindingObserver {
   String _lastDevice = '';
   int _samples = 0;
 
-  // Повільні кадри збираються у вікно 5 с, щоб не засмічувати журнал
+  // Slow frames are collected into a 5 s window so as not to clutter the log
   DateTime? _windowStart;
   int _frames = 0;
   int _slow = 0;
@@ -38,7 +41,7 @@ class AppDiagnostics with WidgetsBindingObserver {
   int _worstBuildUs = 0;
   int _worstRasterUs = 0;
 
-  /// Підключає перехоплення помилок і спостерігачі. Викликається один раз зі `main()`.
+  /// Hooks up error interception and observers. Called once from `main()`.
   void install() {
     if (_installed) return;
     _installed = true;
@@ -65,9 +68,9 @@ class AppDiagnostics with WidgetsBindingObserver {
     unawaited(logEnvironment());
   }
 
-  // ── Середовище ──────────────────────────────────────────────────────────────
+  // ── Environment ──────────────────────────────────────────────────────────────
 
-  /// Запис про пристрій і налаштування на початку сесії (потрапляє і в шапку звіту)
+  /// Record about the device and settings at session start (also goes into the report header)
   Future<void> logEnvironment() async {
     final env = <String>[];
     void add(String line) {
@@ -104,7 +107,7 @@ class AppDiagnostics with WidgetsBindingObserver {
   static String _yes(Object? v) => v == true ? 'так' : 'ні';
   static String _num(Object? v) => v is num ? v.toStringAsFixed(0) : '—';
 
-  /// Маршрут звуку: куди зараз іде вихід (динамік, навушники, Bluetooth…)
+  /// Audio route: where output currently goes (speaker, headphones, Bluetooth…)
   static String _route(Map<String, Object?> info) {
     final out = info['audioOut'];
     final devices = out is List ? out.join(', ') : '—';
@@ -116,7 +119,7 @@ class AppDiagnostics with WidgetsBindingObserver {
   static String _deviceState(Map<String, Object?> info) =>
       '${info['powerSave']}|${info['thermal']}|${_route(info)}|${info['lowMemory']}';
 
-  /// Опис маршруту звуку для запису про відкриття відео
+  /// Audio route description for the video-open record
   static Future<String> describeAudioRoute() async {
     final info = await SystemControls.deviceInfo();
     return info == null ? 'невідомо' : _route(info);
@@ -128,14 +131,19 @@ class AppDiagnostics with WidgetsBindingObserver {
     return '${s.width.round()}×${s.height.round()} @${view.devicePixelRatio.toStringAsFixed(2)} ${s.width > s.height ? 'альбомна' : 'портретна'}';
   }
 
-  // ── Спостерігач життєвого циклу ─────────────────────────────────────────────
+  // ── Lifecycle observer ─────────────────────────────────────────────
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     AppLog.i('життєвий цикл', state.name);
+    if (state == AppLifecycleState.resumed) {
+      unawaited(SettingsSync.instance.sync(auto: true));
+      unawaited(PushNotifications.instance.sync());
+      unawaited(EpisodeAlerts.instance.importInbox());
+    }
     if (state != AppLifecycleState.resumed) {
       unawaited(AppLog.instance.flushNow());
-      // Налаштування й токен входу не мають залежати від того, чи застосунок закрили «правильно»
+      // Settings and the sign-in token must not depend on whether the app was closed "properly"
       unawaited(StorageService.flush());
     }
   }
@@ -159,7 +167,7 @@ class AppDiagnostics with WidgetsBindingObserver {
     });
   }
 
-  // ── Повільні кадри ──────────────────────────────────────────────────────────
+  // ── Slow frames ──────────────────────────────────────────────────────────
 
   void _onTimings(List<ui.FrameTiming> timings) {
     if (!AppLog.on) return;
@@ -194,7 +202,7 @@ class AppDiagnostics with WidgetsBindingObserver {
     _worstRasterUs = 0;
   }
 
-  // ── Періодичний знімок ресурсів ─────────────────────────────────────────────
+  // ── Periodic resource snapshot ─────────────────────────────────────────────
 
   Future<void> _sample({bool force = false}) async {
     if (!AppLog.on && !force) return;
@@ -217,7 +225,7 @@ class AppDiagnostics with WidgetsBindingObserver {
     }
   }
 
-  /// Зупиняє таймери (для завершення роботи)
+  /// Stops the timers (for shutdown)
   void dispose() {
     _sampleTimer?.cancel();
     _metricsTimer?.cancel();
@@ -226,7 +234,7 @@ class AppDiagnostics with WidgetsBindingObserver {
   }
 }
 
-/// Записує відкриття й закриття екранів, діалогів і нижніх панелей
+/// Records opening and closing of screens, dialogs and bottom sheets
 class AppNavObserver extends NavigatorObserver {
   @override
   void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {

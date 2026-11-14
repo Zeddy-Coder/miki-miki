@@ -21,7 +21,7 @@ void main() {
         ),
       );
 
-  // Видима частина шапки: нижня межа відносно верху екрана
+  // Visible part of the header: the lower edge relative to the top of the screen
   double hdrBottom(WidgetTester t) => t.getBottomLeft(find.byKey(const ValueKey('hdr'))).dy;
 
   testWidgets('шапка лежить над вмістом: на верху вміст починається під нею', (t) async {
@@ -63,10 +63,10 @@ void main() {
     await t.pumpAndSettle();
     await t.drag(find.byType(ListView), const Offset(0, -50));
     await t.pump();
-    final off = t.getTopLeft(find.text('row 0')).dy - 128; // скільки вмісту пішло вгору
+    final off = t.getTopLeft(find.text('row 0')).dy - 128; // how much content went up
     expect(off, closeTo(-50, 2));
     expect(hdrBottom(t), closeTo(120 + off, 2), reason: 'шапка зсунулась на стільки ж, нижче неї вміст без щілини');
-    // Повільне повернення до початку: шапка завжди прикриває відступ над вмістом
+    // A slow return to the start: the header always covers the padding above the content
     await t.drag(find.byType(ListView), const Offset(0, -600));
     await t.pumpAndSettle();
     await t.fling(find.byType(ListView), const Offset(0, 4000), 4000);
@@ -97,7 +97,7 @@ void main() {
     for (var i = 0; i < 25; i++) {
       await t.drag(find.byType(ListView), const Offset(0, 30));
       await t.pump();
-      final gapEnd = 128 - c.offset; // де закінчується порожній відступ над першим рядком
+      final gapEnd = 128 - c.offset; // where the empty padding above the first row ends
       if (gapEnd > 0) expect(hdrBottom(t) + 8, greaterThanOrEqualTo(gapEnd - 0.5), reason: 'на offset ${c.offset}');
     }
     c.dispose();
@@ -190,7 +190,7 @@ void main() {
         ),
       ),
     ));
-    // Потяг униз на верху: оновлення спрацювало, вміст не розтягувався
+    // Pull down at the top: the refresh fired, the content did not stretch
     final g = await t.startGesture(t.getCenter(find.byType(ListView)));
     await g.moveBy(const Offset(0, 120));
     await t.pump();
@@ -226,7 +226,7 @@ void main() {
     for (var i = 0; i < 6; i++) {
       await t.pump(const Duration(milliseconds: 100));
     }
-    // Оновлення триває: тягнемо вміст угору — він не рухається
+    // The refresh is running: we drag the content up and it does not move
     await t.drag(find.byType(ListView), const Offset(0, -300));
     await t.pump(const Duration(milliseconds: 500));
     expect(c.offset, 0, reason: 'прокрутка заблокована, доки триває оновлення');
@@ -268,7 +268,7 @@ void main() {
       await g.moveBy(Offset(0, dy));
       await t.pump(const Duration(milliseconds: 50));
     }
-    await t.pump(const Duration(seconds: 1)); // палець тримається
+    await t.pump(const Duration(seconds: 1)); // the finger is held
     expect(find.byIcon(Symbols.arrow_downward_rounded), findsOneWidget, reason: 'стрілка лишилась');
     expect(c.offset, 0, reason: 'вміст під час потягу стоїть');
     await g.up();

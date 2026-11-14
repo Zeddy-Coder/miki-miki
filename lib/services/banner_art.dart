@@ -1,7 +1,7 @@
-/// Широкі зображення для банерів «Головної». Hikka віддає лише вертикальні постери, тому банер шукається
-/// за MAL-id тайтлу в AniList (`bannerImage`), а якщо там його немає — у TheMovieDB (потрібен безкоштовний
-/// ключ; без ключа цей крок пропускається). Результат (і «банера немає») кешується на диску: AniList
-/// просять не частіше за 90 запитів на хвилину, а банери змінюються рідко.
+/// Wide images for the banners on "Головна". Hikka serves only vertical posters, so a banner is looked up
+/// by the title's MAL id in AniList (`bannerImage`), and if it is not there, in TheMovieDB (needs a free
+/// key; without a key this step is skipped). The result (and "no banner") is cached on disk:
+/// AniList asks for no more than 90 requests per minute, and banners change rarely.
 library;
 
 import 'dart:async';
@@ -14,12 +14,12 @@ import 'app_log.dart';
 import 'backend_client.dart';
 import 'storage_service.dart';
 
-/// Знайдений банер тайтлу
+/// A title's banner found
 class BannerArtwork {
-  /// Адреса широкого зображення; `null` — банера не знайшлось
+  /// Address of the wide image; `null` means no banner was found
   final String? url;
 
-  /// Домінантний колір обкладинки (ARGB) — підкладка, поки зображення вантажиться
+  /// Dominant cover color (ARGB): a backdrop while the image loads
   final int? color;
 
   const BannerArtwork({this.url, this.color});
@@ -43,13 +43,13 @@ class BannerArtwork {
   }
 }
 
-/// Запит JSON-API: повертає розібране тіло або кидає виняток (мережа, не 2xx)
-/// Запит банерів у бекенду (MAL-id → адреса й колір); `null` — бекенд недоступний
+/// JSON API request: returns the parsed body or throws (network, non-2xx)
+/// Banner request to the backend (MAL id → address and color); `null` means the backend is unavailable
 typedef BackendBanners = Future<Map<int, (String?, int?)>?> Function(List<Map<String, Object?>> items);
 
 typedef JsonFetcher = Future<Object?> Function(String method, Uri url, {Object? body, Map<String, String>? headers});
 
-/// Справжній `JsonFetcher` на `dart:io`
+/// The real `JsonFetcher` on `dart:io`
 Future<Object?> ioJsonFetch(String method, Uri url, {Object? body, Map<String, String>? headers}) async {
   final client = HttpClient()
     ..connectionTimeout = const Duration(seconds: 8)
@@ -73,11 +73,11 @@ Future<Object?> ioJsonFetch(String method, Uri url, {Object? body, Map<String, S
   }
 }
 
-/// Банери з AniList (GraphQL, без ключа): один запит на всі тайтли за списком MAL-id
+/// Banners from AniList (GraphQL, no key): one request for all titles by a list of MAL ids
 class AniListBanners {
   static final Uri endpoint = Uri.parse('https://graphql.anilist.co');
 
-  /// Скільки id AniList дозволяє в одному запиті сторінки
+  /// How many ids AniList allows in one page request
   static const int maxPerRequest = 50;
 
   static const String query =
@@ -87,7 +87,7 @@ class AniListBanners {
 
   AniListBanners({JsonFetcher? fetch}) : _fetch = fetch ?? ioJsonFetch;
 
-  /// MAL-id → банер. Тайтли, яких AniList не знає, у відповіді відсутні; без банера — `BannerArtwork.none`.
+  /// MAL id → banner. Titles AniList does not know are absent from the response; without a banner: `BannerArtwork.none`.
   Future<Map<int, BannerArtwork>> load(List<int> malIds) async {
     final out = <int, BannerArtwork>{};
     final ids = malIds.toSet().where((i) => i > 0).toList();
@@ -99,7 +99,7 @@ class AniListBanners {
     return out;
   }
 
-  /// Розбір відповіді GraphQL
+  /// Parsing the GraphQL response
   static Map<int, BannerArtwork> parse(Object? json) {
     final out = <int, BannerArtwork>{};
     if (json is! Map) return out;
@@ -122,7 +122,7 @@ class AniListBanners {
   }
 }
 
-/// Запасний пошук банера в TheMovieDB: за японською чи ромаджі назвою й роком. Без ключа нічого не робить.
+/// Fallback banner search in TheMovieDB: by Japanese or romaji title and year. Does nothing without a key.
 class TmdbBackdrops {
   static const String api = 'https://api.themoviedb.org/3';
   static const String images = 'https://image.tmdb.org/t/p/w1280';
@@ -136,13 +136,13 @@ class TmdbBackdrops {
 
   bool get enabled => _key().trim().isNotEmpty;
 
-  /// Адреса широкого зображення тайтлу або `null`
+  /// Address of the title's wide image or `null`
   Future<String?> backdropFor(HikkaAnime a) async {
     final key = _key().trim();
     if (key.isEmpty) return null;
     final isMovie = a.mediaType == 'movie';
     final queries = searchQueries(a);
-    // Ключ v4 («read access token») починається з eyJ і передається заголовком, v3 — параметром
+    // A v4 key ("read access token") starts with eyJ and is sent as a header; v3 as a parameter
     final bearer = key.startsWith('eyJ');
     Future<Object?> search(String q, {required bool withYear}) {
       final url = Uri.parse('$api/search/${isMovie ? 'movie' : 'tv'}').replace(queryParameters: {
@@ -154,7 +154,7 @@ class TmdbBackdrops {
       return _fetch('GET', url, headers: bearer ? {'Authorization': 'Bearer $key'} : null);
     }
 
-    // Спершу з роком; далі без нього: наступний сезон давнього серіалу вийшов пізніше за перший, і TMDB знає лише серіал
+    // First with the year; then without it: the next season of an old series came out later than the first, and TMDB knows only the series
     for (final withYear in [true, false]) {
       if (!withYear && (isMovie || a.year == null)) break;
       for (final q in queries.take(4)) {
@@ -165,8 +165,8 @@ class TmdbBackdrops {
     return null;
   }
 
-  /// Назви для пошуку: оригінальні, а також без позначки сезону («2nd Season», «Part 2», «Final Season», «2期»):
-  /// банер потрібного сезону беремо від серіалу, тобто від попередніх сезонів
+  /// Search titles: originals, and also without the season marker ("2nd Season", "Part 2", "Final Season", "2期"):
+  /// the banner for the needed season is taken from the series, i.e. from the earlier seasons
   static List<String> searchQueries(HikkaAnime a) {
     final out = <String>[];
     void add(String? t) {
@@ -200,7 +200,7 @@ class TmdbBackdrops {
     return r == t.trim() || r.length < 2 ? null : r;
   }
 
-  /// Перший результат із банером (результати вже впорядковані за релевантністю)
+  /// First result with a banner (results are already sorted by relevance)
   static String? pickBackdrop(Object? json) {
     final results = json is Map ? json['results'] : null;
     if (results is! List) return null;
@@ -212,15 +212,15 @@ class TmdbBackdrops {
   }
 }
 
-/// Джерело банерів із дисковим кешем
+/// Banner source with a disk cache
 class BannerArt {
-  /// Спільний екземпляр (у тестах підміняється)
+  /// Shared instance (replaced in tests)
   static BannerArt instance = BannerArt(backend: (items) => BackendClient.instance.banners(items));
 
-  /// Знайдений банер вважається актуальним так довго
+  /// A found banner is considered fresh for this long
   static const Duration foundTtl = Duration(days: 14);
 
-  /// «Банера немає» перевіряється частіше: його могли додати згодом
+  /// "No banner" is rechecked more often: one could be added later
   static const Duration missingTtl = Duration(days: 2);
 
   static const String section = 'banner_art2';
@@ -247,7 +247,7 @@ class BannerArt {
     if (e is! Map) return null;
     final art = BannerArtwork.fromJson(e.cast<String, dynamic>());
     final t = DateTime.fromMillisecondsSinceEpoch((e['t'] as num?)?.toInt() ?? 0);
-    // Запис, зроблений без TMDB (ключа ще не було), перевіряється знову, щойно ключ з'явився
+    // An entry made without TMDB (the key did not exist yet) is rechecked as soon as the key appears
     if (!allowStale && _tmdb.enabled && e['tm'] != true) return null;
     final ttl = art.hasImage ? foundTtl : missingTtl;
     return allowStale || _now().difference(t) < ttl ? art : null;
@@ -265,8 +265,8 @@ class BannerArt {
     }
   }
 
-  /// Банери для тайтлів: MAL-id → результат. Тайтли без MAL-id пропускаються. Збій мережі не кидає виняток:
-  /// повертається те, що вдалося дізнатись (і застарілі записи кешу).
+  /// Banners for titles: MAL id → result. Titles without a MAL id are skipped. A network failure does not throw:
+  /// it returns what could be learned (and stale cache entries).
   Future<Map<int, BannerArtwork>> load(List<HikkaAnime> anime) async {
     final out = <int, BannerArtwork>{};
     final missing = <HikkaAnime>[];
@@ -281,7 +281,7 @@ class BannerArt {
     }
     if (missing.isEmpty) return out;
 
-    // Спершу бекенд: він кешує адреси для всіх користувачів і сам питає TMDB та AniList
+    // Backend first: it caches addresses for all users and asks TMDB and AniList itself
     final backend = _backend;
     if (backend != null) {
       Map<int, (String?, int?)>? got;
@@ -302,7 +302,7 @@ class BannerArt {
         var served = 0;
         for (final a in missing.toList()) {
           final e = got[a.malId];
-          if (e == null && !got.containsKey(a.malId)) continue; // бекенд про цей тайтл промовчав — шукаємо самі
+          if (e == null && !got.containsKey(a.malId)) continue; // the backend said nothing about this title, so we search ourselves
           final art = e?.$1 == null ? BannerArtwork.none : BannerArtwork(url: e!.$1, color: e.$2);
           out[a.malId] = art;
           _store(a.malId, art, viaTmdb: true);
@@ -320,7 +320,7 @@ class BannerArt {
       }
     }
 
-    // AniList — одним запитом на всіх: колір теми й банер для запасного варіанта
+    // AniList in one request for all: theme color and a banner for the fallback
     final fresh = <int, BannerArtwork>{};
     var anilistOk = true;
     try {
@@ -335,8 +335,8 @@ class BannerArt {
     var tmdbFailed = false;
     for (final a in missing) {
       var art = fresh[a.malId] ?? BannerArtwork.none;
-      var tmdbOk = !tmdbOn; // без ключа TMDB «не питали», результат AniList остаточний
-      // Основне джерело — TheMovieDB; AniList лише коли TMDB нічого не дав або видав помилку
+      var tmdbOk = !tmdbOn; // without a TMDB key we "did not ask", so the AniList result is final
+      // The main source is TheMovieDB; AniList only when TMDB gave nothing or returned an error
       if (tmdbOn) {
         try {
           final url = await _tmdb.backdropFor(a);
@@ -358,8 +358,8 @@ class BannerArt {
         continue;
       }
       out[a.malId] = art;
-      // Збій TMDB не кешуємо як «банера немає» (наступного разу спробуємо знову)
-      // Без ключа «банера немає» теж не запам'ятовуємо: ключ з бекенду може прийти трохи згодом
+      // A TMDB failure is not cached as "no banner" (we retry next time)
+      // Without a key, "no banner" is not remembered either: the key from the backend may arrive a bit later
       if (tmdbOk && (anilistOk || art.hasImage) && (tmdbOn || art.hasImage)) _store(a.malId, art, viaTmdb: tmdbOn && tmdbOk);
     }
     final withImage = out.values.where((x) => x.hasImage).length;

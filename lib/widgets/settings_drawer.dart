@@ -18,8 +18,8 @@ class SettingsDrawer extends StatelessWidget {
   final double drawerAnchorPixelX;
   final bool drawerIsTop;
 
-  /// Телефон: лише шапка й список без власної поверхні та прив'язки до кнопки —
-  /// фон, положення й затемнення дає [MobileSheetFrame]
+  /// Phone: only the header and the list, without a surface of their own or a button anchor:
+  /// the background, position and scrim come from [MobileSheetFrame]
   final bool sheet;
   final String activeDrawer;
   final String? activeDrawerPrev;
@@ -36,7 +36,7 @@ class SettingsDrawer extends StatelessWidget {
   final ValueChanged<double> onSpeedSelected;
   final ValueChanged<SubtitleTrack> onSubtitleSelected;
 
-  /// «Додати файл субтитрів…» у меню субтитрів (без нього пункту нема)
+  /// "Додати файл субтитрів…" in the subtitle menu (without it there is no item)
   final VoidCallback? onAddSubtitleFile;
   final ValueChanged<AudioTrack> onAudioSelected;
   final ValueChanged<String> onHwdecSelected;
@@ -44,7 +44,7 @@ class SettingsDrawer extends StatelessWidget {
   final VoidCallback onOpenStats;
   final Anime4kController anime4k;
 
-  /// Ключ твору для збереження затримки звуку (порожній — не зберігати)
+  /// Work key for saving the audio delay (empty means do not save)
   final String audioDelayKey;
 
   const SettingsDrawer({
@@ -238,7 +238,7 @@ class SettingsDrawer extends StatelessWidget {
     )]);
   }
 
-  /// Телефон: шапка (назад / назва / закрити, кнопки ≥ 48 dp) і список, що прокручується пальцем
+  /// Phone: a header (back / title / close, buttons ≥ 48 dp) and a list scrolled by finger
   Widget _buildSheet(BuildContext context, bool isSubDisabled, SubtitleTrack currentSub, AudioTrack currentAud) {
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -284,7 +284,7 @@ class SettingsDrawer extends StatelessWidget {
     );
   }
 
-  /// Кругла кнопка 48×48 dp з видимою реакцією на дотик
+  /// A round 48×48 dp button with a visible touch reaction
   Widget _sheetButton(IconData icon, VoidCallback onTap, String label) {
     return Semantics(
       button: true,
@@ -496,8 +496,8 @@ class SettingsDrawer extends StatelessWidget {
     ];
   }
 
-  /// Сторінка Anime4K: якість, вимкнення та шість режимів із підказками клавіш.
-  /// Меню не закривається після вибору — режими зручно порівнювати «наживо».
+  /// The Anime4K page: quality, off, and six modes with key hints.
+  /// The menu does not close after a choice: modes are convenient to compare "live".
   List<Widget> _buildAnime4kPage(double scale) {
     final a = anime4k;
     return [
@@ -518,7 +518,7 @@ class SettingsDrawer extends StatelessWidget {
                     onSelected: a.setQuality,
                   ),
                 ),
-                // Підказки клавіш (Ctrl + цифра) мають сенс лише з клавіатурою
+                // Key hints (Ctrl + digit) make sense only with a keyboard
                 if (!AppPlatform.isMobile) ...[
                   SizedBox(width: 10 * scale),
                   AppKeyCombo(scale: scale, keys: const ['Ctrl', '9']),
@@ -675,8 +675,8 @@ class SettingsDrawer extends StatelessWidget {
 }
 
 
-/// Затримка звуку (`audio-delay` в mpv): крок 50 мс, від −10 до +10 с; кнопка скидання повертає нуль.
-/// Зберігається для твору (див. `audioDelayKey`) і застосовується до його наступних серій.
+/// Audio delay (`audio-delay` in mpv): a 50 ms step, from −10 to +10 s; the reset button returns zero.
+/// It is stored for a work (see `audioDelayKey`) and applied to its next episodes.
 class _AudioDelayRow extends StatefulWidget {
   final double scale;
   final Player player;
@@ -759,7 +759,7 @@ class _AudioDelayRowState extends State<_AudioDelayRow> {
 }
 
 
-/// Меню «Аудіодоріжка»: вкладки «Доріжка» і «Затримка», як «Серії / Озвучка / Плеєр» у списку серій
+/// The "Аудіодоріжка" menu: tabs "Доріжка" and "Затримка", like "Серії / Озвучка / Плеєр" in the episode list
 class _AudioPane extends StatefulWidget {
   final double scale;
   final Player player;

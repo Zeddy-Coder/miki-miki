@@ -1,6 +1,6 @@
 import 'package:flutter/services.dart';
 
-/// Схема гарячих клавіш. Відрізняються лише клавіші, які в mpv і в цьому плеєрі означають різне.
+/// Hotkey scheme. Only keys that mean different things in mpv and in this player differ.
 enum KeyScheme {
   standard(
     'Стандартна',
@@ -20,7 +20,7 @@ enum KeyScheme {
       KeyScheme.values.firstWhere((s) => s.name == raw, orElse: () => KeyScheme.standard);
 }
 
-/// У якій схемі діє комбінація
+/// In which scheme the combination applies
 enum KeyScope {
   both,
   standardOnly,
@@ -46,8 +46,8 @@ enum ShortcutGroup {
   final String title;
 }
 
-/// Комбінація: фізична клавіша + модифікатори. Фізичні клавіші дають однакову поведінку
-/// незалежно від розкладки (українська / англійська).
+/// Combination: a physical key + modifiers. Physical keys give the same behavior
+/// regardless of layout (Ukrainian / English).
 class KeyChord {
   const KeyChord(
     this.key,
@@ -61,14 +61,14 @@ class KeyChord {
 
   final PhysicalKeyboardKey key;
 
-  /// Підписи для «кнопок клавіатури» в довідці: ['Ctrl', '1'], ['>'] …
+  /// Labels for "keyboard keys" in the help: ['Ctrl', '1'], ['>'] …
   final List<String> caps;
   final bool ctrl;
   final bool shift;
   final bool alt;
   final KeyScope scope;
 
-  /// Не показувати в довідці (медіаклавіші, дублікати)
+  /// Do not show in the help (media keys, duplicates)
   final bool hidden;
 
   (int, bool, bool, bool) get lookupKey => (key.usbHidUsage, ctrl, shift, alt);
@@ -88,7 +88,7 @@ class ShortcutDef {
   final String label;
   final List<KeyChord> chords;
 
-  /// Дію можна повторювати утриманням клавіші
+  /// The action can be repeated by holding the key
   final bool repeat;
 
   Iterable<KeyChord> chordsFor(KeyScheme scheme) => chords.where((c) => c.scope.appliesTo(scheme));
@@ -100,10 +100,10 @@ class ShortcutCatalog {
   static const _std = KeyScope.standardOnly;
   static const _mpv = KeyScope.mpvOnly;
 
-  /// Єдине джерело правди: за цим списком працює обробник клавіш і сторінка довідки.
-  /// Комбінації взято зі стандартного input.conf mpv; Anime4K — з офіційного конфігу Anime4K.
+  /// Single source of truth: the key handler and the help page both work from this list.
+  /// Combinations are taken from mpv's standard input.conf; Anime4K from the official Anime4K config.
   static const List<ShortcutDef> all = [
-    // ── Відтворення ──────────────────────────────────────────────
+    // ── Playback ──────────────────────────────────────────────
     ShortcutDef('play_pause', ShortcutGroup.playback, 'Пауза / відтворення', [
       KeyChord(PhysicalKeyboardKey.space, ['Space']),
       KeyChord(PhysicalKeyboardKey.keyK, ['K']),
@@ -154,7 +154,7 @@ class ShortcutCatalog {
       KeyChord(PhysicalKeyboardKey.keyW, ['Ctrl', 'W'], ctrl: true),
     ]),
 
-    // ── Перемотка ────────────────────────────────────────────────
+    // ── Seek ────────────────────────────────────────────────
     ShortcutDef('seek_back_5', ShortcutGroup.seek, 'Назад на 5 секунд', [
       KeyChord(PhysicalKeyboardKey.arrowLeft, ['←']),
       KeyChord(PhysicalKeyboardKey.arrowDown, ['Shift', '↓'], shift: true),
@@ -209,7 +209,7 @@ class ShortcutCatalog {
       KeyChord(PhysicalKeyboardKey.arrowRight, ['Ctrl', 'Shift', '→'], ctrl: true, shift: true),
     ]),
 
-    // ── Швидкість ────────────────────────────────────────────────
+    // ── Speed ────────────────────────────────────────────────
     ShortcutDef('speed_down', ShortcutGroup.speed, 'Повільніше (÷ 1,1)', [
       KeyChord(PhysicalKeyboardKey.bracketLeft, ['[']),
     ], repeat: true),
@@ -226,7 +226,7 @@ class ShortcutCatalog {
       KeyChord(PhysicalKeyboardKey.backspace, ['Backspace']),
     ]),
 
-    // ── Звук ─────────────────────────────────────────────────────
+    // ── Sound ─────────────────────────────────────────────────────
     ShortcutDef('volume_up_5', ShortcutGroup.audio, 'Гучніше на 5%', [
       KeyChord(PhysicalKeyboardKey.arrowUp, ['↑'], scope: _std),
     ], repeat: true),
@@ -259,7 +259,7 @@ class ShortcutCatalog {
       KeyChord(PhysicalKeyboardKey.digit3, ['#'], shift: true),
     ]),
 
-    // ── Субтитри ─────────────────────────────────────────────────
+    // ── Subtitles ─────────────────────────────────────────────────
     ShortcutDef('sub_toggle', ShortcutGroup.subtitles, 'Показати / сховати субтитри', [
       KeyChord(PhysicalKeyboardKey.keyV, ['V']),
     ]),
@@ -290,7 +290,7 @@ class ShortcutCatalog {
       KeyChord(PhysicalKeyboardKey.keyG, ['Shift', 'G'], shift: true),
     ], repeat: true),
 
-    // ── Зображення ───────────────────────────────────────────────
+    // ── Picture ───────────────────────────────────────────────
     ShortcutDef('contrast_down', ShortcutGroup.picture, 'Контраст −', [
       KeyChord(PhysicalKeyboardKey.digit1, ['1']),
     ], repeat: true),
@@ -385,7 +385,7 @@ class ShortcutCatalog {
       KeyChord(PhysicalKeyboardKey.digit9, ['Ctrl', '9'], ctrl: true),
     ]),
 
-    // ── Вікно та сервіс ──────────────────────────────────────────
+    // ── Window and service ──────────────────────────────────────────
     ShortcutDef('fullscreen', ShortcutGroup.window, 'Повноекранний режим', [
       KeyChord(PhysicalKeyboardKey.keyF, ['F']),
       KeyChord(PhysicalKeyboardKey.enter, ['Alt', 'Enter'], alt: true, hidden: true),
@@ -432,13 +432,13 @@ class ShortcutCatalog {
       },
   };
 
-  /// Яка дія прив'язана до комбінації у схемі [scheme]
+  /// Which action is bound to the combination in scheme [scheme]
   static ShortcutDef? find(KeyScheme scheme, PhysicalKeyboardKey key,
       {required bool ctrl, required bool shift, required bool alt}) {
     return _lookup[scheme]![(key.usbHidUsage, ctrl, shift, alt)];
   }
 
-  /// Комбінації, які діють у схемі, згруповані для довідки
+  /// Combinations that apply in the scheme, grouped for the help
   static Map<ShortcutGroup, List<ShortcutDef>> grouped(KeyScheme scheme) {
     final out = <ShortcutGroup, List<ShortcutDef>>{};
     for (final def in all) {

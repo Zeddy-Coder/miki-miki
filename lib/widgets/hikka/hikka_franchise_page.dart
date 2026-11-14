@@ -14,7 +14,7 @@ import 'hikka_cards.dart';
 import 'hikka_common.dart';
 import 'hikka_page_kit.dart';
 
-/// Франшиза: усі тайтли за роками виходу або за групами (основна історія, побічні історії, рекапи…).
+/// Franchise: all titles by release year or by group (main story, side stories, recaps…).
 class HikkaFranchisePage extends StatefulWidget {
   final HikkaRoute route;
   final double scale;
@@ -89,7 +89,7 @@ class _HikkaFranchisePageState extends State<HikkaFranchisePage> {
 
   bool _visible(FranchiseNode n) => HikkaPrefs.instance.allowAdult || !n.anime.isAdult;
 
-  // ── Вміст ──────────────────────────────────────────────────────────────────
+  // ── Content ──────────────────────────────────────────────────────────────────
 
   Widget _narrow(double pad, Widget child) => Padding(
         padding: EdgeInsets.fromLTRB(pad, 0, pad, 0),

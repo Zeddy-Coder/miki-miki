@@ -10,7 +10,7 @@ import 'hikka_common.dart';
 import 'hikka_community_cards.dart';
 import 'hikka_paged_list.dart';
 
-/// Розділ «Колекції»: добірки аніме від користувачів Hikka; за замовчуванням — найпопулярніші, можна — найновіші.
+/// The "Колекції" section: anime collections from Hikka users; the most popular by default, newest optionally.
 class HikkaCollectionsPage extends StatefulWidget {
   final double scale;
   final double bottomInset;

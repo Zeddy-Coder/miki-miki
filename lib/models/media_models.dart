@@ -12,8 +12,8 @@ class VideoChapter {
   });
 }
 
-/// Гучність для повзунка: значення (0..100) + «без звуку». Має рівність, тож однакові
-/// значення не викликають перебудов.
+/// Volume for the slider: value (0..100) + "muted". Has equality, so identical
+/// values do not cause rebuilds.
 class VolumeState {
   final double volume;
   final bool muted;
@@ -71,4 +71,4 @@ class PlaybackStats {
     this.videoCodec = "HEVC",
     this.audioCodec = "AAC",
   });
-}
+}

@@ -1,5 +1,5 @@
-/// Дістає відтворюване відео для серії: перебирає плеєри (Moon → Ashdi …), перший робочий виграє,
-/// якість добирається за налаштуванням. Нічого не знає про Flutter і media_kit.
+/// Gets a playable video for an episode: goes through the players (Moon → Ashdi …), the first working one wins,
+/// quality is picked by the setting. Knows nothing about Flutter and media_kit.
 library;
 
 import '../models/source_models.dart';
@@ -7,17 +7,17 @@ import 'sources/anime_source.dart';
 import 'sources/source_http.dart';
 import 'sources/source_log.dart';
 
-/// Відео, готове до відкриття в плеєрі, + усе, що потрібно для перемикання якості й плеєра
+/// A video ready to open in the player, plus everything needed to switch quality and player
 class ResolvedStream {
   final Video video;
 
-  /// Усі варіанти якості з обраного плеєра («Авто», 1080p …)
+  /// All quality variants from the chosen player ("Авто", 1080p …)
   final List<Video> qualities;
 
-  /// Обраний плеєр
+  /// The chosen player
   final String hoster;
 
-  /// Усі плеєри серії (для ручного перемикання)
+  /// All players of the episode (for manual switching)
   final List<String> hosters;
 
   const ResolvedStream({required this.video, required this.qualities, required this.hoster, required this.hosters});
@@ -26,13 +26,13 @@ class ResolvedStream {
 }
 
 class StreamResolver {
-  /// Найбільша висота кадру, яку вибираємо автоматично (0 — найвища)
+  /// The largest frame height we pick automatically (0 is the highest)
   final int Function() maxHeight;
 
-  /// Бажаний плеєр (порожньо — за порядком джерела)
+  /// Preferred player (empty means by the source's order)
   final String Function() preferredHoster;
 
-  /// Умова домовленості з Moon: де в серії є Moon, Ashdi не пропонуємо й не підставляємо замість нього
+  /// Agreement with Moon: where an episode has Moon, we do not offer or substitute Ashdi for it
   static List<Hoster> withoutAshdiWhereMoon(List<Hoster> all) {
     bool named(Hoster h, String n) => h.name.toLowerCase() == n;
     if (!all.any((h) => named(h, 'moon'))) return all;
@@ -44,7 +44,7 @@ class StreamResolver {
   static int _zero() => 0;
   static String _empty() => '';
 
-  /// [hoster] — примусово обраний плеєр (ручне перемикання), [height] — примусова якість
+  /// [hoster] is a forcibly chosen player (manual switching), [height] is a forced quality
   Future<ResolvedStream> resolve(AnimeSource source, SEpisode episode, {String? hoster, int? height}) async {
     final all = withoutAshdiWhereMoon(await source.hosters(episode));
     if (all.isEmpty) {
@@ -78,7 +78,7 @@ class StreamResolver {
         problems.add('${h.name}: $e');
       }
     }
-    // Якщо плеєр був один — віддаємо його власну помилку (вона точніша), інакше зведену
+    // If there was only one player, we return its own error (it is more precise), otherwise the combined one
     if (ordered.length == 1 && first != null) throw first;
     throw SourceException(first?.kind ?? SourceErrorKind.badResponse, 'Не вдалося відкрити жоден плеєр: ${problems.join('; ')}');
   }

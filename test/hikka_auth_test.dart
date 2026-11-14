@@ -10,7 +10,7 @@ import 'package:miki_miki/services/hikka_client_key.dart';
 
 import 'support/hikka_account_fakes.dart';
 
-/// Сирий HTTP-запит до локального сервера входу (без HttpClient: у тестах він підмінений)
+/// A raw HTTP request to the local sign-in server (without HttpClient: it is replaced in tests)
 Future<String> rawGet(int port, String path, {String? host}) async {
   final s = await Socket.connect(InternetAddress.loopbackIPv4, port);
   s.write('GET $path HTTP/1.1\r\nHost: ${host ?? '127.0.0.1:$port'}\r\nConnection: close\r\n\r\n');
@@ -316,7 +316,7 @@ void main() {
   });
 
   test('обмін коду не висить вічно: за таймаутом помилка й можна повторити', () async {
-    backend.onExchange = (ref) => Completer<(int, Map<String, dynamic>)>().future; // служба мовчить
+    backend.onExchange = (ref) => Completer<(int, Map<String, dynamic>)>().future; // the service is silent
     final auth = makeAuth(exchangeTimeout: const Duration(milliseconds: 150));
     final login = auth.startLogin();
     await until(() => auth.loopbackReady);

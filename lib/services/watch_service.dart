@@ -1,5 +1,5 @@
-/// «Дивитись»: для аніме з Hikka збирає, що знайдено в джерелах (спершу Mikai за slug Hikka, решту — пошуком
-/// за назвами із запамʼятовуванням зіставлення), і групує серії за озвучками / субтитрами.
+/// "Дивитись": for a Hikka anime gathers what was found in the sources (first Mikai by Hikka slug, the rest by search
+/// by titles, remembering the match) and groups episodes by dub / subtitles.
 library;
 
 import 'package:flutter/foundation.dart';
@@ -16,20 +16,20 @@ import 'watch_models.dart';
 import 'storage_service.dart';
 import 'watch_store.dart';
 
-/// Що запропонувати, коли в обраній вручну озвучці немає наступної серії
+/// What to offer when the manually chosen dub has no next episode
 class MissingNext {
   final WatchGroup pinned;
 
-  /// Перша за пріоритетом озвучка, де наступна серія є
+  /// The first dub by priority that has the next episode
   final WatchGroup byPriority;
 
-  /// Повна озвучка з наступною серією, якщо вона інша, ніж [byPriority]
+  /// A full dub with the next episode, if it differs from [byPriority]
   final WatchGroup? full;
 
   const MissingNext({required this.pinned, required this.byPriority, this.full});
 }
 
-/// Хід завантаження для однієї сторінки аніме: пропозиції надходять у міру відповіді джерел
+/// Load progress for one anime page: offers arrive as the sources respond
 class WatchLoad extends ChangeNotifier {
   final String animeKey;
   final HikkaEpisodeInfo hikka;
@@ -42,7 +42,7 @@ class WatchLoad extends ChangeNotifier {
   MikaiLicense? _license;
   bool _disposed = false;
 
-  /// Куди записувати, скільки серій у обраній озвучці (для «Нової серії» в «Продовжити перегляд»)
+  /// Where to record how many episodes the chosen dub has (for "Нова серія" in "Продовжити перегляд")
   final WatchStore? store;
 
   WatchLoad({required this.animeKey, required this.hikka, required this.order, this.store});
@@ -56,7 +56,7 @@ class WatchLoad extends ChangeNotifier {
         episodeLimit: (hikka.total ?? 0) > 0 ? hikka.total : null,
       );
 
-  /// Джерела, які ще шукають
+  /// Sources still searching
   Set<String> get pending => Set.unmodifiable(_pending);
 
   bool get busy => _pending.isNotEmpty;
@@ -66,13 +66,13 @@ class WatchLoad extends ChangeNotifier {
 
   EpisodeCheck checkOf(WatchGroup g) => checkGroup(g, hikka);
 
-  /// Варіант за кнопкою «Дивитись»; `null`, поки нічого не знайдено.
+  /// The variant for the "Дивитись" button; `null` until anything is found.
   ///
-  /// 1. Вручну обрана для тайтлу озвучка ([WatchStore.pinnedGroup]) — якщо в ній є наступна серія.
-  /// 2. Інакше автоматично ([_auto]): серед озвучок із наступною серією (за номером, а не за кількістю) — перша за
-  ///    пріоритетом команд, тож «Amanogawa 1–9» змінюється на «Далі Буде 10–19», щойно потрібна серія є лише там.
-  ///    З перемикачем [StorageService.getPreferFullDub] — спершу повні озвучки.
-  /// [seen] — скільки серій уже переглянуто (за історією чи Hikka).
+  /// 1. The dub chosen manually for the title ([WatchStore.pinnedGroup]), if it has the next episode.
+  /// 2. Otherwise automatically ([_auto]): among dubs with the next episode (by number, not by count), the first by
+  ///    team priority, so "Amanogawa 1–9" gives way to "Далі Буде 10–19" as soon as the needed episode exists only there.
+  ///    With the [StorageService.getPreferFullDub] switch, full dubs first.
+  /// [seen] is how many episodes are already watched (by history or Hikka).
   WatchGroup? defaultGroup(WatchStore store, {int seen = 0}) {
     final groups = title.groups;
     if (groups.isEmpty) return null;
@@ -86,7 +86,7 @@ class WatchLoad extends ChangeNotifier {
     return _auto(store, seen);
   }
 
-  /// Озвучки, з яких вибираємо: де є наступна серія, інакше де є хоч щось далі, інакше всі
+  /// Dubs to choose from: those with the next episode, otherwise those with anything further, otherwise all
   List<WatchGroup> _tier(List<WatchGroup> groups, int seen) {
     final withNext = [for (final g in groups) if (g.hasEpisode(seen + 1)) g];
     if (withNext.isNotEmpty) return withNext;
@@ -110,8 +110,8 @@ class WatchLoad extends ChangeNotifier {
     );
   }
 
-  /// Вручну обрана озвучка не має наступної серії, а в інших вона є: що запропонувати замість неї.
-  /// `null` — застерігати нема про що
+  /// The manually chosen dub has no next episode while others do: what to offer instead.
+  /// `null`: nothing to warn about
   MissingNext? missingNext(WatchStore store, {int seen = 0}) {
     final pin = store.pinnedGroup(animeKey);
     if (pin == null) return null;
@@ -130,7 +130,7 @@ class WatchLoad extends ChangeNotifier {
     super.dispose();
   }
 
-  /// Озвучка, яку людина обрала під час перегляду (інакше — обрана на сторінці): скільки в ній серій зараз
+  /// The dub the person chose while watching (otherwise the one chosen on the page): how many episodes it has now
   void _recordAvailability() {
     final s = store;
     if (s == null) return;
@@ -188,7 +188,7 @@ class WatchService {
         finished: a.status == 'finished',
       );
 
-  /// Усі назви Hikka (укр., англ., яп., синоніми) без повторів
+  /// All Hikka titles (Ukr., Eng., Jap., synonyms) without repeats
   static List<String> titlesOf(HikkaAnime a) {
     final out = <String>[];
     final seen = <String>{};
@@ -199,7 +199,7 @@ class WatchService {
     return out;
   }
 
-  /// Запити для пошуку на сайтах: укр. назва, англійська, японська (до трьох різних)
+  /// Queries for searching sites: Ukr. title, English, Japanese (up to three different ones)
   static List<String> queriesOf(HikkaAnime a) {
     final out = <String>[];
     for (final t in [a.titleUa, a.titleEn, a.titleJa]) {
@@ -209,7 +209,7 @@ class WatchService {
     return out;
   }
 
-  /// Починає пошук у ввімкнених джерелах. Повертає одразу; підсумок поповнюється, а `WatchLoad` сповіщає.
+  /// Starts the search in enabled sources. Returns at once; the summary fills up and `WatchLoad` notifies.
   WatchLoad start(HikkaAnime a, {bool searchOthers = true}) {
     final sources = registry.enabled;
     final load = WatchLoad(animeKey: keyOf(a), hikka: infoOf(a), order: registry.all, store: store);
@@ -257,7 +257,7 @@ class WatchService {
         updatedAt: rel.updatedAt,
       ));
     }
-    // порядок: пріоритет команд, озвучення першими, де серій більше, за алфавітом
+    // order: team priority, dubs first, more episodes first, alphabetically
     final sorted = sortGroups(groups, priority: StorageService.getWatchTeamPriority(), fullFirst: StorageService.getPreferFullDub(), limit: (load.hikka.total ?? 0) > 0 ? load.hikka.total : null);
     load._done(
       m.id,
@@ -267,7 +267,7 @@ class WatchService {
     );
   }
 
-  /// Шукає тайтл на сайті за назвами Hikka (або бере запамʼятоване зіставлення) і збирає його серії
+  /// Looks for the title on the site by Hikka titles (or takes a remembered match) and gathers its episodes
   Future<WatchOffer?> searchOffer(AnimeSource s, HikkaAnime a) async {
     var linked = store.link(a.slug, s.id);
     if (linked != null) {
@@ -275,7 +275,7 @@ class WatchService {
         return await offerFor(s, linked);
       } on SourceException catch (e) {
         if (e.kind != SourceErrorKind.notFound) rethrow;
-        store.setLink(a.slug, s.id, null); // сторінка зникла чи змінила адресу — шукаємо наново
+        store.setLink(a.slug, s.id, null); // the page disappeared or changed address: search anew
         linked = null;
       }
     }
@@ -297,13 +297,13 @@ class WatchService {
     return offer;
   }
 
-  /// Серії відомого запису джерела, згруповані за озвучками
+  /// Episodes of a known source record, grouped by dub
   Future<WatchOffer> offerFor(AnimeSource s, SAnime anime) async {
     final eps = await s.episodes(anime);
     return WatchOffer(source: s, anime: anime, groups: groupEpisodes(s, anime, eps));
   }
 
-  /// Групує серії за озвучкою. Порядок — як з джерела, серії всередині групи — за сезоном і номером.
+  /// Groups episodes by dub. The order is as from the source, episodes within a group by season and number.
   static List<WatchGroup> groupEpisodes(AnimeSource s, SAnime anime, List<SEpisode> eps) {
     final order = <String>[];
     final by = <String, List<SEpisode>>{};

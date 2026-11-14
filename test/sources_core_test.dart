@@ -68,7 +68,7 @@ void main() {
       expect(seen[1].headers['Cookie'], 'sid=abc');
       await http.get('https://site.test/home');
       expect(seen.last.headers['Cookie'], 'sid=abc');
-      // інший домен кукі не отримує
+      // another domain gets no cookie
       await http.get('https://other.test/home');
       expect(seen.last.headers.containsKey('Cookie'), isFalse);
     });
@@ -109,7 +109,7 @@ void main() {
     });
 
     test('windows-1251 розкодовується', () {
-      final bytes = <int>[0xCF, 0xF0, 0xE8, 0xE2, 0xB3, 0xF2]; // «Привіт»
+      final bytes = <int>[0xCF, 0xF0, 0xE8, 0xE2, 0xB3, 0xF2]; // "Привіт"
       final r = SourceResponse(200, Uri.parse('https://a.test/'), bytes, headers: {'content-type': 'text/html; charset=windows-1251'});
       expect(r.text, 'Привіт');
     });

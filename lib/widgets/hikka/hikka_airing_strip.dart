@@ -12,20 +12,21 @@ import '../../services/ui_theme_service.dart';
 import '../../utils/platform_info.dart';
 import '../app_animation_kit.dart';
 import 'hikka_common.dart';
+import '../../utils/app_clock.dart';
 
-/// Підпис серії в стрічці календаря: коли вийшла чи вийде і чи це «просто зараз»
+/// Episode label in the calendar feed: when it aired or will air and whether it is "just now"
 class HikkaAiring {
   final String text;
 
-  /// Серія вже вийшла (в останні години) — її позначено акцентом
+  /// The episode has already aired (in recent hours): it is marked with the accent
   final bool live;
 
   const HikkaAiring(this.text, {required this.live});
 
-  /// Серія, що вийшла менше [recentWindow] тому, вважається «щойно вийшла»; далі — звичайний час виходу
+  /// An episode that aired less than [recentWindow] ago counts as "just aired"; beyond that, the ordinary air time
   static const Duration recentWindow = Duration(hours: 4);
 
-  /// Серія виходить у поточну годину за годинником (21:00–21:59 для 21:16), незалежно від того, вийшла вона вже чи ні
+  /// The episode airs in the current clock hour (21:00–21:59 for 21:16), regardless of whether it has already aired
   static bool isCurrent(HikkaScheduleEntry e, DateTime now) {
     final t = e.time;
     return t.year == now.year && t.month == now.month && t.day == now.day && t.hour == now.hour;
@@ -44,8 +45,8 @@ class HikkaAiring {
   }
 }
 
-/// Тонка стрічка календаря на «Головній»: один рядок, у якому по черзі (фейдом) з'являються серії, що щойно вийшли
-/// чи вийдуть найближчим часом. Іконка ліворуч відкриває повний розклад.
+/// A thin calendar ticker on "Головна": one line in which episodes that just aired
+/// or will air soon appear in turn (fading). The icon on the left opens the full schedule.
 class HikkaAiringStrip extends StatelessWidget {
   final double scale;
   final double pad;
@@ -53,7 +54,7 @@ class HikkaAiringStrip extends StatelessWidget {
 
   const HikkaAiringStrip({super.key, required this.scale, required this.pad, this.token});
 
-  /// Скільки серій брати з розкладу
+  /// How many episodes to take from the schedule
   static const int limit = 24;
 
   @override
@@ -66,7 +67,7 @@ class HikkaAiringStrip extends StatelessWidget {
       load: () async => (await HikkaApi.instance.schedule(size: limit, allowAdult: adult)).items,
       loading: (context) => _StripSkeleton(scale: scale, pad: pad),
       builder: (context, list) {
-        final now = DateTime.now();
+        final now = AppClock.now();
         final entries = [...list]..sort((a, b) => a.airingAt.compareTo(b.airingAt));
         return _Strip(entries: entries, now: now, scale: scale, pad: pad);
       },
@@ -76,7 +77,7 @@ class HikkaAiringStrip extends StatelessWidget {
 
 double _stripHeight(double scale) => AppPlatform.isMobile ? 44.0 : 40 * scale;
 
-/// Як часто стрічка перемикає серію
+/// How often the ticker switches the episode
 const Duration kAiringTick = Duration(seconds: 5);
 
 class _Strip extends StatefulWidget {
@@ -91,13 +92,13 @@ class _Strip extends StatefulWidget {
   State<_Strip> createState() => _StripState();
 }
 
-/// Тонка смужка «як у службах новин»: один запис, що м'яко змінюється іншим (фейдом), час і номер серії збоку,
-/// Тап по запису відкриває аніме, по іконці — календар.
+/// A thin strip "like news services": one entry that softly gives way to another (fading), time and episode number at the side,
+/// A tap on an entry opens the anime, on the icon the calendar.
 class _StripState extends State<_Strip> {
   Timer? _timer;
   int _index = 0;
 
-  /// Серія, з якої починає стрічка: перша цієї години; немає такої — найближча наступна; немає й її — остання вийшла
+  /// The episode the ticker starts from: the first of this hour; if none, the nearest upcoming; if none, the last aired
   int get _startIndex {
     final e = widget.entries;
     if (e.isEmpty) return -1;
@@ -190,7 +191,7 @@ class _CalendarButton extends StatelessWidget {
   }
 }
 
-/// Один запис стрічки: назва ліворуч, номер серії й час збоку праворуч
+/// One ticker entry: the title on the left, the episode number and time at the right
 class _EpisodeLine extends StatelessWidget {
   final HikkaScheduleEntry entry;
   final DateTime now;
@@ -205,7 +206,7 @@ class _EpisodeLine extends StatelessWidget {
     final title = a.title(HikkaPrefs.instance.titleLang);
     final episode = entry.episode > 0 ? 'Серія ${entry.episode}' : 'Нова серія';
     final accent = uiTheme.accentColor;
-    // Збоку лише час (економимо місце); серія іншого дня — з назвою дня
+    // Only the time at the side (saving room); an episode of another day with the day name
     final t = entry.time;
     final today = t.year == now.year && t.month == now.month && t.day == now.day;
     final when = today ? HikkaText.hhmm(t) : HikkaText.airingLabel(t, now);
@@ -222,7 +223,7 @@ class _EpisodeLine extends StatelessWidget {
           padding: EdgeInsets.symmetric(horizontal: 12 * scale),
           child: Row(
             children: [
-              // Крапка лише в серій, що виходять у цю годину
+              // A dot only for episodes airing in this hour
               if (HikkaAiring.isCurrent(entry, now)) ...[
                 Container(
                   width: 7 * scale,

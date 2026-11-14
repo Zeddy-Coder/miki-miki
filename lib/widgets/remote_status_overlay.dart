@@ -6,17 +6,17 @@ import '../services/ui_theme_service.dart';
 import 'app_animation_kit.dart';
 import 'app_ui_kit.dart';
 
-/// Стан серії із сайту поверх відео: «Шукаю відео…», «Запускаю плеєр…» або помилка з діями
-/// («Спробувати ще», «Інший плеєр», «Озвучки та плеєри», «Наступна серія», «Закрити»).
-/// Поки відео йде, нічого не малює й не перехоплює дотики.
+/// The state of a site episode over the video: "Шукаю відео…", "Запускаю плеєр…" or an error with actions
+/// ("Спробувати ще", "Інший плеєр", "Озвучки та плеєри", "Наступна серія", "Закрити").
+/// While the video plays, it draws nothing and catches no touches.
 class RemoteStatusOverlay extends StatelessWidget {
   final double scale;
   final RemoteDriver driver;
 
-  /// Відкрити бічну панель серій (озвучки, плеєри, якість)
+  /// Open the episode side panel (dubs, players, quality)
   final VoidCallback onOpenPanel;
 
-  /// Закрити плеєр (повернутись на головну)
+  /// Close the player (return to home)
   final VoidCallback onClose;
 
   const RemoteStatusOverlay({
@@ -104,7 +104,7 @@ class RemoteStatusOverlay extends StatelessWidget {
     );
   }
 
-  /// Серія скінчилась, а наступної в цій озвучці немає: куди перейти
+  /// The episode ended and there is no next one in this dub: where to go
   Widget _offerCard(NextOffer o) {
     final others = o.full != null;
     return ConstrainedBox(

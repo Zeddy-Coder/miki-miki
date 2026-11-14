@@ -1,6 +1,6 @@
-/// «Продовжити перегляд»: тайтли Hikka, які людина недавно відкривала в плеєрі, найновіші першими.
-/// Дані беруться з `WatchStore` (що й коли відкривали) та `HikkaApi` (постер і назва); прогрес усередині
-/// серії зберігає плеєр окремо.
+/// "Продовжити перегляд": Hikka titles the person recently opened in the player, newest first.
+/// Data comes from `WatchStore` (what was opened and when) and `HikkaApi` (poster and title); progress within
+/// an episode is stored by the player separately.
 library;
 
 import 'dart:async';
@@ -13,48 +13,48 @@ import 'hikka_lists.dart';
 import 'watch_service.dart';
 import 'watch_store.dart';
 
-/// Тайтл у списку «Продовжити перегляд»
+/// A title in the "Продовжити перегляд" list
 class ContinueItem {
   final HikkaAnime anime;
 
-  /// Остання відкрита серія («3», «s2e5») або `null`, якщо номера немає
+  /// The last opened episode ("3", "s2e5") or `null` if there is no number
   final String? episodeKey;
   final DateTime at;
 
-  /// Тайтл дивились, але його немає в жодному зі списків Hikka (показується з позначкою)
+  /// The title was watched but is in none of the Hikka lists (shown with a badge)
   final bool notInList;
 
-  /// Скільки серій уже переглянуто і скільки їх у озвучці, яку обрано під час перегляду (`null` — невідомо)
+  /// How many episodes are already watched and how many the dub chosen during watching has (`null` means unknown)
   final int watched;
   final int? dubCount;
 
-  /// Скільки серій було в озвучці до останнього збільшення (див. [hasNew])
+  /// How many episodes the dub had before the latest increase (see [hasNew])
   final int? dubPrev;
 
-  /// Назва обраної озвучки (для підпису «Нова серія · Inari»)
+  /// Name of the chosen dub (for the caption "Нова серія · Inari")
   final String dubName;
 
   const ContinueItem({required this.anime, required this.episodeKey, required this.at, this.notInList = false, this.watched = 0, this.dubCount, this.dubPrev, this.dubName = ''});
 
-  /// «Нова серія»: лише для онґоїнгу й лише якщо глядач дивився усе, що було доступно в обраній озвучці до виходу
-  /// нової серії (`watched >= dubPrev`). Хто не додивився попередні, «нових» не бачить, поки не наздожене. Серії,
-  /// що вийшли в інших командах, не рахуються
+  /// "New episode": only for ongoing titles and only if the viewer watched everything available in the chosen dub before the new
+  /// episode came out (`watched >= dubPrev`). Whoever has not caught up sees no "new" until they do. Episodes
+  /// released by other teams do not count
   bool get hasNew => anime.isOngoing && dubCount != null && dubCount! > watched && watched >= (dubPrev ?? dubCount!);
 
-  /// «Серія 3» / «Сезон 2 · серія 5»; `null`, якщо серію не визначено
+  /// "Серія 3" / "Сезон 2 · серія 5"; `null` if the episode is not determined
   String? get episodeLabel => episodeKey == null ? null : ContinueWatching.episodeCaption(episodeKey!);
 
-  /// Коротка плашка для постера: «Серія 3» / «С2 · Е5»
+  /// Short badge for the poster: "Серія 3" / "С2 · Е5"
   String? get episodeShort => episodeKey == null ? null : ContinueWatching.episodeShort(episodeKey!);
 }
 
 class ContinueWatching {
   const ContinueWatching._();
 
-  /// Префікс ключа тайтлу Hikka у `WatchStore` (`hikka:<slug>`)
+  /// Prefix of the Hikka title key in `WatchStore` (`hikka:<slug>`)
   static const String prefix = 'hikka:';
 
-  /// Підпис за ключем серії: «3» → «Серія 3», «3.5» → «Серія 3.5», «s2e5» → «Сезон 2 · серія 5», «i7» → «Серія 7»
+  /// Label by episode key: "3" → "Серія 3", "3.5" → "Серія 3.5", "s2e5" → "Сезон 2 · серія 5", "i7" → "Серія 7"
   static String? episodeCaption(String epKey) {
     final season = RegExp(r'^s(\d+)e(.+)$').firstMatch(epKey);
     if (season != null) return 'Сезон ${season.group(1)} · серія ${_number(season.group(2)!)}';
@@ -62,7 +62,7 @@ class ContinueWatching {
     return plain.isEmpty ? null : 'Серія $plain';
   }
 
-  /// Коротко для плашки на постері: «3» → «Серія 3», «s2e5» → «С2 · Е5»
+  /// Short form for the poster badge: "3" → "Серія 3", "s2e5" → "С2 · Е5"
   static String? episodeShort(String epKey) {
     final season = RegExp(r'^s(\d+)e(.+)$').firstMatch(epKey);
     if (season != null) return 'С${season.group(1)} · Е${_number(season.group(2)!)}';
@@ -70,10 +70,10 @@ class ContinueWatching {
     return plain.isEmpty ? null : 'Серія $plain';
   }
 
-  /// Порядковий номер «i7» показується як «7»
+  /// The ordinal number "i7" is shown as "7"
   static String _number(String key) => key.startsWith('i') ? key.substring(1) : key;
 
-  /// Тайтли Hikka з недавніми переглядами: (slug, остання відкрита серія, коли), найновіші першими
+  /// Hikka titles with recent views: (slug, last opened episode, when), newest first
   static List<(String slug, String? epKey, DateTime at)> recent({WatchStore? store, int limit = 12}) {
     final s = store ?? WatchStore.instance;
     final out = <(String, String?, DateTime)>[];
@@ -89,8 +89,8 @@ class ContinueWatching {
     return out;
   }
 
-  /// Скільки серій у озвучці, яку людина обрала під час перегляду цього тайтлу: (кількість, назва) або (`null`, '').
-  /// Лише для тієї самої озвучки, що й остання відкрита (чи обрана на сторінці): дані іншої команди не підходять.
+  /// How many episodes the dub chosen while watching this title has: (count, name) or (`null`, '').
+  /// Only for the same dub as the last opened one (or the one chosen on the page): another team's data does not fit.
   static (int?, String, int?) dubOf(WatchStore s, String animeKey) {
     final av = s.available(animeKey);
     if (av == null) return (null, '', null);
@@ -99,7 +99,7 @@ class ContinueWatching {
     return (av.count, av.label, av.prev);
   }
 
-  /// Підпис кількості серій обраних озвучок: зміна означає, що полицю треба перебудувати
+  /// Label of the episode counts of the chosen dubs: a change means the shelf must be rebuilt
   static String availabilitySignature({WatchStore? store}) {
     final s = store ?? WatchStore.instance;
     return [for (final r in recent(store: s, limit: 24)) () {
@@ -108,8 +108,8 @@ class ContinueWatching {
     }()].join(',');
   }
 
-  /// Тихо перевіряє, чи з'явились нові серії в обраній озвучці онґоїнгів зі списку (результат осідає в `WatchStore`).
-  /// Не частіше ніж раз на [maxAge] для тайтлу й не більше [max] за раз, по черзі.
+  /// Quietly checks whether new episodes appeared in the chosen dub of ongoing titles from the list (the result settles in `WatchStore`).
+  /// At most once per [maxAge] for a title and no more than [max] at a time, one by one.
   static Future<void> refreshAvailability(
     List<ContinueItem> items, {
     WatchStore? store,
@@ -143,10 +143,10 @@ class ContinueWatching {
     }
   }
 
-  /// Список «Продовжити перегляд»: усе зі списку «Дивлюсь» на Hikka (якщо є вхід) плюс тайтли, які дивились
-  /// локально, але не додали до жодного списку (з позначкою [ContinueItem.notInList]). Порядок — за останнім
-  /// переглядом (у кого його немає — за часом оновлення запису на Hikka), тож і онґоїнги без нових серій стоять
-  /// там, де ви на них зупинились. Завершені й повністю переглянуті локальні тайтли не показуються.
+  /// The "Продовжити перегляд" list: everything from the "Дивлюсь" list on Hikka (if signed in) plus titles watched
+  /// locally but not added to any list (marked [ContinueItem.notInList]). Order follows the last
+  /// view (for those without one, the time the Hikka entry was updated), so even ongoing titles without new episodes sit
+  /// where you stopped on them. Finished and fully watched local titles are not shown.
   static Future<List<ContinueItem>> load({WatchStore? store, HikkaApi? api, HikkaAuth? auth, HikkaMyList? lists, int limit = 20, bool allowAdult = false}) async {
     final s = store ?? WatchStore.instance;
     final client = api ?? HikkaApi.instance;
@@ -155,7 +155,7 @@ class ContinueWatching {
     final recents = recent(store: s, limit: 400);
     final local = {for (final r in recents) r.$1: r};
 
-    // Список «Дивлюсь» (помилка мережі не фатальна: лишаються локальні перегляди)
+    // The "Дивлюсь" list (a network error is not fatal: local views remain)
     final watching = <HikkaWatchEntry>[];
     if (user.signedIn && user.username.isNotEmpty) {
       try {
@@ -176,7 +176,7 @@ class ContinueWatching {
       final l = local[a.slug];
       final done = s.watched('$prefix${a.slug}').length;
       final dub = dubOf(s, '$prefix${a.slug}');
-      // Прогрес на Hikka попереду за локальним (дивились на сайті): підпис і продовження йдуть від нього
+      // Hikka progress is ahead of the local one (watched on the site): the label and continuation follow it
       final localNum = int.tryParse((l?.$2 ?? '').replaceAll(RegExp(r'^s\d+e'), '')) ?? 0;
       out.add(ContinueItem(
         anime: a,
@@ -189,7 +189,7 @@ class ContinueWatching {
       ));
     }
 
-    // Локальні перегляди поза списком «Дивлюсь»
+    // Local views outside the "Дивлюсь" list
     final extra = [for (final r in recents) if (!seen.contains(r.$1)) r].take(limit).toList();
     final loaded = await Future.wait([
       for (final r in extra)
@@ -208,7 +208,7 @@ class ContinueWatching {
       final total = anime.episodesTotal ?? 0;
       final done = s.watched('$prefix${extra[i].$1}').length;
       if (anime.status == 'finished' && total > 0 && done >= total) continue;
-      // Тайтли з інших списків (заплановане, відкладене…) не вважаються «поза списком»
+      // Titles from other lists (planned, on hold…) do not count as "not in list"
       final inList = user.signedIn && myList.statusOf(extra[i].$1) != null;
       out.add(ContinueItem(
         anime: anime,

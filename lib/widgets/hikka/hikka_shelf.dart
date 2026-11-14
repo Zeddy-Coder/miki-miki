@@ -7,18 +7,18 @@ import '../app_animation_kit.dart';
 import '../app_ui_kit.dart';
 import 'hikka_common.dart';
 
-/// Розміри карток на горизонтальних полицях
+/// Card sizes on horizontal shelves
 class HikkaShelfMetrics {
   const HikkaShelfMetrics._();
 
   static double cardWidth(double scale) => AppPlatform.isMobile ? 128.0 : 148 * scale;
 
-  /// Висота полиці: постер + текст під ним
+  /// Shelf height: a poster + the text under it
   static double height(BuildContext context, double scale) =>
       cardWidth(scale) / 0.7 + hikkaCardTextHeight(context, scale);
 }
 
-/// Горизонтальна полиця карток із заголовком. На десктопі справа стрілки прокрутки: миша не тягне список.
+/// A horizontal shelf of cards with a heading. On desktop, scroll arrows on the right (the list can also be dragged with a mouse or Shift+wheel).
 class HikkaShelf extends StatefulWidget {
   final double scale;
   final double pad;
@@ -29,7 +29,7 @@ class HikkaShelf extends StatefulWidget {
   final int count;
   final IndexedWidgetBuilder itemBuilder;
 
-  /// Своя ширина й висота карток (для горизонтальних карток); без них — звичайні постерні
+  /// Its own card width and height (for horizontal cards); without them, ordinary poster cards
   final double? cardWidth;
   final double? cardHeight;
 
@@ -112,7 +112,7 @@ class _HikkaShelfState extends State<HikkaShelf> {
   }
 }
 
-/// Заглушка полиці: сірі прямокутники на місці карток
+/// Shelf placeholder: gray rectangles in place of cards
 class HikkaShelfSkeleton extends StatelessWidget {
   final double scale;
   final double pad;
@@ -124,7 +124,7 @@ class HikkaShelfSkeleton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (cardWidth != null && cardHeight != null) {
-      // Горизонтальні картки: прості прямокутники
+      // Horizontal cards: simple rectangles
       return SizedBox(
         height: cardHeight,
         child: ListView.separated(
@@ -175,8 +175,8 @@ class HikkaShelfSkeleton extends StatelessWidget {
   }
 }
 
-/// Полиця, що сама завантажує список: заглушка → картки; порожній результат ховає полицю цілком,
-/// помилка показується під заголовком з кнопкою «Повторити».
+/// A shelf that loads its list itself: placeholder → cards; an empty result hides the whole shelf,
+/// an error is shown under the heading with a "Повторити" button.
 class HikkaShelfAsync<T> extends StatelessWidget {
   final double scale;
   final double pad;
@@ -189,7 +189,7 @@ class HikkaShelfAsync<T> extends StatelessWidget {
   final double? cardWidth;
   final double? cardHeight;
 
-  /// Інше значення — полиця завантажується заново
+  /// Another value means the shelf loads anew
   final Object? token;
 
   const HikkaShelfAsync({

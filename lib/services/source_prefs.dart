@@ -1,4 +1,4 @@
-/// Налаштування джерел перегляду: які ввімкнені, ключ Mikai, бажана якість і плеєр.
+/// Watch-source settings: which are enabled, the Mikai key, preferred quality and player.
 library;
 
 import 'package:flutter/foundation.dart';
@@ -9,7 +9,7 @@ import 'storage_service.dart';
 class SourcePrefs extends ChangeNotifier {
   static const String section = 'source_prefs';
 
-  /// Якості, які пропонуємо вибрати (висота кадру; 0 — найвища доступна)
+  /// Qualities we offer to choose (frame height; 0 is the highest available)
   static const List<int> heights = [0, 1080, 720, 480];
 
   final SectionLoader _load;
@@ -22,7 +22,7 @@ class SourcePrefs extends ChangeNotifier {
 
   static SourcePrefs instance = SourcePrefs();
 
-  /// Для тестів і після зміни сховища: перечитати дані
+  /// For tests and after a store change: reread the data
   void reload() {
     _data = Map<String, dynamic>.of(_load());
     notifyListeners();
@@ -38,7 +38,7 @@ class SourcePrefs extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ── Ввімкнені джерела ────────────────────────────────────────────────────────
+  // ── Enabled sources ────────────────────────────────────────────────────────
   Set<String> get _disabled => {for (final x in (_data['disabled'] as List? ?? const [])) '$x'};
 
   bool isEnabled(String sourceId) => !_disabled.contains(sourceId);
@@ -50,27 +50,27 @@ class SourcePrefs extends ChangeNotifier {
   }
 
   // ── Mikai ────────────────────────────────────────────────────────────────────
-  /// Необовʼязковий ключ API Mikai (300 запитів/хв замість 60)
+  /// Optional Mikai API key (300 requests/min instead of 60)
   String get mikaiKey => (_data['mikai_key'] as String?) ?? '';
 
   set mikaiKey(String v) => _put('mikai_key', v.trim().isEmpty ? null : v.trim());
 
   // ── Moon ─────────────────────────────────────────────────────────────────────
-  /// Власний ключ MoonAnime API (необов'язковий: без нього діє безкоштовний ключ із бекенду)
+  /// Own MoonAnime API key (optional: without it the free key from the backend applies)
   String get moonKey => (_data['moon_key'] as String?) ?? '';
 
   set moonKey(String v) => _put('moon_key', v.trim().isEmpty ? null : v.trim());
 
-  /// Ключ, яким користується Moon: власний із налаштувань, а коли його нема — безкоштовний із бекенду (у застосунку ключів немає)
+  /// The key Moon uses: the own one from settings, and when there is none, the free one from the backend (the app has no keys)
   String get effectiveMoonKey => moonKey.isNotEmpty ? moonKey : BackendClient.instance.cachedMoonKey;
 
-  // ── Відео ────────────────────────────────────────────────────────────────────
-  /// Найбільша висота кадру, яку вибираємо автоматично (0 — найвища)
+  // ── Video ────────────────────────────────────────────────────────────────────
+  /// The largest frame height we pick automatically (0 is the highest)
   int get maxHeight => (_data['max_height'] as num?)?.toInt() ?? 0;
 
   set maxHeight(int v) => _put('max_height', v);
 
-  /// Бажаний плеєр («Moon», «Ashdi»); порожньо — за порядком джерела
+  /// Preferred player ("Moon", "Ashdi"); empty means by the source's order
   String get hoster => (_data['hoster'] as String?) ?? '';
 
   set hoster(String v) => _put('hoster', v.isEmpty ? null : v);

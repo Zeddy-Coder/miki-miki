@@ -1,5 +1,5 @@
-// Локальний HLS-проксі: переписування списків і віддача сегментів із заголовками оригінального сервера.
-// Справжній `HttpServer` на loopback грає роль CDN; мережі назовні немає.
+// Local HLS proxy: rewriting playlists and serving segments with the original server's headers.
+// A real `HttpServer` on loopback plays the CDN; there is no outside network.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -37,7 +37,7 @@ void main() {
           'ua': r.headers.value('user-agent') ?? '',
           'range': r.headers.value('range') ?? '',
         };
-        // як справжній CDN Moon: без Accept-Language (і без Accept) — «сторінка захисту» з 403
+        // like the real Moon CDN: without Accept-Language (and without Accept) a "protection page" with 403
         if (r.headers.value('referer') != 'https://site.example/' || r.headers.value('accept-language') == null || r.headers.value('accept') == null) {
           r.response.statusCode = 403;
           r.response.headers.contentType = ContentType.html;
@@ -104,7 +104,7 @@ void main() {
       final base = 'http://127.0.0.1:${cdn.port}';
       final proxied = await HlsProxy.instance.wrap('$base/v/q/index.m3u8', {'Referer': 'https://site.example/'});
       final (st, body) = await get(proxied);
-      expect(st, 200); // список віддається (Referer правильний)
+      expect(st, 200); // the playlist is served (the Referer is right)
       final segUrl = utf8.decode(body).split('\n').firstWhere((l) => l.startsWith('http'));
       final bad = await HlsProxy.instance.wrap('$base/v/q/seg0.ts', {'Referer': 'https://other.example/'});
       final before = HlsProxy.instance.blockedCount;

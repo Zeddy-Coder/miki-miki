@@ -1,7 +1,7 @@
 import 'package:flutter/widgets.dart';
 
-/// Екранне сповіщення поверх відео (аналог OSD в mpv): іконка, заголовок, значення,
-/// необов'язкова смужка прогресу й підказка гарячої клавіші.
+/// An on-screen notification over the video (like mpv's OSD): an icon, a title, a value,
+/// an optional progress bar and a hotkey hint.
 class OsdMessage {
   const OsdMessage({
     required this.icon,
@@ -15,16 +15,16 @@ class OsdMessage {
   final IconData icon;
   final String title;
 
-  /// Значення: «1.25x», «Режим A (Fast)», «12:34 / 24:00» …
+  /// Value: "1.25x", "Режим A (Fast)", "12:34 / 24:00" …
   final String? detail;
 
-  /// Підписи кнопок клавіатури: ['Ctrl', '1']
+  /// Keyboard key labels: ['Ctrl', '1']
   final List<String> keys;
 
-  /// 0..1 — смужка під текстом (гучність, позиція у відео)
+  /// 0..1: a bar under the text (volume, position in the video)
   final double? progress;
   final bool isError;
 }
 
-/// Приймач сповіщень (контролер плеєра показує їх через [OsdToast]).
+/// Notification receiver (the player controller shows them via [OsdToast]).
 typedef OsdSink = void Function(OsdMessage message, {Duration? duration});

@@ -10,14 +10,14 @@ import '../services/ui_theme_service.dart';
 import 'app_animation_kit.dart';
 import 'app_ui_kit.dart';
 
-/// Група довідки: назва групи й дії, що мають видимі комбінації у вибраній схемі.
+/// A help group: the group name and the actions that have visible combinations in the chosen scheme.
 class ShortcutSection {
   const ShortcutSection(this.group, this.items);
 
   final ShortcutGroup group;
   final List<ShortcutDef> items;
 
-  /// Приблизна висота картки в «рядках» (заголовок рахується як два)
+  /// Approximate card height in "rows" (the heading counts as two)
   int get weight => items.length + 2;
 }
 
@@ -42,7 +42,7 @@ IconData _groupIcon(ShortcutGroup group) {
   }
 }
 
-/// «1 дія», «2 дії», «5 дій»
+/// "1 дія", "2 дії", "5 дій"
 String _actionsCount(int n) {
   final mod10 = n % 10;
   final mod100 = n % 100;
@@ -51,22 +51,22 @@ String _actionsCount(int n) {
   return '$n дій';
 }
 
-/// Довідка з гарячих клавіш: картки за групами, у кожній — назва дії й кнопки клавіатури.
-/// Не прокручується сама, тому підходить і для окремого вікна, і для вкладки налаштувань.
-/// Дані беруться з [ShortcutCatalog] — того самого списку, за яким працює обробник клавіш.
+/// Hotkey help: cards by groups, each with an action name and keyboard keys.
+/// It does not scroll by itself, so it suits both a separate window and a settings tab.
+/// Data comes from the [ShortcutCatalog], the same list the key handler works from.
 class ShortcutsView extends StatelessWidget {
   const ShortcutsView({super.key, required this.scale, required this.scheme, this.query = ''});
 
   final double scale;
   final KeyScheme scheme;
 
-  /// Пошук за назвою дії, групою або клавішею («ctrl 1», «пауза», «seek»)
+  /// Search by action name, group or key ("ctrl 1", "пауза", "seek")
   final String query;
 
-  /// Від якої ширини картки стають у дві колонки
+  /// The width from which cards go into two columns
   static const double twoColumnsFrom = 640;
 
-  /// Групи довідки для схеми [scheme], відфільтровані за [query]
+  /// Help groups for scheme [scheme], filtered by [query]
   static List<ShortcutSection> sections(KeyScheme scheme, String query) {
     final grouped = ShortcutCatalog.grouped(scheme);
     final out = <ShortcutSection>[];
@@ -77,7 +77,7 @@ class ShortcutsView extends StatelessWidget {
     return out;
   }
 
-  /// Інші назви клавіш, які можна вписати в пошук (ключ — підпис клавіші малими літерами)
+  /// Other key names that can be typed in search (the key is the key label in lowercase)
   static const Map<String, List<String>> _keyAliases = {
     'space': ['пробіл'],
     'enter': ['ентер'],
@@ -90,9 +90,9 @@ class ShortcutsView extends StatelessWidget {
     'pgdn': ['pagedown', 'page'],
   };
 
-  /// Слова запиту. Клавіші розділяють пробіл і «+»: «ctrl 1», «ctrl+1» і «ctrl + 1» — те саме.
-  /// «+» наприкінці («ctrl++», «ctrl +») — це клавіша «+», а «ctrl+» — ще не дописана комбінація.
-  /// Мінус Unicode («−») зводиться до звичайного.
+  /// Query words. Keys are separated by a space and "+": "ctrl 1", "ctrl+1" and "ctrl + 1" are the same.
+  /// A trailing "+" ("ctrl++", "ctrl +") is the "+" key, while "ctrl+" is a not-yet-finished combination.
+  /// The Unicode minus ("−") is normalized to the plain one.
   static List<String> queryWords(String query) {
     final parts = query.trim().toLowerCase().replaceAll('−', '-').split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
     final out = <String>[];
@@ -105,16 +105,16 @@ class ShortcutsView extends StatelessWidget {
     return out;
   }
 
-  /// Слово запиту, що збігається з підписом клавіші: повністю, початком («ctr» → Ctrl) або псевдонімом
+  /// A query word matching a key label: fully, by prefix ("ctr" → Ctrl) or by alias
   static bool _hitsCap(String word, String cap) {
     bool same(String name) => name == word || (word.length > 1 && name.startsWith(word));
     return same(cap) || (_keyAliases[cap]?.any(same) ?? false);
   }
 
-  /// Слова запиту шукаються в назві дії, групі та англійському ідентифікаторі (підрядок), а ті,
-  /// яких там немає, — серед клавіш, причому всі в межах однієї комбінації: «ctrl 1» знаходить
-  /// лише Ctrl+1, а не «Звук раніше на 0,1 с». Односимвольні слова («1», «a») шукаються лише
-  /// серед клавіш. Приховані комбінації не враховуються.
+  /// Query words are searched in the action name, group and English identifier (substring), and those
+  /// not found there, among the keys, all within one combination: "ctrl 1" finds
+  /// only Ctrl+1, not "Звук раніше на 0,1 с". Single-character words ("1", "a") are searched
+  /// only among keys. Hidden combinations are not counted.
   static bool matches(ShortcutDef def, KeyScheme scheme, String query) {
     final words = queryWords(query);
     if (words.isEmpty) return true;
@@ -132,7 +132,7 @@ class ShortcutsView extends StatelessWidget {
     return false;
   }
 
-  /// Скільки перших груп іде в ліву колонку, щоб колонки вийшли приблизно однакової висоти
+  /// How many first groups go into the left column so the columns come out of roughly equal height
   static int splitIndex(List<ShortcutSection> sections) {
     if (sections.length < 2) return sections.length;
     final total = sections.fold<int>(0, (sum, s) => sum + s.weight);
@@ -306,8 +306,8 @@ class _ShortcutRow extends StatelessWidget {
   }
 }
 
-/// Вікно «Гарячі клавіші»: відкривається клавішею `?` або F1. Схему клавіш можна змінити тут же —
-/// вона застосовується одразу.
+/// The "Гарячі клавіші" window: opens with the `?` key or F1. The key scheme can be changed right here:
+/// it applies immediately.
 class ShortcutsDialog extends StatefulWidget {
   const ShortcutsDialog({super.key, required this.scale, required this.controller});
 
@@ -342,7 +342,7 @@ class _ShortcutsDialogState extends State<ShortcutsDialog> {
 
   @override
   void dispose() {
-    // Маршрут могли прибрати без завершення Future (наприклад, при закритті навігатора)
+    // The route could have been removed without completing the Future (e.g. when the navigator closes)
     ShortcutsDialog._isOpen = false;
     _search.dispose();
     _searchFocus.dispose();
@@ -359,7 +359,7 @@ class _ShortcutsDialogState extends State<ShortcutsDialog> {
     final keyboard = HardwareKeyboard.instance;
 
     if (key == PhysicalKeyboardKey.escape) {
-      // Перший Esc очищає пошук, другий закриває вікно
+      // The first Esc clears the search, the second closes the window
       if (_search.text.isNotEmpty) {
         _search.clear();
         _setQuery('');
@@ -372,7 +372,7 @@ class _ShortcutsDialogState extends State<ShortcutsDialog> {
       _searchFocus.requestFocus();
       return KeyEventResult.handled;
     }
-    // Під час введення в поле пошуку решта клавіш — звичайний текст
+    // While typing in the search field, the other keys are ordinary text
     if (_searchFocus.hasFocus) return KeyEventResult.ignored;
     if (key == PhysicalKeyboardKey.f1 || (key == PhysicalKeyboardKey.slash && keyboard.isShiftPressed)) {
       _close();

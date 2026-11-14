@@ -12,8 +12,8 @@ HikkaAnime anime(String slug, {int? start, int? year}) => HikkaAnime(slug: slug,
 HikkaRelation rel(String slug, String related, String type, {String from = 'anime', String to = 'anime'}) =>
     HikkaRelation(slug: slug, relatedSlug: related, contentType: from, relatedContentType: to, type: type);
 
-/// Фікстура з тестів фронтенду hikka.io: a1 → a2 → a3 (сиквели), s1 — побічна історія a1,
-/// s2 — сиквел s1, r1 — рекап a2
+/// A fixture from the hikka.io frontend tests: a1 → a2 → a3 (sequels), s1 is a side story of a1,
+/// s2 is a sequel of s1, r1 is a recap of a2
 HikkaFranchiseData fixture() => HikkaFranchiseData(
       anime: [
         anime('a2', start: ts(2012)),
@@ -72,7 +72,7 @@ void main() {
       final m = FranchiseModel.build(fixture(), 'a2')!;
       final r1 = m.byId['r1']!;
       expect((r1.group, r1.relation?.label, r1.relation?.targetId), (FranchiseGroup.summary, 'Рекап', 'a2'));
-      // зв'язки самого рекапу: що він є для a2 — «Повна історія» (a2) стосовно r1
+      // the recap's own relations: what it is for a2: "Повна історія" (a2) relative to r1
       expect([for (final d in m.relations['r1']!) '${d.label}:${d.node.id}'], ['Повна історія:a2']);
     });
 
@@ -87,7 +87,7 @@ void main() {
 
     test('поточний — сиквел побічної історії: основна лінія — його власний ланцюг', () {
       final m = FranchiseModel.build(fixture(), 's2')!;
-      // власний ланцюг s1–s2 коротший за a1–a3, але s2 має сиквел-зв'язок, тож основна лінія — її власна
+      // its own chain s1–s2 is shorter than a1–a3, but s2 has a sequel relation, so the main line is its own
       expect(ids(m.chain), ['s1', 's2']);
       expect(m.current.chainIndex, 1);
       expect(m.relationText(m.current), 'Основна історія, 2 з 2');
@@ -114,7 +114,7 @@ void main() {
           rel('a1', 'a2', 'sequel'),
           rel('a1', 'manga-1', 'adaptation', to: 'manga'),
           rel('novel-1', 'a2', 'adaptation', from: 'novel'),
-          rel('a2', 'ghost', 'sequel'), // тайтл, якого немає у відповіді
+          rel('a2', 'ghost', 'sequel'), // a title that is not in the response
         ],
       );
       final m = FranchiseModel.build(data, 'a1')!;
@@ -151,7 +151,7 @@ void main() {
         relations: [rel('a1', 'a2', 'sequel')],
       );
       final m = FranchiseModel.build(data, 'a1')!;
-      expect(ids(m.nodes), ['a1', 'a2', 'u3', 'u1', 'u2']); // стабільне сортування
+      expect(ids(m.nodes), ['a1', 'a2', 'u3', 'u1', 'u2']); // stable sort
       expect(m.groupByYear().last.$1, 'Дата невідома');
       expect(m.groupByYear().map((g) => g.$1).toList().sublist(0, 2), ['2010', '2015']);
     });

@@ -6,7 +6,7 @@ import 'package:flutter/foundation.dart' show ValueListenable, ValueNotifier, vi
 import '../constants/app_identity.dart';
 import '../utils/platform_info.dart';
 
-/// Читання / запис окремого розділу стану (для сервісів, що не мають звертатись до `StorageService` напряму — у тестах підміняються)
+/// Reading / writing a separate state section (for services that must not call `StorageService` directly; replaced in tests)
 typedef SectionLoader = Map<String, dynamic> Function();
 typedef SectionSaver = void Function(Map<String, dynamic> data);
 
@@ -22,8 +22,8 @@ class StorageService {
     try {
       final basePath = appBasePath;
 
-      // Перейменування застосунку: дані зі старої теки переїжджають у нову (лише ПК; на Android у нового
-      // застосунку своя приватна тека)
+      // App rename: data from the old folder moves to the new one (PC only; on Android the new
+      // app has its own private folder)
       if (!Platform.isAndroid) {
         await AppIdentity.migrateLegacyData(Directory(_basePathFor(AppIdentity.legacyDataDirName)), Directory(basePath));
       }
@@ -32,7 +32,7 @@ class StorageService {
       if (!await dir.exists()) await dir.create(recursive: true);
 
       _storageFile = File('$basePath/app_state.json');
-      // Android: раніше стан лежав у кеші (його може очистити система) — переносимо в постійну теку
+      // Android: the state used to live in the cache (the system may clear it): we move it to a persistent folder
       if (Platform.isAndroid && !await _storageFile.exists()) {
         final old = File('${Directory.systemTemp.path}/${AppIdentity.legacyDataDirName}/app_state.json');
         if (await old.exists()) {
@@ -45,7 +45,7 @@ class StorageService {
         final content = await _storageFile.readAsString();
         if (content.isNotEmpty) _cache = jsonDecode(content) as Map<String, dynamic>;
       }
-      // Одноразово: автопропуск опенінґів типово вимкнено (раніше міг лишитись увімкненим)
+      // One time: auto-skipping openings is off by default (it could previously have stayed on)
       if (_cache['auto_skip_default_v2'] != true) {
         _cache['auto_skip_chapters'] = false;
         _cache['auto_skip_default_v2'] = true;
@@ -66,7 +66,7 @@ class StorageService {
       return '$appData/$dirName';
     }
     if (Platform.isAndroid) {
-      // Приватна тека застосунку поруч із кешем: налаштування, історія й позиції не зникають, коли кеш чистять
+      // The app's private folder next to the cache: settings, history and positions do not vanish when the cache is cleared
       return '${Directory.systemTemp.parent.path}/files/$dirName';
     }
     return '${Directory.systemTemp.path}/$dirName';
@@ -82,7 +82,7 @@ class StorageService {
     } catch (_) {}
   }
 
-  /// Затримка звуку (мс) окремого твору; ключ дає `PlayerStateController.audioDelayKey`
+  /// Audio delay (ms) of a single work; the key comes from `PlayerStateController.audioDelayKey`
   static int getAudioDelay(String key) {
     final map = _cache['audio_delays'] as Map<String, dynamic>?;
     return map?[key] as int? ?? 0;
@@ -117,7 +117,39 @@ class StorageService {
     _isDirty = true;
   }
 
-  // --- Довільні розділи (дані джерел перегляду: зв'язки, прогрес, налаштування) ---
+  // --- Raw access for settings sync (`SettingsSync`) ---
+  /// A top-level value by key (null if absent)
+  static Object? readRaw(String key) => _cache[key];
+
+  /// Writes (or, for null, removes) a top-level value
+  static void writeRaw(String key, Object? value) {
+    if (value == null) {
+      _cache.remove(key);
+    } else {
+      _cache[key] = value;
+    }
+    _isDirty = true;
+  }
+
+  /// All saved positions (`path or hikka:<slug>#<episode>` → ms)
+  static Map<String, int> allPlaybackPositions() {
+    final m = _cache['playback_positions'];
+    return m is Map ? {for (final e in m.entries) '${e.key}': (e.value as num).toInt()} : <String, int>{};
+  }
+
+  /// Sets / removes a position without the "almost finished" rules of [savePlaybackPosition]
+  static void writePlaybackPosition(String key, int? ms) {
+    _cache['playback_positions'] ??= <String, dynamic>{};
+    final map = _cache['playback_positions'] as Map<String, dynamic>;
+    if (ms == null) {
+      map.remove(key);
+    } else {
+      map[key] = ms;
+    }
+    _isDirty = true;
+  }
+
+  // --- Arbitrary sections (watch-source data: links, progress, settings) ---
   static Map<String, dynamic> getSection(String key) {
     final v = _cache[key];
     return v is Map<String, dynamic> ? v : <String, dynamic>{};
@@ -128,15 +160,15 @@ class StorageService {
     _isDirty = true;
   }
 
-  // --- Зовнішні сервіси: банери ---
-  /// Ключ TheMovieDB для запасних банерів (порожній — не використовується). Можна передати й під час збирання:
+  // --- External services: banners ---
+  /// TheMovieDB key for fallback banners (empty means unused). Can also be passed at build time:
   /// `--dart-define=TMDB_KEY=…`
   static String getTmdbKey({String fallback = ''}) =>
       _cache['tmdb_key'] as String? ?? const String.fromEnvironment('TMDB_KEY', defaultValue: '');
   static void saveTmdbKey(String key) { _cache['tmdb_key'] = key.trim(); _isDirty = true; }
 
-  // --- Приховані можливості ---
-  /// Стара локальна медіатека (відкрити файл, історія файлів, плейлисти): прихована, вмикається в «Розробник»
+  // --- Hidden features ---
+  /// The old local media library (open a file, file history, playlists): hidden, enabled in "Розробник"
   static bool getLocalLibrary({bool fallback = false}) => _cache['local_library'] as bool? ?? fallback;
   static void saveLocalLibrary(bool val) {
     _cache['local_library'] = val;
@@ -146,10 +178,10 @@ class StorageService {
 
   static ValueNotifier<bool>? _localLibrary;
 
-  /// Слухач перемикача локальної медіатеки: «Профіль» з'являється з пунктом одразу, без перезапуску
+  /// Listener for the local media library switch: "Профіль" shows the item right away, without a restart
   static ValueListenable<bool> get localLibraryListenable => _localLibrary ??= ValueNotifier<bool>(getLocalLibrary());
 
-  // --- Налаштування теми ---
+  // --- Theme settings ---
   static String getThemeMode({String fallback = 'system'}) => _cache['theme_mode'] as String? ?? fallback;
   static void saveThemeMode(String mode) { _cache['theme_mode'] = mode; _isDirty = true; }
 
@@ -159,7 +191,7 @@ class StorageService {
   static String getUiRadius({String fallback = 'MD'}) => _cache['ui_radius'] as String? ?? fallback;
   static void saveUiRadius(String r) { _cache['ui_radius'] = r; _isDirty = true; }
 
-  // --- Налаштування відтворення ---
+  // --- Playback settings ---
   static bool getAutoplayNext({bool fallback = true}) => _cache['autoplay_next'] as bool? ?? fallback;
   static void saveAutoplayNext(bool val) { _cache['autoplay_next'] = val; _isDirty = true; }
 
@@ -172,7 +204,7 @@ class StorageService {
   static bool getSeekButtons({bool fallback = false}) => _cache['seek_buttons'] as bool? ?? fallback;
   static void saveSeekButtons(bool val) { _cache['seek_buttons'] = val; _isDirty = true; }
 
-  /// Кнопки ±крок на екрані плеєра на телефоні (за замовчуванням є)
+  /// The ±step buttons on the phone player screen (on by default)
   static bool getMobileSeekButtons({bool fallback = true}) => _cache['mobile_seek_buttons'] as bool? ?? fallback;
   static void saveMobileSeekButtons(bool val) { _cache['mobile_seek_buttons'] = val; _isDirty = true; }
 
@@ -188,56 +220,56 @@ class StorageService {
   static bool getAutoSkipChapters({bool fallback = false}) => _cache['auto_skip_chapters'] as bool? ?? fallback;
   static void saveAutoSkipChapters(bool val) { _cache['auto_skip_chapters'] = val; _isDirty = true; }
 
-  /// Кнопка «Пропустити опенінґ / ендінґ» на плеєрі (типово показується)
+  /// The "Skip opening / ending" button in the player (shown by default)
   static bool getShowSkipButton({bool fallback = true}) => _cache['show_skip_button'] as bool? ?? fallback;
   static void saveShowSkipButton(bool val) { _cache['show_skip_button'] = val; _isDirty = true; }
 
-  // --- Anime4K (шейдери апскейлу) ---
+  // --- Anime4K (upscaling shaders) ---
   static bool getAnime4kEnabled({bool fallback = false}) => _cache['anime4k_enabled'] as bool? ?? fallback;
   static void saveAnime4kEnabled(bool val) { _cache['anime4k_enabled'] = val; _isDirty = true; }
 
-  /// Режим: a | b | c | aa | bb | ca
+  /// Mode: a | b | c | aa | bb | ca
   static String getAnime4kMode({String fallback = 'a'}) => _cache['anime4k_mode'] as String? ?? fallback;
   static void saveAnime4kMode(String mode) { _cache['anime4k_mode'] = mode; _isDirty = true; }
 
-  /// Якість ланцюжка: fast | hq
+  /// Chain quality: fast | hq
   static String getAnime4kQuality({String fallback = 'fast'}) => _cache['anime4k_quality'] as String? ?? fallback;
   static void saveAnime4kQuality(String quality) { _cache['anime4k_quality'] = quality; _isDirty = true; }
 
-  /// Не застосовувати Anime4K до відео з висотою від N пікселів (0 — застосовувати завжди)
+  /// Do not apply Anime4K to videos with a height of N pixels or more (0 means always apply)
   static int getAnime4kSkipHeight({int fallback = 0}) => (_cache['anime4k_skip_height'] as num?)?.toInt() ?? fallback;
   static void saveAnime4kSkipHeight(int height) { _cache['anime4k_skip_height'] = height; _isDirty = true; }
 
-  // --- Каталог Hikka ---
-  /// Мова назв у каталозі: ua | en | ja
+  // --- Hikka catalog ---
+  /// Title language in the catalog: ua | en | ja
   static String getHikkaTitleLang({String fallback = 'ua'}) => _cache['hikka_title_lang'] as String? ?? fallback;
   static void saveHikkaTitleLang(String lang) { _cache['hikka_title_lang'] = lang; _isDirty = true; }
 
-  /// Другорядна назва під заголовком сторінки тайтла: показувати чи ні, і якою мовою (ua | en | ja)
+  /// Secondary title under the title-page heading: whether to show it and in which language (ua | en | ja)
   static bool getHikkaShowSecondary({bool fallback = true}) => _cache['hikka_show_secondary'] as bool? ?? fallback;
   static void saveHikkaShowSecondary(bool val) { _cache['hikka_show_secondary'] = val; _isDirty = true; }
   static String getHikkaSecondaryLang({String fallback = 'en'}) => _cache['hikka_secondary_lang'] as String? ?? fallback;
   static void saveHikkaSecondaryLang(String lang) { _cache['hikka_secondary_lang'] = lang; _isDirty = true; }
 
-  /// Пріоритет команд озвучення: назви (як на сайтах), найпотрібніша першою; за ними вибирається варіант за кнопкою «Дивитись»
+  /// Dub team priority: names (as on the sites), the most needed first; the "Дивитись" button picks the variant by them
   static List<String> getWatchTeamPriority() => [for (final x in (_cache['watch_team_priority'] as List? ?? const [])) '$x'];
   static void saveWatchTeamPriority(List<String> v) { _cache['watch_team_priority'] = v; _isDirty = true; }
 
-  /// Віддавати перевагу повним озвученням (з 1-ї серії, без пропусків і не коротшим за інші): у списку та за кнопкою
-  /// «Продовжити» вони вищі за неповні, хоч би де ті стояли в пріоритеті. Вимкнено — вирішує лише пріоритет команд
-  /// і те, чи є в озвученні потрібна серія
+  /// Prefer full dubs (from episode 1, no gaps and not shorter than the others): in the list and on the
+  /// "Продовжити" button they rank above incomplete ones, wherever those stand in the priority. Off: only the team priority decides
+  /// and whether the dub has the needed episode
   static bool getPreferFullDub({bool fallback = false}) => _cache['prefer_full_dub'] as bool? ?? fallback;
   static void savePreferFullDub(bool v) { _cache['prefer_full_dub'] = v; _isDirty = true; }
 
-  /// Після якої частки серії (у відсотках) вона вважається переглянутою; за замовчуванням 85
+  /// After what share of an episode (in percent) it counts as watched; 85 by default
   static int getWatchedPercent({int fallback = 85}) => ((_cache['watched_percent'] as num?)?.toInt() ?? fallback).clamp(50, 100);
   static void saveWatchedPercent(int v) { _cache['watched_percent'] = v.clamp(50, 100); _isDirty = true; }
 
-  /// Вважати серію переглянутою й раніше, коли дійшли до ендінґу (за мітками часу озвучки)
+  /// Count an episode as watched earlier, when the ending is reached (by the dub's timestamps)
   static bool getWatchedByEnding({bool fallback = true}) => _cache['watched_by_ending'] as bool? ?? fallback;
   static void saveWatchedByEnding(bool v) { _cache['watched_by_ending'] = v; _isDirty = true; }
 
-  /// Команди озвучення, які застосунок уже бачив на сайтах (найновіші першими): з них у налаштуваннях можна обрати пріоритет
+  /// Dub teams the app has already seen on the sites (newest first): the priority can be chosen from them in settings
   static List<String> getKnownTeams() => [for (final x in (_cache['known_teams'] as List? ?? const [])) '$x'];
   @visibleForTesting
   static void clearKnownTeams() { _cache.remove('known_teams'); }
@@ -258,16 +290,16 @@ class StorageService {
     _isDirty = true;
   }
 
-  /// Показувати контент 18+ (хентай); за замовчуванням ні
+  /// Show 18+ content (hentai); off by default
   static bool getHikkaAllowAdult({bool fallback = false}) => _cache['hikka_allow_adult'] as bool? ?? fallback;
   static void saveHikkaAllowAdult(bool val) { _cache['hikka_allow_adult'] = val; _isDirty = true; }
 
-  // --- Клавіатура ---
-  /// Схема гарячих клавіш: standard (↑/↓ — гучність, J/L — перемотка) | mpv (як у mpv за замовчуванням)
+  // --- Keyboard ---
+  /// Hotkey scheme: standard (↑/↓ volume, J/L seek) | mpv (as in mpv by default)
   static String getKeyScheme({String fallback = 'standard'}) => _cache['key_scheme'] as String? ?? fallback;
   static void saveKeyScheme(String scheme) { _cache['key_scheme'] = scheme; _isDirty = true; }
 
-  // --- Аудіо та відео рушій ---
+  // --- Audio and video engine ---
   static String getHwdec({String? fallback}) => _cache['hwdec'] as String? ?? fallback ?? AppPlatform.defaultHwdec;
   static Future<void> saveHwdec(String hwdec) async { _cache['hwdec'] = hwdec; _isDirty = true; await flush(); }
 
@@ -280,11 +312,11 @@ class StorageService {
   static bool getPitchCorrection({bool fallback = true}) => _cache['pitch_correction'] as bool? ?? fallback;
   static void savePitchCorrection(bool val) { _cache['pitch_correction'] = val; _isDirty = true; }
 
-  /// Орієнтація плеєра на телефоні: 'system' | 'landscape' | 'portrait' (див. `PlayerOrientation`)
+  /// Phone player orientation: 'system' | 'landscape' | 'portrait' (see `PlayerOrientation`)
   static String getPlayerOrientation({String fallback = 'landscape'}) => _cache['player_orientation'] as String? ?? fallback;
   static void savePlayerOrientation(String v) { _cache['player_orientation'] = v; _isDirty = true; }
 
-  /// Детальний журнал (запис майже всіх дій у файл). На час тестування увімкнений за замовчуванням.
+  /// Verbose log (writing almost all actions to a file). On by default during testing.
   static bool getDetailedLog({bool fallback = true}) => _cache['detailed_log'] as bool? ?? fallback;
   static void saveDetailedLog(bool v) { _cache['detailed_log'] = v; _isDirty = true; }
 
@@ -305,7 +337,7 @@ class StorageService {
     _isDirty = true;
   }
 
-  // --- Субтитри ---
+  // --- Subtitles ---
   static List<String> getSubLangPriorities({List<String> fallback = const ['uk', 'ja', 'en']}) {
     final list = _cache['sub_lang_priorities'];
     if (list is List && list.isNotEmpty) return List<String>.from(list);
@@ -376,7 +408,7 @@ class StorageService {
     _isDirty = true;
   }
 
-  // --- Остання черга та плейлисти ---
+  // --- Last queue and playlists ---
   static List<Map<String, String>> _normItems(dynamic raw) {
     if (raw is! List) return [];
     final out = <Map<String, String>>[];
@@ -388,7 +420,7 @@ class StorageService {
     return out;
   }
 
-  /// Остання черга відтворення: {'items': List<Map<String,String>>, 'index': int} або null
+  /// Last playback queue: {'items': List<Map<String,String>>, 'index': int} or null
   static Map<String, dynamic>? getLastQueue() {
     final q = _cache['last_queue'];
     if (q is! Map) return null;
@@ -411,7 +443,7 @@ class StorageService {
     flush();
   }
 
-  /// Плейлисти: [{'id','name','items','created'}], найновіші першими
+  /// Playlists: [{'id','name','items','created'}], newest first
   static List<Map<String, dynamic>> getPlaylists() {
     final raw = _cache['playlists'];
     if (raw is! List) return [];

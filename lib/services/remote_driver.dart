@@ -1,6 +1,6 @@
-/// Драйвер перегляду серій із сайтів: бере посилання на потрібну серію, відкриває його в плеєрі, памʼятає місце,
-/// позначає «переглянуто», переходить до наступної серії, перемикає озвучки, плеєри й якість і виручає, коли відео
-/// не запускається. Нічого не знає про media_kit і віджети: плеєр — це [RemoteEngine], тому все перевіряється тестами.
+/// Site episode driver: takes the link to the needed episode, opens it in the player, remembers the position,
+/// marks "watched", moves to the next episode, switches dubs, players and quality, and helps when a video
+/// does not start. Knows nothing about media_kit and widgets: the player is a [RemoteEngine], so everything is testable.
 library;
 
 import 'dart:async';
@@ -23,56 +23,56 @@ import 'watch_marks.dart';
 import 'watch_models.dart';
 import 'watch_store.dart';
 
-/// Те, що драйверу потрібно від плеєра
+/// What the driver needs from the player
 abstract class RemoteEngine {
-  /// Відкриває пряме відео (попереднє відтворення скасовується); [start] — з якого місця почати
+  /// Opens a direct video (the previous playback is cancelled); [start] is where to begin
   Future<void> openVideo(Video video, {Duration? start});
 
   Duration get position;
   Duration get duration;
 
-  /// Відео зараз відтворюється (не на паузі)
+  /// The video is currently playing (not paused)
   bool get playing;
 
-  /// Додає зовнішній субтитр; [select] — одразу показувати його
+  /// Adds an external subtitle; [select] shows it right away
   Future<void> addSubtitle(Track track, {required bool select});
 
-  /// Додає зовнішню звукову доріжку (наприклад, озвучення окремим файлом)
+  /// Adds an external audio track (e.g. a dub as a separate file)
   Future<void> addAudio(Track track, {required bool select});
 }
 
-/// Стан відтворення серії
-/// Серія скінчилась, а наступної в цій озвучці немає, хоча в інших вона є: що запропонувати глядачеві
+/// Episode playback state
+/// The episode ended and there is no next one in this dub, though other dubs have it: what to offer the viewer
 class NextOffer {
-  /// Номер потрібної серії
+  /// Number of the needed episode
   final int next;
 
-  /// Назва озвучки, де наступної серії немає
+  /// Name of the dub that has no next episode
   final String from;
 
-  /// Перша за пріоритетом озвучка з наступною серією
+  /// First dub by priority that has the next episode
   final WatchGroup byPriority;
 
-  /// Повна озвучка з наступною серією, якщо вона інша, ніж [byPriority]
+  /// Full dub with the next episode, if it differs from [byPriority]
   final WatchGroup? full;
 
   const NextOffer({required this.next, required this.from, required this.byPriority, this.full});
 }
 
 enum RemotePhase {
-  /// Сесії немає
+  /// No session
   idle,
 
-  /// Шукаємо пряме посилання на відео
+  /// Looking for a direct video link
   resolving,
 
-  /// Посилання передано плеєру, чекаємо початку відео
+  /// The link was passed to the player, waiting for the video to start
   opening,
 
-  /// Відео йде
+  /// The video is playing
   playing,
 
-  /// Не вдалося (є [RemoteDriver.error])
+  /// Failed (there is [RemoteDriver.error])
   failed,
 }
 
@@ -82,20 +82,20 @@ class RemoteDriver extends ChangeNotifier {
   final StreamResolver resolver;
   final WatchStore store;
 
-  /// Чи переходити до наступної серії, коли ця закінчилась
+  /// Whether to move to the next episode when this one ends
   final bool Function() autoNext;
 
   final int Function(String key) _readPosition;
   final void Function(String key, int positionMs, int durationMs) _writePosition;
   final DateTime Function() _now;
 
-  /// Пріоритет мов субтитрів із налаштувань: з кількох зовнішніх доріжок вмикається найвища за ним
+  /// Subtitle language priority from settings: of several external tracks the highest by it is turned on
   final List<String> Function() _subPriorities;
 
-  /// Скільки чекати на початок відео, перш ніж пробувати інший плеєр
+  /// How long to wait for the video to start before trying another player
   final Duration openTimeout;
 
-  /// Скільки чекати після помилки плеєра (помилки бувають і дрібні — відео може все одно піти)
+  /// How long to wait after a player error (errors can be minor: the video may still go)
   final Duration errorGrace;
 
   RemoteDriver({
@@ -117,18 +117,18 @@ class RemoteDriver extends ChangeNotifier {
        _writePosition = writePosition ?? StorageService.savePlaybackPosition,
        _now = now ?? DateTime.now;
 
-  // ── Зворотні виклики до контролера плеєра ────────────────────────────────────
+  // ── Callbacks to the player controller ────────────────────────────────────────
 
-  /// Змінилася поточна серія (назва, ключ позиції)
+  /// The current episode changed (title, position key)
   void Function(int index)? onEntry;
 
-  /// Змінилася черга (обрано іншу озвучку)
+  /// The queue changed (another dub was chosen)
   VoidCallback? onSession;
 
-  /// Коротке повідомлення для екрана («Наступна серія», «Це остання серія»)
+  /// A short message for the screen ("Наступна серія", "Це остання серія")
   void Function(String text, {bool error})? onMessage;
 
-  // ── Стан ────────────────────────────────────────────────────────────────────
+  // ── State ────────────────────────────────────────────────────────────────────
 
   RemoteSession? _session;
   NextOffer? _offer;
@@ -144,7 +144,7 @@ class RemoteDriver extends ChangeNotifier {
 
   RemoteSession? get session => _session;
 
-  /// Усі варіанти перегляду аніме (для перемикання озвучок); `null`, якщо запуск був без них
+  /// All watch variants of the anime (for switching dubs); `null` if launched without them
   WatchTitle? get title => _title;
 
   String get groupId => _groupId;
@@ -153,23 +153,23 @@ class RemoteDriver extends ChangeNotifier {
 
   RemotePhase get phase => _phase;
 
-  /// Повідомлення про невдачу для користувача (у фазі [RemotePhase.failed])
+  /// Failure message for the user (in the [RemotePhase.failed] phase)
   String? get error => _error;
 
-  /// Пряме відео, що відтворюється, і всі його варіанти якості / плеєри
+  /// The direct video being played and all its quality variants / players
   ResolvedStream? get stream => _stream;
 
   Video? get video => _video;
 
-  /// Розділи з таймкодів сайту (опенінґ, ендінґ …)
+  /// Chapters from the site's timestamps (opening, ending …)
   List<VideoChapter> get chapters => _chapters;
 
   bool get active => _session != null;
 
-  /// Серію ще готують або вона не запустилась: плеєр показує екран стану замість відео
+  /// The episode is still being prepared or failed to start: the player shows a state screen instead of the video
   bool get showsStatus => _session != null && (_offer != null || _phase == RemotePhase.resolving || _phase == RemotePhase.opening || _phase == RemotePhase.failed);
 
-  /// Пропозиція перейти в іншу озвучку, коли в цій наступної серії немає
+  /// An offer to switch to another dub when this one has no next episode
   NextOffer? get offer => _offer;
 
   void dismissOffer() {
@@ -178,14 +178,14 @@ class RemoteDriver extends ChangeNotifier {
     _changed();
   }
 
-  /// Прийняти пропозицію: відкрити потрібну серію в озвучці [g]
+  /// Accept the offer: open the needed episode in dub [g]
   Future<void> acceptOffer(WatchGroup g) async {
     final o = _offer;
     _offer = null;
     await switchGroup(g, episode: o?.next);
   }
 
-  /// Інший плеєр цієї серії, який варто спробувати після поточного (по колу); `null`, якщо вибору немає
+  /// Another player of this episode worth trying after the current one (in a cycle); `null` if there is no choice
   String? get alternativeHoster {
     final list = _stream?.hosters ?? const <String>[];
     if (list.length < 2) return null;
@@ -199,22 +199,22 @@ class RemoteDriver extends ChangeNotifier {
 
   bool get hasPrevious => _session != null && _index > 0;
 
-  /// Усе, що можна показати користувачеві про поточний варіант
+  /// Everything that can be shown to the user about the current variant
   WatchGroup? get group => _title?.groupById(_groupId);
 
-  /// Субтитри, а не озвучення
+  /// Subtitles, not dubbing
   bool get isSub => group?.isSub ?? false;
 
   String get hoster => _stream?.hoster ?? '';
 
-  /// Що зараз відтворюється одним рядком: «Озвучення: Amanogawa · Moon · 1080p» (без підпису — [withKind] = false)
+  /// What is playing now on one line: "Озвучення: Amanogawa · Moon · 1080p" (without the label if [withKind] = false)
   String nowPlaying({bool withKind = true}) {
     final g = group;
     final q = _video?.title ?? '';
     return [if (g != null) (withKind ? g.fullLabel : g.label), if (hoster.isNotEmpty) hoster, if (q.isNotEmpty) q].join(' · ');
   }
 
-  /// Номер спроби (1 — перший плеєр), для підпису «Пробую інший плеєр»
+  /// Attempt number (1 is the first player), for the "Пробую інший плеєр" label
   int get attempt => _tried.length;
 
   int _token = 0;
@@ -229,12 +229,12 @@ class RemoteDriver extends ChangeNotifier {
   String? _stickyHoster;
   int? _stickyHeight;
 
-  // ── Запуск і навігація ──────────────────────────────────────────────────────
+  // ── Launch and navigation ──────────────────────────────────────────────────────
 
-  /// Звірка серій варіанта з Hikka (для застережень у списку озвучок). Без даних Hikka — лише перевірка нумерації.
+  /// Reconciliation of the variant's episodes with Hikka (for warnings in the dub list). Without Hikka data, numbering check only.
   EpisodeCheck checkOf(WatchGroup g) => checkEpisodes(g.episodes, _hikka ?? const HikkaEpisodeInfo());
 
-  /// Починає перегляд: черга — усі серії обраної озвучки, відкривається стартова
+  /// Starts watching: the queue is all episodes of the chosen dub, the starting one opens
   Future<void> start(RemoteLaunch launch) async {
     _savePosition();
     _offer = null;
@@ -249,7 +249,7 @@ class RemoteDriver extends ChangeNotifier {
     await open(launch.startIndex, saveCurrent: false);
   }
 
-  /// Відкриває серію [i] поточної черги. [startAt] — з якого місця (інакше зі збереженого, а якщо його немає — спочатку).
+  /// Opens episode [i] of the current queue. [startAt] is where to start (otherwise from the saved place, and if there is none, from the start).
   Future<void> open(int i, {String? hoster, int? height, Duration? startAt, bool saveCurrent = true}) async {
     final s = _session;
     if (s == null || i < 0 || i >= s.entries.length) return;
@@ -284,7 +284,7 @@ class RemoteDriver extends ChangeNotifier {
     return true;
   }
 
-  /// Спробувати ще раз (після невдачі): з тим самим місцем, без запамʼятованих невдалих плеєрів
+  /// Try again (after a failure): with the same position, without remembered failed players
   Future<void> retry() async {
     if (!active) return;
     final at = engine.position > const Duration(seconds: 5) ? engine.position : null;
@@ -293,7 +293,7 @@ class RemoteDriver extends ChangeNotifier {
 
   Duration? _fallbackStart() => _openStart > const Duration(seconds: 5) ? _openStart : null;
 
-  /// Наступна серія є в інших озвученнях, а в цій — ні: яку озвучку запропонувати (за пріоритетом і повну)
+  /// The next episode exists in other dubs but not in this one: which dub to offer (by priority and full)
   NextOffer? _offerFor(RemoteEntry e) {
     final t = _title;
     final n = e.episode.number;
@@ -316,8 +316,8 @@ class RemoteDriver extends ChangeNotifier {
     return NextOffer(next: next, from: cur?.label ?? '', byPriority: byPriority, full: full == null || full.id == byPriority.id ? null : full);
   }
 
-  /// Куди перейти, коли поточної серії в новому варіанті немає: перша ще не переглянута серія після неї (за
-  /// номером); якщо таких немає — остання серія варіанта; без номера — перша не переглянута
+  /// Where to go when the current episode is not in the new variant: the first not-yet-watched episode after it (by
+  /// number); if there is none, the variant's last episode; without a number, the first unwatched one
   int _nearestIndex(RemoteSession ns, RemoteEntry cur, String animeKey) {
     final entries = ns.entries;
     final seen = store.watched(animeKey);
@@ -332,16 +332,16 @@ class RemoteDriver extends ChangeNotifier {
     return after >= 0 ? after : entries.length - 1;
   }
 
-  /// Скільки серій уже відмічено на Hikka (з пам'яті; без входу — 0)
+  /// How many episodes are already marked on Hikka (from memory; 0 when signed out)
   int _hikkaSeen(String animeKey) {
     const prefix = 'hikka:';
     if (!animeKey.startsWith(prefix)) return 0;
     return HikkaMyList.instance.cached(animeKey.substring(prefix.length))?.episodes ?? 0;
   }
 
-  /// Перемикає озвучку / субтитри. Та сама серія (за номером) відкривається з того ж місця; якщо в новому варіанті
-  /// її немає — перша ще не переглянута, з початку (раніше брався номер за позицією, що кидав у кінець тайтла).
-  /// [episode] — відкрити серію з цим номером
+  /// Switches dub / subtitles. The same episode (by number) opens from the same place; if the new variant
+  /// does not have it, the first unwatched one from the start (previously the number was taken by position, which threw you to the end of the title).
+  /// [episode]: open the episode with this number
   Future<void> switchGroup(WatchGroup g, {int? episode}) async {
     final s = _session;
     final t = _title;
@@ -357,7 +357,7 @@ class RemoteDriver extends ChangeNotifier {
     _groupId = g.id;
     _offer = null;
     _stickyHoster = null;
-    // Свідомий вибір: запамʼятовується для цього тайтлу й стає типовим для нових (див. `pickGroup`)
+    // A deliberate choice: remembered for this title and becomes the default for new ones (see `pickGroup`)
     store.setPreferredGroup(s.animeKey, g.id);
     store.setPinnedGroup(s.animeKey, g.id);
     store.setFavoriteChoice(choiceKeyOf(g));
@@ -366,7 +366,7 @@ class RemoteDriver extends ChangeNotifier {
     await open(ni, startAt: sameEpisode && at > const Duration(seconds: 5) ? at : null, saveCurrent: false);
   }
 
-  /// Вручну обраний плеєр (Moon, Ashdi …): діє й на наступні серії цієї сесії
+  /// Manually chosen player (Moon, Ashdi …): also applies to the next episodes of this session
   Future<void> switchHoster(String name) async {
     if (!active || name.isEmpty || name == hoster) return;
     _stickyHoster = name;
@@ -374,20 +374,20 @@ class RemoteDriver extends ChangeNotifier {
     await open(_index, hoster: name, startAt: at > const Duration(seconds: 5) ? at : _fallbackStart());
   }
 
-  /// Інша якість того самого плеєра: посилання вже відоме, повторного пошуку немає
+  /// Another quality of the same player: the link is already known, no new lookup
   Future<void> switchQuality(Video v) async {
     final res = _stream;
     if (!active || res == null || _phase == RemotePhase.resolving || v.url == _video?.url) return;
-    _stickyHeight = v.resolution; // «Авто» (без висоти) повертає налаштування за замовчуванням
+    _stickyHeight = v.resolution; // "Авто" (no height) restores the default setting
     final at = engine.position;
     final token = ++_token;
     _cancelTimers();
     await _launch(token, res, v, at > const Duration(seconds: 5) ? at : null);
   }
 
-  // ── Події плеєра ────────────────────────────────────────────────────────────
+  // ── Player events ────────────────────────────────────────────────────────────
 
-  /// Плеєр дізнався тривалість — відео справді запустилось
+  /// The player learned the duration: the video has really started
   void onDuration(Duration d) {
     if (!active || d <= Duration.zero || _phase != RemotePhase.opening) return;
     final v = _video;
@@ -399,7 +399,7 @@ class RemoteDriver extends ChangeNotifier {
     if (v != null) unawaited(_applyExtras(token, v));
   }
 
-  /// Раз на кілька секунд: зберігає місце й позначає серію переглянутою
+  /// Every few seconds: saves the position and marks the episode watched
   void tick() {
     if (!active || _phase != RemotePhase.playing) return;
     _savePosition();
@@ -409,11 +409,11 @@ class RemoteDriver extends ChangeNotifier {
     }
   }
 
-  /// Серія дограла до кінця
+  /// The episode played to the end
   Future<void> onCompleted() async {
     final e = entry;
     if (!active || e == null || _phase != RemotePhase.playing) return;
-    // Відео скінчилося за мить після старту з середини — збережена позиція не підійшла цій озвучці: починаємо спочатку
+    // The video ended a moment after starting from the middle: the saved position did not suit this dub, so we start over
     if (_openStart > Duration.zero && _now().difference(_openedAt) < const Duration(seconds: 6)) {
       _openStart = Duration.zero;
       final token = ++_token;
@@ -423,7 +423,7 @@ class RemoteDriver extends ChangeNotifier {
     }
     if (!_marked) _markWatched(e);
     final dur = engine.duration.inMilliseconds;
-    if (dur > 0) _writePosition(e.key, dur, dur); // дивитись спочатку, а не з кінця
+    if (dur > 0) _writePosition(e.key, dur, dur); // watch from the beginning, not from the end
     if (!hasNext) {
       final o = _offerFor(e);
       if (o != null) {
@@ -436,11 +436,11 @@ class RemoteDriver extends ChangeNotifier {
     }
     if (autoNext()) {
       onMessage?.call('Наступна серія');
-      await next(save: false); // підсумок серії вже записано вище
+      await next(save: false); // the episode summary was already recorded above
     }
   }
 
-  /// Помилка плеєра: до початку відео — пробуємо інший плеєр; під час перегляду — перевіряємо, чи потік не завис
+  /// Player error: before the video starts, we try another player; during watching, we check whether the stream froze
   void onPlayerError(String text) {
     if (!active) return;
     final token = _token;
@@ -451,13 +451,13 @@ class RemoteDriver extends ChangeNotifier {
       _stallCheck?.cancel();
       _stallCheck = Timer(errorGrace, () {
         if (token != _token || _phase != RemotePhase.playing || !engine.playing) return;
-        if ((engine.position - at).inMilliseconds.abs() > 500) return; // відео йде — помилка була дрібна
+        if ((engine.position - at).inMilliseconds.abs() > 500) return; // the video is going: the error was minor
         unawaited(_recover());
       });
     }
   }
 
-  /// Потік міг протухнути (посилання живуть пару годин): беремо нове й продовжуємо з того ж місця
+  /// The stream may have gone stale (links live a couple of hours): take a new one and continue from the same place
   Future<void> _recover() async {
     final now = _now();
     final last = _lastRecover;
@@ -468,7 +468,7 @@ class RemoteDriver extends ChangeNotifier {
     await open(_index, hoster: _stream?.hoster, startAt: at > const Duration(seconds: 5) ? at : null, saveCurrent: false);
   }
 
-  /// Зупиняє сесію (закрили плеєр або відкрили інший файл)
+  /// Stops the session (the player was closed or another file was opened)
   void stop({bool save = true}) {
     if (!active) return;
     if (save) _savePosition();
@@ -492,7 +492,7 @@ class RemoteDriver extends ChangeNotifier {
     super.dispose();
   }
 
-  // ── Внутрішнє ───────────────────────────────────────────────────────────────
+  // ── Internal ───────────────────────────────────────────────────────────────
 
   void _changed() {
     if (!_disposed) notifyListeners();
@@ -507,7 +507,7 @@ class RemoteDriver extends ChangeNotifier {
 
   StreamSubscription<int>? _blockedSub;
 
-  /// Локальний проксі повідомляє, що сервер відхиляє сегменти: чекати 30 с марно, одразу пробуємо інший плеєр
+  /// The local proxy reports that the server rejects segments: waiting 30 s is pointless, we try another player right away
   void _watchBlocked(int token) {
     _blockedSub?.cancel();
     final baseline = HlsProxy.instance.blockedCount;
@@ -523,17 +523,17 @@ class RemoteDriver extends ChangeNotifier {
     final s = _session!;
     store.setWatched(s.animeKey, e.epKey, true);
     _syncToHikka(s, e);
-    _changed(); // у панелі серій зʼявляється позначка «переглянуто»
+    _changed(); // a "watched" mark appears in the episode panel
   }
 
-  /// Передає прогрес у списки Hikka: лише для тайтлів із каталогу Hikka, лише за входу й тихо
+  /// Sends progress to Hikka lists: only for titles from the Hikka catalog, only when signed in, and quietly
   void _syncToHikka(RemoteSession s, RemoteEntry e) {
     final total = _hikka?.total;
     final n = WatchMarks.hikkaNumber(number: e.episode.number, position: s.entries.indexOf(e) + 1, allNumbers: s.entries.map((x) => x.episode.number), total: total);
     WatchMarks.syncToHikka(s.animeKey, n, total: total);
   }
 
-  /// Довге утримання серії в списку: ставить чи знімає позначку «переглянуто» (і на Hikka)
+  /// Long press on an episode in the list: sets or clears the "watched" mark (on Hikka too)
   void toggleWatched(int i) {
     final s = _session;
     if (s == null || i < 0 || i >= s.entries.length) return;
@@ -542,7 +542,7 @@ class RemoteDriver extends ChangeNotifier {
     final total = _hikka?.total;
     final n = WatchMarks.hikkaNumber(number: e.episode.number, position: i + 1, allNumbers: s.entries.map((x) => x.episode.number), total: total);
     WatchMarks.set(store, s.animeKey, e.epKey, value, hikkaEpisode: n, total: total);
-    if (i == _index) _marked = true; // поточну серію не позначати знову автоматично
+    if (i == _index) _marked = true; // do not mark the current episode again automatically
     onMessage?.call(value ? 'Позначено переглянутою' : 'Позначку знято');
     _changed();
   }
@@ -568,7 +568,7 @@ class RemoteDriver extends ChangeNotifier {
         return;
       }
       final res = await resolver.resolve(source, e.episode, hoster: hoster, height: height);
-      if (token != _token) return; // за цей час обрали іншу серію
+      if (token != _token) return; // another episode was chosen in the meantime
       if (_tried.contains(res.hoster.toLowerCase())) {
         _fail(token, 'Жоден із плеєрів не запустив це відео');
         return;
@@ -581,7 +581,7 @@ class RemoteDriver extends ChangeNotifier {
     }
   }
 
-  /// Передає відео плеєру й чекає на його початок
+  /// Hands the video to the player and waits for it to start
   Future<void> _launch(int token, ResolvedStream res, Video v, Duration? start) async {
     if (token != _token) return;
     _stream = res;
@@ -612,7 +612,7 @@ class RemoteDriver extends ChangeNotifier {
     });
   }
 
-  /// Відео не запустилось: пробуємо наступний плеєр серії, а як їх більше немає — повідомляємо про невдачу
+  /// The video did not start: we try the episode's next player, and when there are no more we report the failure
   Future<void> _failOver(int token, String reason) async {
     if (token != _token) return;
     SourceLog.add('Збій відкриття: $reason');
@@ -650,11 +650,11 @@ class RemoteDriver extends ChangeNotifier {
     _changed();
   }
 
-  /// Зовнішні доріжки (субтитри, окрема озвучка) додаються, коли відео вже завантажилось
+  /// External tracks (subtitles, a separate dub) are added once the video has loaded
   Future<void> _applyExtras(int token, Video v) async {
     try {
       final subs = v.subtitleTracks;
-      // Субтитри обрано свідомо (варіант «Субтитри»): вмикаємо доріжку за мовою з налаштувань, а не просто першу
+      // Subtitles were chosen deliberately (the "Субтитри" variant): turn on the track by the language from settings, not just the first one
       final pick = subs.isEmpty ? 0 : LangMatch.pickByLabel([for (final t in subs) t.lang], _subPriorities());
       for (int i = 0; i < subs.length; i++) {
         if (token != _token) return;

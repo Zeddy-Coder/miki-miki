@@ -9,12 +9,12 @@ import 'storage_service.dart';
 import 'system_fonts.dart';
 
 class MpvConfig {
-  /// Шрифт субтитрів для libass на Android (Liberation Sans, SIL OFL 1.1; є кирилиця, зокрема і ї є ґ).
-  /// У libmpv для Android немає системних шрифтів: без цього шрифту libass не малює жодного рядка.
+  /// Subtitle font for libass on Android (Liberation Sans, SIL OFL 1.1; has Cyrillic, including ї and ґ).
+  /// libmpv for Android has no system fonts: without this font libass draws no line at all.
   static const String androidSubtitleFontAsset = 'assets/fonts/subtitle.ttf';
   static const String androidSubtitleFontName = 'Liberation Sans';
 
-  /// Розкладає вбудовані шрифти (і запасний Liberation Sans) у теку застосунку: libass читає шрифти лише з файлів
+  /// Lays out the bundled fonts (and the fallback Liberation Sans) in the app folder: libass reads fonts only from files
   static Future<String?> ensureEmbeddedFontsDir() async {
     try {
       final dir = Directory('${StorageService.appBasePath}/fonts');
@@ -57,16 +57,16 @@ class MpvConfig {
         await platform.setProperty('sub-fix-timing', 'yes');
         await platform.setProperty('gapless-audio', 'yes');
 
-        // 1. Застосування стилів субтитрів
+        // 1. Applying subtitle styles
         await applySubtitleStyles(player);
 
-        // 2. Зчитування та застосування кастомного mpv.conf якщо він існує
+        // 2. Reading and applying a custom mpv.conf if it exists
         await loadCustomMpvConf(player);
       }
     } catch (_) {}
   }
 
-  // ЗЧИТУВАННЯ ТА ПАРСИНГ КАСТОМНОГО MPV.CONF
+  // READING AND PARSING THE CUSTOM MPV.CONF
   static Future<void> loadCustomMpvConf(Player player) async {
     try {
       final dynamic platform = player.platform;
@@ -108,7 +108,7 @@ class MpvConfig {
     } catch (_) {}
   }
 
-  // ЗАСТОСУВАННЯ СТИЛІВ CRUNCHYROLL ТА РЕЖИМІВ SSA OVERRIDE
+  // APPLYING CRUNCHYROLL STYLES AND SSA OVERRIDE MODES
   static Future<void> applySubtitleStyles(Player player) async {
     try {
       final dynamic platform = player.platform;
@@ -122,8 +122,8 @@ class MpvConfig {
         final bgOpacity = StorageService.getSubBgOpacity();
         final assMode = StorageService.getSubAssMode(); // 'no' | 'yes' | 'force'
 
-        // Android: єдиний доступний libass шрифт — вбудований (його каталог і назву вже задав media_kit); власні
-        // шрифти й назву з налаштувань для Windows сюди не переносимо, бо вони замінили б його й субтитри зникли б
+        // Android: the only available libass font is the bundled one (media_kit already set its directory and name); custom
+        // fonts and the name from the Windows settings are not carried over here, since they would replace it and subtitles would vanish
         final bool android = Platform.isAndroid;
         final customFonts = android ? const <String>[] : StorageService.getCustomFonts();
         final embedded = SystemFonts.embedded.containsKey(font);
@@ -134,11 +134,11 @@ class MpvConfig {
         }
         if (dirs.isNotEmpty) await platform.setProperty('sub-fonts-dir', dirs.join(Platform.isWindows ? ';' : ':'));
 
-        // Режими переписування ASS
+        // ASS rewrite modes
         if (assMode == 'force') {
           await platform.setProperty('sub-ass-override', 'force');
         } else if (assMode == 'yes') {
-          // Переписує тільки звичайний текст діалогів (зберігає написи та пісні)
+          // Rewrites only the plain dialogue text (keeps signs and songs)
           await platform.setProperty('sub-ass-override', 'yes');
         } else {
           await platform.setProperty('sub-ass-override', 'no');

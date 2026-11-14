@@ -57,8 +57,12 @@ class AppFadeSwitcher extends StatelessWidget {
   final Duration duration;
   final AlignmentGeometry alignment;
 
-  /// true — старий і новий вміст розтягуються на весь доступний простір
+  /// true: old and new content stretch over all available space
   final bool expand;
+
+  /// true: fading old content takes no room in the layout: only the new one sets the size. Without it, when the new
+  /// content is shorter (or empty), everything below "jumps" as soon as the fade ends.
+  final bool overlayPrevious;
 
   const AppFadeSwitcher({
     super.key,
@@ -66,6 +70,7 @@ class AppFadeSwitcher extends StatelessWidget {
     this.duration = AppAnim.fast,
     this.alignment = Alignment.topLeft,
     this.expand = false,
+    this.overlayPrevious = false,
   });
 
   @override
@@ -79,7 +84,7 @@ class AppFadeSwitcher extends StatelessWidget {
           alignment: alignment,
           fit: expand ? StackFit.expand : StackFit.loose,
           children: <Widget>[
-            ...previousChildren,
+            for (final old in previousChildren) overlayPrevious ? Positioned(left: 0, right: 0, top: 0, child: old) : old,
             if (currentChild != null) currentChild,
           ],
         );
@@ -90,8 +95,8 @@ class AppFadeSwitcher extends StatelessWidget {
   }
 }
 
-/// Плавна поява/зникнення віджета (fade + легкий зсув). На відміну від `if (...)`,
-/// під час зникнення вміст ще лишається на екрані й плавно гасне.
+/// Smooth appearance / disappearance of a widget (fade + a slight shift). Unlike `if (...)`,
+/// while disappearing the content stays on screen and fades smoothly.
 class AppPresence extends StatelessWidget {
   final bool visible;
   final Widget child;
@@ -138,7 +143,7 @@ class AppPresence extends StatelessWidget {
   }
 }
 
-/// AnimatedContainer із токенами кіта за замовчуванням
+/// AnimatedContainer with the kit's default tokens
 class AppAnimatedContainer extends StatelessWidget {
   final Duration duration;
   final Curve curve;
@@ -200,7 +205,7 @@ class AppAnimatedContainer extends StatelessWidget {
   }
 }
 
-/// Плавна прозорість (AnimatedOpacity з токенами кіта)
+/// Smooth opacity (AnimatedOpacity with the kit's tokens)
 class AppFade extends StatelessWidget {
   final double opacity;
   final Duration duration;
@@ -221,7 +226,7 @@ class AppFade extends StatelessWidget {
   }
 }
 
-/// Плавний поворот (AnimatedRotation з токенами кіта)
+/// Smooth rotation (AnimatedRotation with the kit's tokens)
 class AppRotate extends StatelessWidget {
   final double turns;
   final Duration duration;
@@ -242,7 +247,7 @@ class AppRotate extends StatelessWidget {
   }
 }
 
-/// Плавна зміна розміру за вмістом
+/// Smooth size change following the content
 class AppAnimatedSize extends StatelessWidget {
   final Duration duration;
   final Curve curve;
@@ -263,7 +268,7 @@ class AppAnimatedSize extends StatelessWidget {
   }
 }
 
-/// AnimatedPositioned із токенами кіта
+/// AnimatedPositioned with the kit's tokens
 class AppAnimatedPositioned extends StatelessWidget {
   final Duration duration;
   final Curve curve;
@@ -304,8 +309,8 @@ class AppAnimatedPositioned extends StatelessWidget {
   }
 }
 
-/// Бокова панель, що висувається: ширина плавно росте з 0 до [extent],
-/// вміст при цьому не стискається (обрізається), а старий вміст плавно гасне.
+/// A sliding side panel: the width grows smoothly from 0 to [extent],
+/// the content is not squeezed (it is clipped), and the old content fades smoothly.
 class AppSlideReveal extends StatelessWidget {
   final bool isOpen;
   final double extent;
@@ -330,7 +335,7 @@ class AppSlideReveal extends StatelessWidget {
           minWidth: extent,
           maxWidth: extent,
           alignment: Alignment.topRight,
-          // Окремий шар: панель (з тінню) растеризується раз і лише зсувається під час анімації
+          // A separate layer: the panel (with its shadow) is rasterized once and only shifted during the animation
           child: RepaintBoundary(child: child),
         ),
       ),
@@ -338,7 +343,7 @@ class AppSlideReveal extends StatelessWidget {
   }
 }
 
-/// Плавне число 0..1 (для кастомних малювальників): значення анімується до [value]
+/// A smooth number 0..1 (for custom painters): the value animates to [value]
 class AppAnimatedValue extends StatelessWidget {
   final double value;
   final Duration duration;
@@ -364,7 +369,7 @@ class AppAnimatedValue extends StatelessWidget {
   }
 }
 
-/// Діалоги з єдиною анімацією (fade + scale) замість стандартного showDialog
+/// Dialogs with a single animation (fade + scale) instead of the standard showDialog
 class AppDialogs {
   static Future<T?> show<T>(
     BuildContext context, {
@@ -383,7 +388,7 @@ class AppDialogs {
   }
 }
 
-/// Суворо вертикальне розкриття (Top-to-Bottom, без горизонтального розширення)
+/// Strictly vertical reveal (top to bottom, no horizontal expansion)
 class AppVerticalCollapse extends StatefulWidget {
   final bool isExpanded;
   final Widget child;
@@ -586,7 +591,7 @@ class AppDialogTransition {
   }
 }
 
-/// Розумний скрол: 1:1 прямий безконфліктний трекінг для тачпада, плавний інерційний наплив для мишки
+/// Smart scroll: direct conflict-free 1:1 tracking for a touchpad, a smooth inertial flow for a mouse
 class AppSmoothScrollView extends StatefulWidget {
   final ScrollController? controller;
   final Widget child;
@@ -640,17 +645,17 @@ class _AppSmoothScrollViewState extends State<AppSmoothScrollView> {
   void _onPointerSignal(PointerSignalEvent pointerSignal) {
     if (pointerSignal is PointerScrollEvent) {
       final dy = pointerSignal.scrollDelta.dy;
-      // Розпізнавання тачпада: PointerDeviceKind.trackpad або мікродельти
+      // Touchpad detection: PointerDeviceKind.trackpad or micro-deltas
       final bool isTrackpad = pointerSignal.kind == PointerDeviceKind.trackpad ||
           dy.abs() < 24.0 ||
           (dy != dy.roundToDouble() && dy.abs() < 40.0);
 
       if (isTrackpad) {
-        // Тачпад: пропускаємо напряму в нативний рушій Flutter для ідеального 1:1 відгуку
+        // Touchpad: pass straight to Flutter's native engine for a perfect 1:1 response
         return;
       }
 
-      // Мишка: перехоплюємо грубі клацання коліщатка для надання інерційного напливу
+      // Mouse: we intercept coarse wheel clicks to give an inertial flow
       GestureBinding.instance.pointerSignalResolver.register(pointerSignal, (event) {
         if (event is! PointerScrollEvent) return;
         if (!_scrollController.hasClients) return;
@@ -692,14 +697,14 @@ class _AppSmoothScrollViewState extends State<AppSmoothScrollView> {
   }
 }
 
-/// Контролер плавної прокрутки колесом миші для БУДЬ-ЯКОГО скролу (ListView, SingleChildScrollView…).
+/// Smooth mouse-wheel scroll controller for ANY scroll (ListView, SingleChildScrollView…).
 ///
-/// Стандартна поведінка Flutter на десктопі: кожен «клік» колеса миттєво стрибає на
-/// фіксовану відстань без інерції, і це виглядає як гальмування. Тут колесо
-/// накопичує цільову позицію й пливе до неї 220 мс (easeOutCubic). Тачпад і
-/// дрібні дельти йдуть напряму, без згладжування, щоб відгук був 1:1.
+/// Standard Flutter behavior on desktop: every wheel "click" instantly jumps a
+/// fixed distance without inertia, and it looks like stuttering. Here the wheel
+/// accumulates a target position and glides to it for 220 ms (easeOutCubic). Touchpad and
+/// small deltas go straight through without smoothing, so the response is 1:1.
 ///
-/// На відміну від [AppSmoothScrollView], працює і зі списками, які будуються ліниво.
+/// Unlike [AppSmoothScrollView], it also works with lazily built lists.
 class AppSmoothScrollController extends ScrollController {
   AppSmoothScrollController({
     super.initialScrollOffset,
@@ -745,13 +750,13 @@ class _AppSmoothScrollPosition extends ScrollPositionWithSingleContext {
 
   @override
   void pointerScroll(double delta) {
-    // Тачпад / мікродельти: напряму, як у стандартному рушії
+    // Touchpad / micro-deltas: straight through, as in the standard engine
     if (delta == 0.0 || delta.abs() < 24.0) {
       super.pointerScroll(delta);
       return;
     }
 
-    // Якщо анімація не триває, цільова позиція починається з поточної
+    // If no animation is running, the target position starts from the current one
     if (activity is! DrivenScrollActivity || (_target - pixels).abs() > 400) {
       _target = pixels;
     }

@@ -11,12 +11,12 @@ class VideoViewport extends StatefulWidget {
   final VoidCallback onSpeedStart;
   final VoidCallback onSpeedEnd;
   final VoidCallback onTap;
-  /// Подвійний дотик: true = правий бік (вперед), false = лівий (назад); null = вимкнено
+  /// Double tap: true = right side (forward), false = left (back); null = off
   final ValueChanged<bool>? onDoubleTapSide;
   final String doubleTapLabel;
   final List<Widget> overlays;
 
-  /// Збільшення щипком (телефон); null — без збільшення
+  /// Pinch zoom (phone); null means no zoom
   final VideoZoomController? zoom;
 
   const VideoViewport({
@@ -61,7 +61,7 @@ class _VideoViewportState extends State<VideoViewport> {
     final width = cons.maxWidth;
     return Stack(
       children: [
-        // 1. ВІДЕОПОТІК ТА ЖЕСТИ КЛІКУ (ПРИВ'ЯЗАНІ ТІЛЬКИ ДО ВІДЕОШАРУ)
+        // 1. VIDEO STREAM AND CLICK GESTURES (BOUND ONLY TO THE VIDEO LAYER)
         Positioned.fill(
           child: GestureDetector(
               behavior: HitTestBehavior.opaque,
@@ -88,7 +88,7 @@ class _VideoViewportState extends State<VideoViewport> {
           ),
         ),
 
-        // 2. 2.0x ПЛАШКА
+        // 2. 2.0x BADGE
         Positioned(
           top: 45 * scale,
           left: 0,
@@ -116,7 +116,7 @@ class _VideoViewportState extends State<VideoViewport> {
           ),
         ),
 
-        // Індикатор перемотки подвійним дотиком
+        // Double-tap seek indicator
         Positioned(
           top: 0,
           bottom: 0,
@@ -136,7 +136,7 @@ class _VideoViewportState extends State<VideoViewport> {
           ),
         ),
 
-        // 3. НАКЛАДАНІ ВІДЖЕТИ, ШУХЛЯДИ ТА ОВЕРЛЕЇ (ПОВНІСТЮ ІЗОЛЬОВАНІ)
+        // 3. OVERLAY WIDGETS, DRAWERS AND OVERLAYS (FULLY ISOLATED)
         ...widget.overlays,
       ],
     );

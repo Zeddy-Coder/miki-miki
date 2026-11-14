@@ -6,13 +6,13 @@ import '../services/ui_theme_service.dart';
 import '../utils/platform_info.dart';
 import 'app_animation_kit.dart';
 
-/// Екранне сповіщення поверх відео (гучність, швидкість, Anime4K, клавіші mpv…).
-/// Завжди темне «скляне» — лежить на відео, тому не залежить від світлої / темної теми.
+/// An on-screen notification over the video (volume, speed, Anime4K, mpv keys…).
+/// Always dark "glass": it sits on the video, so it does not depend on the light / dark theme.
 class OsdToast extends StatelessWidget {
   final double scale;
   final ValueListenable<OsdMessage?> message;
 
-  /// Додатковий відступ згори (телефон: виріз / рядок стану)
+  /// Extra top padding (phone: the cutout / status bar)
   final double topInset;
 
   const OsdToast({super.key, required this.scale, required this.message, this.topInset = 0});
@@ -154,7 +154,7 @@ class _OsdPill extends StatelessWidget {
   }
 }
 
-/// Кнопка клавіатури для темних оверлеїв
+/// Keyboard key for dark overlays
 class _OverlayKeyCap extends StatelessWidget {
   final double scale;
   final String text;

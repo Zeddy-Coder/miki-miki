@@ -45,7 +45,7 @@ void main() {
       expect(AppLog.sanitize('заголовок Bearer abc.def'), 'заголовок Bearer ***');
       expect(AppLog.sanitize('apikey=SECRET; password: hunter2'), 'apikey=***; password: ***');
       expect(AppLog.sanitize('Set-Cookie: sid=1; Path=/'), contains('Set-Cookie: ***'));
-      // звичайний текст не чіпаємо
+      // plain text is left alone
       expect(AppLog.sanitize('keyboard: ok, monkey see'), 'keyboard: ok, monkey see');
       expect(AppLog.sanitize('швидкість ×1.25, поз 12:34'), 'швидкість ×1.25, поз 12:34');
     });
@@ -198,7 +198,7 @@ void main() {
       await log.clear();
       expect(await log.files(), isEmpty);
       expect(log.length, 0);
-      // після очищення журнал знову пишеться
+      // after clearing, the log is written again
       log.log(LogLevel.info, 'т', 'нове');
       await log.flushNow();
       expect((await log.sessionText()), contains('нове'));

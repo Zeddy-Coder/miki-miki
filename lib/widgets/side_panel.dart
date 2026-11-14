@@ -30,11 +30,11 @@ class SidePanel extends StatefulWidget {
   final ValueChanged<int> onQueueRemove;
   final VoidCallback onQueueClear;
 
-  /// Серії із сайту: замість черги файлів показуються серії, озвучки й плеєри
+  /// Site episodes: instead of a file queue, episodes, dubs and players are shown
   final RemoteDriver? remote;
 
-  /// Телефон: без власної поверхні й ширини — поверхню та положення дає [MobileSheetFrame],
-  /// кнопки збільшені під дотик, черга міняється порядок лише перетягуванням
+  /// Phone: without a surface or width of its own: the surface and position come from [MobileSheetFrame],
+  /// the buttons are enlarged for touch, the queue is reordered only by dragging
   final bool sheet;
 
   const SidePanel({
@@ -108,7 +108,7 @@ class _SidePanelState extends State<SidePanel> {
   @override
   void initState() {
     super.initState();
-    // Не запускаємо фонові плеєри (прев'ю), поки панель висувається — інакше це б'є по плавності
+    // We do not start background players (previews) while the panel slides out, otherwise it hurts smoothness
     ThumbnailService.holdFor(AppAnim.slow + const Duration(milliseconds: 200));
     _prepareChapterPreviews();
   }
@@ -256,7 +256,7 @@ class _SidePanelState extends State<SidePanel> {
     }
   }
 
-  /// Тонкий скролбар у стилі меню налаштувань
+  /// A thin scrollbar in the style of the settings menu
   Widget _scrollArea(double scale, Widget child) {
     return ScrollConfiguration(
       behavior: const AppScrollBehavior().copyWith(scrollbars: false),
@@ -275,8 +275,8 @@ class _SidePanelState extends State<SidePanel> {
       );
     }
 
-    // Позиція відео оновлюється десятки разів на секунду, тому слухаємо не її, а лише
-    // індекс поточного розділу (distinct): список перебудовується тільки при зміні розділу.
+    // The video position updates dozens of times per second, so we listen not to it but only to
+    // the current chapter index (distinct): the list rebuilds only when the chapter changes.
     return StreamBuilder<int>(
       stream: widget.player.stream.position.map(_currentChapterIndex).distinct(),
       initialData: _currentChapterIndex(widget.player.state.position),
@@ -384,7 +384,7 @@ class _SidePanelState extends State<SidePanel> {
     return -1;
   }
 
-  /// Невелика квадратна кнопка-плитка для панелей
+  /// A small square tile button for panels
   Widget _iconTile(double scale, IconData icon, {required VoidCallback onTap, bool active = false, String? tooltip, double size = 30}) {
     final tile = Material(
       color: active ? uiTheme.accentColor.withValues(alpha: 0.18) : uiTheme.bgElevated,
@@ -486,7 +486,7 @@ class _SidePanelState extends State<SidePanel> {
                       final bool many = widget.playlistItems.length > 1;
                       final radius = uiTheme.borderRadius(10 * scale);
 
-                      // Рядок у тому ж вигляді, що й список пріоритету мов у налаштуваннях
+                      // A row in the same look as the language priority list in settings
                       return Container(
                         key: ObjectKey(item),
                         margin: EdgeInsets.only(bottom: 6 * scale),
@@ -703,7 +703,7 @@ class _SidePanelState extends State<SidePanel> {
     );
   }
 
-  /// Рядки про джерело відео: шлях до файлу або серія / озвучка / плеєр (пряме посилання на потік не показуємо)
+  /// Lines about the video source: the file path or episode / dub / player (we do not show the direct stream link)
   List<Widget> _fileRows(double scale) {
     final rd = widget.remote;
     if (rd != null && rd.active) {

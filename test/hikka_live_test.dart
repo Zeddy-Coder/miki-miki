@@ -1,5 +1,5 @@
-// «Живий» тест: усі запити каталогу проти справжнього api.hikka.io. Не входить у звичайний набір:
-// запускати вручну — `flutter test test/hikka_live_test.dart` (потрібен інтернет).
+// A "live" test: all catalog requests against the real api.hikka.io. Not part of the regular suite:
+// run it manually with `flutter test test/hikka_live_test.dart` (internet required).
 @Timeout(Duration(minutes: 6))
 library;
 
@@ -91,7 +91,7 @@ void main() {
     final voices = await api.characterVoices(slug, size: 30);
     expect(voices.items, isNotEmpty);
     final groups = HikkaCharacterVoice.groupByLanguage(voices.items);
-    // Усі мови мають людські назви: жодної «сирої» двобуквеної (en / ja) у підписах
+    // All languages have human names: no "raw" two-letter ones (en / ja) in labels
     for (final g in groups) {
       expect(g.$1.length, greaterThan(2), reason: 'код мови без перекладу: ${g.$1}');
     }

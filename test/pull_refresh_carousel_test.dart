@@ -22,7 +22,7 @@ void main() {
               children: [
                 SizedBox(
                   height: 160,
-                  // Нова карусель при кожному «оновленні даних» (як на головній)
+                  // A new carousel on every "data refresh" (as on home)
                   child: ListView.builder(
                     key: ValueKey('carousel-$generation'),
                     controller: generation == 0 ? horizontal : null,
@@ -39,7 +39,7 @@ void main() {
       ),
     ));
 
-    // Потяг униз від верху запускає оновлення
+    // A pull down from the top starts a refresh
     final pull = await tester.startGesture(const Offset(300, 400));
     for (var i = 0; i < 12; i++) {
       await pull.moveBy(const Offset(0, 14));
@@ -48,7 +48,7 @@ void main() {
     await pull.up();
     await tester.pump(const Duration(milliseconds: 50));
 
-    // Оновлення триває, дані перемалювалися — нова карусель
+    // The refresh is running, the data was repainted: a new carousel
     rebuild(() => generation++);
     await tester.pump();
     done.complete();

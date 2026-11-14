@@ -4,10 +4,10 @@ import 'package:flutter/services.dart' show rootBundle;
 
 import 'storage_service.dart';
 
-/// Виконує команду mpv (`change-list glsl-shaders …`). У застосунку це `NativePlayer.command`.
+/// Runs an mpv command (`change-list glsl-shaders …`). In the app this is `NativePlayer.command`.
 typedef MpvCommand = Future<void> Function(List<String> args);
 
-/// Якість ланцюжка шейдерів Anime4K.
+/// Quality of the Anime4K shader chain.
 enum Anime4kQuality {
   fast('Fast', 'Швидкий', 'Для слабших відеокарт: GTX 980, GTX 1060, RX 570 та подібних', 'Для слабших пристроїв: менше навантаження й нагрів'),
   hq('HQ', 'Висока якість', 'Для потужних відеокарт: GTX 1080, RTX 2070, RTX 3060, RX 5700 XT та вище', 'Для потужних пристроїв: краща картинка, більше навантаження');
@@ -17,17 +17,17 @@ enum Anime4kQuality {
   final String label;
   final String title;
 
-  /// Підказка для ПК (відеокарти)
+  /// Hint for PC (graphics cards)
   final String gpuHint;
 
-  /// Підказка для телефона (без назв відеокарт)
+  /// Hint for phone (without graphics card names)
   final String deviceHint;
 
   static Anime4kQuality parse(String? raw) =>
       Anime4kQuality.values.firstWhere((q) => q.name == raw, orElse: () => Anime4kQuality.fast);
 }
 
-/// Режими Anime4K (офіційні комбінації v4). Вибирати треба той, що виглядає найкраще.
+/// Anime4K modes (official v4 combinations). Pick whichever looks best.
 enum Anime4kMode {
   a(
     label: 'A',
@@ -84,32 +84,32 @@ enum Anime4kMode {
     this.needsUpscale = false,
   });
 
-  /// Коротка назва: A, B+B …
+  /// Short name: A, B+B …
   final String label;
 
-  /// Цифра в комбінації Ctrl+цифра (як в офіційному input.conf Anime4K)
+  /// The digit in the Ctrl+digit combination (as in the official Anime4K input.conf)
   final int digit;
   final String tagline;
   final String bestFor;
   final String note;
 
-  /// Режими з другим проходом мають сенс лише при збільшенні картинки від ×2
+  /// Modes with a second pass only make sense when upscaling by ×2 or more
   final bool needsUpscale;
 
   String get title => 'Режим $label';
 
-  /// Ідентифікатор дії клавіші в каталозі гарячих клавіш
+  /// Identifier of the key action in the hotkey catalog
   String get shortcutId => 'a4k_mode_$digit';
 
   static Anime4kMode parse(String? raw) =>
       Anime4kMode.values.firstWhere((m) => m.name == raw, orElse: () => Anime4kMode.a);
 }
 
-/// Нативна підтримка Anime4K: шейдери лежать у assets, при першому використанні розпаковуються
-/// в `%APPDATA%/MikiMiki/shaders/anime4k` (mpv читає шейдери лише з диска) і підключаються
-/// до рушія командою `change-list glsl-shaders`.
+/// Native Anime4K support: the shaders live in assets and are unpacked on first use
+/// into `%APPDATA%/MikiMiki/shaders/anime4k` (mpv reads shaders only from disk) and attached
+/// to the engine with the `change-list glsl-shaders` command.
 ///
-/// Шейдери: bloc97/Anime4K v4.0.1, ліцензія MIT (assets/shaders/anime4k/LICENSE.txt).
+/// Shaders: bloc97/Anime4K v4.0.1, MIT license (assets/shaders/anime4k/LICENSE.txt).
 class Anime4kService {
   Anime4kService._();
 
@@ -124,8 +124,8 @@ class Anime4kService {
   static String _upscale(String v) => 'Anime4K_Upscale_CNN_x2_$v.glsl';
   static String _upscaleDenoise(String v) => 'Anime4K_Upscale_Denoise_CNN_x2_$v.glsl';
 
-  /// Ланцюжок шейдерів режиму — точно як в офіційних шаблонах input.conf
-  /// (Low-end → Fast: M та S, High-end → HQ: VL та M).
+  /// The mode's shader chain, exactly as in the official input.conf templates
+  /// (Low-end → Fast: M and S, High-end → HQ: VL and M).
   static List<String> chain(Anime4kMode mode, Anime4kQuality quality) {
     final big = quality == Anime4kQuality.hq ? 'VL' : 'M';
     final small = quality == Anime4kQuality.hq ? 'M' : 'S';
@@ -145,27 +145,27 @@ class Anime4kService {
     }
   }
 
-  /// Усі файли, які можуть знадобитися (для перевірки збірки)
+  /// All files that may be needed (for build verification)
   static Set<String> get allShaderFiles => {
         for (final q in Anime4kQuality.values)
           for (final m in Anime4kMode.values) ...chain(m, q),
       };
 
-  /// «Режим A (Fast)»
+  /// "Режим A (Fast)"
   static String describe(Anime4kMode mode, Anime4kQuality quality) => '${mode.title} (${quality.label})';
 
   static Directory get shaderDir => Directory('${StorageService.appBasePath}/shaders/anime4k');
 
   static final Set<String> _verified = {};
 
-  /// Розпаковує потрібні шейдери з assets (лише відсутні чи змінені) і повертає шляхи з прямими слешами.
+  /// Unpacks the needed shaders from assets (only missing or changed ones) and returns paths with forward slashes.
   static Future<List<String>> ensureExtracted(List<String> names) async {
     final dir = shaderDir;
     if (!await dir.exists()) await dir.create(recursive: true);
     final paths = <String>[];
     for (final name in names) {
       final file = File('${dir.path}/$name');
-      // Розмір звіряється раз за запуск, наявність файлу — щоразу (папку могли очистити, поки плеєр працює)
+      // Size is checked once per launch, file presence every time (the folder could be cleaned while the player runs)
       if (!_verified.contains(file.path) || !await file.exists()) {
         final data = await rootBundle.load('$assetDir/$name');
         final bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
@@ -179,7 +179,7 @@ class Anime4kService {
     return paths;
   }
 
-  /// Підключає ланцюжок до mpv. Повертає текст помилки або `null`, якщо все гаразд.
+  /// Attaches the chain to mpv. Returns the error text or `null` if all is well.
   static Future<String?> apply(MpvCommand command, Anime4kMode mode, Anime4kQuality quality) async {
     final List<String> paths;
     try {
@@ -191,10 +191,10 @@ class Anime4kService {
     }
 
     try {
-      // Роздільник списку шляхів у mpv: «;» на Windows, «:» в інших системах
+      // Path list separator in mpv: ";" on Windows, ":" elsewhere
       final sep = Platform.isWindows ? ';' : ':';
       if (paths.any((p) => p.contains(sep))) {
-        // Шлях містить роздільник — додаємо по одному (append не розбиває рядок)
+        // The path contains the separator: add one by one (append does not split the string)
         await command(const ['change-list', 'glsl-shaders', 'clr', '']);
         for (final p in paths) {
           await command(['change-list', 'glsl-shaders', 'append', p]);
@@ -208,14 +208,14 @@ class Anime4kService {
     }
   }
 
-  /// Вимикає всі GLSL-шейдери (як CTRL+0 в офіційному конфігу)
+  /// Disables all GLSL shaders (like CTRL+0 in the official config)
   static Future<void> clear(MpvCommand command) async {
     try {
       await command(const ['change-list', 'glsl-shaders', 'clr', '']);
     } catch (_) {}
   }
 
-  /// Чи схожий рядок логу mpv на помилку шейдера (компіляція, відсутній файл)
+  /// Whether an mpv log line looks like a shader error (compilation, missing file)
   static bool looksLikeShaderFailure(String level, String text) {
     if (level != 'error' && level != 'fatal') return false;
     final t = text.toLowerCase();

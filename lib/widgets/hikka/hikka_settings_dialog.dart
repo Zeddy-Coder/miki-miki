@@ -13,14 +13,14 @@ import '../../services/hikka_nav.dart';
 import 'hikka_common.dart';
 import 'sources_dialog.dart';
 
-/// Вміст вкладки «Каталог» основних налаштувань: мова назв, друга назва, 18+, джерела перегляду, свій клієнт Hikka,
-/// оновлення даних і кеш зображень. Зміни застосовуються одразу.
+/// Content of the main settings' "Каталог" tab: title language, second title, 18+, watch sources, own Hikka client,
+/// data refresh and the image cache. Changes apply immediately.
 class HikkaCatalogSettings extends StatefulWidget {
   final double scale;
 
   const HikkaCatalogSettings({super.key, required this.scale});
 
-  /// «12,4 МБ» / «830 КБ» / «0 Б»
+  /// "12,4 МБ" / "830 КБ" / "0 Б"
   static String formatBytes(int bytes) {
     if (bytes < 1024) return '$bytes Б';
     if (bytes < 1024 * 1024) return '${(bytes / 1024).round()} КБ';
@@ -58,7 +58,7 @@ class _HikkaCatalogSettingsState extends State<HikkaCatalogSettings> {
 
   Future<void> _clearImages() async {
     await HikkaImageStore.instance.clear();
-    // Уже декодовані картинки теж скидаємо, щоб нове завантаження справді пішло з мережі
+    // Already decoded images are reset too, so the new load really goes to the network
     PaintingBinding.instance.imageCache
       ..clear()
       ..clearLiveImages();

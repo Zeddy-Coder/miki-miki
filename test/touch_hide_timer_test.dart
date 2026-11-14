@@ -19,8 +19,8 @@ void main() {
     final t = TouchHideTimer(shouldStayVisible: () => false, onHide: () => hidden++);
     t.arm();
     await tester.pump(const Duration(seconds: 3));
-    t.arm(); // дотик на 3-й секунді
-    await tester.pump(const Duration(seconds: 3)); // 6 с від початку, 3 с від дотику
+    t.arm(); // a touch at the 3rd second
+    await tester.pump(const Duration(seconds: 3)); // 6 s from the start, 3 s from the touch
     expect(hidden, 0);
     await tester.pump(const Duration(milliseconds: 1100));
     expect(hidden, 1);
@@ -34,7 +34,7 @@ void main() {
     await tester.pump(const Duration(seconds: 5));
     expect(hidden, 0);
     expect(t.isArmed, isFalse, reason: 'таймер відпрацював і чекає наступного дотику');
-    stay = false; // відновили відтворення, потім будь-який дотик знову запускає відлік
+    stay = false; // playback resumed, then any touch restarts the countdown
     t.arm();
     await tester.pump(const Duration(seconds: 5));
     expect(hidden, 1);

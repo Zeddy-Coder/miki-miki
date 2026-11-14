@@ -50,7 +50,7 @@ void main() {
     StorageService.saveAutoSkipChapters(true);
     final p = await pumpAt(t, const Duration(minutes: 1, seconds: 35));
     expect(p.seeks, [const Duration(minutes: 3)]);
-    // Той самий розділ вдруге не пропускається
+    // The same chapter is not skipped a second time
     p.tickPosition(const Duration(minutes: 1, seconds: 38));
     await t.pump(const Duration(milliseconds: 200));
     expect(p.seeks.length, 1);

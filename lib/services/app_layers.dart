@@ -1,18 +1,18 @@
 import 'package:flutter/material.dart';
 
-/// Шари інтерфейсу: мініплеєр стоїть над сторінками, але під шторками, діалогами й сторінкою налаштувань.
-/// Шторки та сторінки, що живуть усередині дерева (а не в Navigator), «займають» шар через [AppLayerClaim];
-/// поки є хоч одне заняття, мініплеєр ховається під них і не перекриває кнопок.
+/// UI layers: the mini player sits above pages but under drawers, dialogs and the settings page.
+/// Drawers and pages that live inside the tree (not in the Navigator) "claim" a layer via [AppLayerClaim];
+/// while there is at least one claim, the mini player hides under them and does not cover buttons.
 class AppLayers {
   AppLayers._();
 
-  /// Скільки накладок зараз закривають нижню частину екрана
+  /// How many overlays currently cover the bottom of the screen
   static final ValueNotifier<int> blockers = ValueNotifier<int>(0);
 
   static bool get blocked => blockers.value > 0;
 }
 
-/// Позначає, що [child] — накладка (шторка, сторінка налаштувань), яку мініплеєр не має перекривати, поки [active].
+/// Marks [child] as an overlay (drawer, settings page) that the mini player must not cover while [active].
 class AppLayerClaim extends StatefulWidget {
   final bool active;
   final Widget child;
@@ -41,7 +41,7 @@ class _AppLayerClaimState extends State<AppLayerClaim> {
   void _sync() {
     if (widget.active == _held) return;
     _held = widget.active;
-    // Не сповіщаємо слухачів посеред побудови дерева
+    // Do not notify listeners in the middle of building the tree
     final delta = _held ? 1 : -1;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       AppLayers.blockers.value = (AppLayers.blockers.value + delta).clamp(0, 1 << 20);

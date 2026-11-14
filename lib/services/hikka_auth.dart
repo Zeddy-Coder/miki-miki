@@ -1,9 +1,9 @@
-/// Вхід в акаунт Hikka через «зовнішній застосунок» (клієнт): людина дозволяє доступ на hikka.io, сайт
-/// перекидає її на адресу клієнта з кодом запиту, а застосунок міняє цей код на токен.
+/// Signing in to a Hikka account through an "external app" (client): the person allows access on hikka.io, the site
+/// redirects them to the client's address with a request code, and the app exchanges that code for a token.
 ///
-/// Код ловить тимчасовий сервер на `127.0.0.1` (див. [HikkaLoopback]): він працює лише поки йде вхід і
-/// слухає тільки цей комп'ютер чи телефон. Якщо порт зайнятий чи застосунок убило в фоні — запасний шлях:
-/// вставити адресу, на яку перекинув сайт (або сам код), прямо у вікні входу ([HikkaAuth.submit]).
+/// The code is caught by a temporary server on `127.0.0.1` (see [HikkaLoopback]): it runs only while sign-in is in progress and
+/// listens only on this computer or phone. If the port is busy or the app was killed in the background, the fallback is to
+/// paste the address the site redirected to (or the code itself) right in the sign-in dialog ([HikkaAuth.submit]).
 library;
 
 import 'dart:async';
@@ -20,20 +20,20 @@ import 'hikka_client_key.dart';
 import 'storage_service.dart';
 import 'system_controls.dart';
 
-/// Стан входу
+/// Sign-in state
 enum HikkaAuthPhase { signedOut, waiting, exchanging, signedIn }
 
 class HikkaAuth extends ChangeNotifier {
-  /// Спільний екземпляр (у тестах підміняється)
+  /// Shared instance (replaced in tests)
   static HikkaAuth instance = HikkaAuth();
 
   static const String section = 'hikka_auth';
   static const String webBase = 'https://hikka.io';
 
-  /// Які права просимо: профіль, списки перегляду, улюблене
+  /// Permissions we ask for: profile, watch lists, favorites
   static const List<String> scopes = ['user-details', 'watchlist', 'favourite'];
 
-  /// Адреса, яку треба вказати в налаштуваннях застосунку на hikka.io («Посилання переспрямування»)
+  /// The address to enter in the app settings on hikka.io ("Redirect link")
   static const int loopbackPort = 47615;
   static const String loopbackPath = '/auth/confirm';
   static const String redirectUri = 'http://127.0.0.1:$loopbackPort$loopbackPath';
@@ -73,7 +73,7 @@ class HikkaAuth extends ChangeNotifier {
         _openUrl = urlOpener ?? SystemControls.openUrl,
         _startLoopback = loopbackFactory ?? HikkaLoopback.start {
     _phase = token.isEmpty ? HikkaAuthPhase.signedOut : HikkaAuthPhase.signedIn;
-    // Спільний API бере токен звідси; окремому (тестовому) екземпляру токен задається прямо
+    // The shared API takes the token from here; a separate (test) instance gets its token directly
     String? provide() => token.isEmpty ? null : token;
     final own = _apiOverride;
     if (own != null) {
@@ -88,19 +88,19 @@ class HikkaAuth extends ChangeNotifier {
 
   HikkaApi get _api => _apiOverride ?? HikkaApi.instance;
 
-  // ── Стан ───────────────────────────────────────────────────────
+  // ── State ───────────────────────────────────────────────────────
 
   HikkaAuthPhase get phase => _phase;
   String get token => (_data['token'] as String?) ?? '';
   bool get signedIn => token.isNotEmpty && _phase == HikkaAuthPhase.signedIn;
 
-  /// Йде вхід (чекаємо дозволу на сайті або міняємо код на токен)
+  /// Sign-in is in progress (waiting for consent on the site or exchanging the code for a token)
   bool get busy => _phase == HikkaAuthPhase.waiting || _phase == HikkaAuthPhase.exchanging;
 
-  /// Остання помилка входу для показу людині (скидається новою спробою)
+  /// Last sign-in error to show the person (reset by a new attempt)
   String? get error => _error;
 
-  /// Локальна адреса для відповіді сайту піднялась (якщо ні — лишається вставити код вручну)
+  /// The local address for the site's reply is up (if not, pasting the code manually remains)
   bool get loopbackReady => _loopbackReady;
 
   HikkaMe? get me {
@@ -110,7 +110,7 @@ class HikkaAuth extends ChangeNotifier {
 
   String get username => me?.username ?? '';
 
-  /// Передавати прогрес перегляду в списки Hikka (типово так)
+  /// Send watch progress to Hikka lists (on by default)
   bool get syncProgress => (_data['sync'] as bool?) ?? true;
 
   set syncProgress(bool value) {
@@ -119,15 +119,15 @@ class HikkaAuth extends ChangeNotifier {
     _commit();
   }
 
-  // ── Клієнт Hikka ───────────────────────────────────────────────
+  // ── Hikka client ───────────────────────────────────────────────
 
-  /// Свій клієнт, якщо людина вписала його в налаштуваннях (має перевагу над вбудованим)
+  /// The person's own client, if entered in settings (takes priority over the built-in one)
   String get customReference => (_data['client_ref'] as String?) ?? '';
   String get customSecret => (_data['client_secret'] as String?) ?? '';
 
   String get clientReference => customReference.isNotEmpty ? customReference : HikkaClientKey.reference;
 
-  /// Секрет лише свого клієнта; вбудований клієнт секрету в застосунку не має (його додає бекенд)
+  /// Secret of the own client only; the built-in client has no secret in the app (the backend adds it)
   String get clientSecret => customSecret;
   bool get hasClient => clientReference.isNotEmpty && (customReference.isEmpty || customSecret.isNotEmpty);
 
@@ -144,12 +144,12 @@ class HikkaAuth extends ChangeNotifier {
     _commit();
   }
 
-  /// Сторінка дозволу на hikka.io
+  /// Consent page on hikka.io
   String get authorizeUrl => '$webBase/oauth?reference=${Uri.encodeQueryComponent(clientReference)}&scope=${scopes.join(',')}';
 
-  // ── Вхід ───────────────────────────────────────────────────────
+  // ── Sign-in ───────────────────────────────────────────────────────
 
-  /// Відкриває сторінку дозволу в браузері й чекає код (до [loginTimeout]); далі міняє його на токен
+  /// Opens the consent page in a browser and waits for the code (up to [loginTimeout]); then exchanges it for a token
   Future<void> startLogin() async {
     if (busy) return;
     if (!hasClient) {
@@ -192,7 +192,7 @@ class HikkaAuth extends ChangeNotifier {
     await _finish(ref);
   }
 
-  /// Скасувати вхід (закрили вікно)
+  /// Cancel sign-in (the window was closed)
   void cancelLogin() {
     if (_phase != HikkaAuthPhase.waiting) return;
     _cancelled = true;
@@ -204,7 +204,7 @@ class HikkaAuth extends ChangeNotifier {
     }
   }
 
-  /// Запасний шлях: людина вставила адресу, на яку перекинув сайт (або сам код). `false` — коду не знайшли.
+  /// Fallback: the person pasted the address the site redirected to (or the code itself). `false`: no code found.
   bool submit(String pasted) {
     final ref = parseReference(pasted);
     if (ref == null) {
@@ -217,7 +217,7 @@ class HikkaAuth extends ChangeNotifier {
     if (c != null && !c.isCompleted) {
       c.complete(ref);
     } else if (!busy) {
-      // Застосунок перезапускали, поки людина була на сайті, — завершуємо вхід одразу
+      // The app was restarted while the person was on the site, so we finish the sign-in immediately
       unawaited(_finish(ref));
     }
     return true;
@@ -226,7 +226,7 @@ class HikkaAuth extends ChangeNotifier {
   Future<void> _finish(String ref) async {
     _setPhase(HikkaAuthPhase.exchanging);
     try {
-      // Обмін коду не має висіти вічно: якщо мережа чи служба входу мовчать, людина бачить помилку й може повторити
+      // The code exchange must not hang forever: if the network or the sign-in service is silent, the person sees an error and can retry
       await _exchange(ref).timeout(
         exchangeTimeout,
         onTimeout: () => throw const HikkaException(HikkaErrorKind.timeout, 'Служба входу не відповіла вчасно. Перевірте мережу й спробуйте ще раз.'),
@@ -241,7 +241,7 @@ class HikkaAuth extends ChangeNotifier {
   Future<void> _exchange(String ref) async {
     final seq = ++_exchangeSeq;
     final t = customSecret.isNotEmpty ? await _api.exchangeToken(ref, customSecret) : await _viaBackend(ref);
-    if (seq != _exchangeSeq || _phase != HikkaAuthPhase.exchanging) return; // обмін уже відкинуто (таймаут)
+    if (seq != _exchangeSeq || _phase != HikkaAuthPhase.exchanging) return; // the exchange has already been abandoned (timeout)
     _data['token'] = t.secret;
     _data['expires'] = t.expiration;
     final HikkaMe me;
@@ -257,7 +257,7 @@ class HikkaAuth extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Вбудований клієнт: код міняє бекенд, секрет клієнта до застосунку не потрапляє
+  /// Built-in client: the backend exchanges the code, the client secret never reaches the app
   Future<HikkaToken> _viaBackend(String ref) async {
     try {
       final (status, j) = await BackendClient.instance.hikkaToken(ref);
@@ -281,7 +281,7 @@ class HikkaAuth extends ChangeNotifier {
       return 'Hikka відхилила вхід (${e.code ?? e.status ?? 'помилка'}). Перевірте клієнта в налаштуваннях.';
     }
     if (e.kind == HikkaErrorKind.network && e.detail.isNotEmpty) {
-      // Без причини «немає інтернету» нічого не пояснює: показуємо, куди саме не вдалося достукатись
+      // "No internet" alone explains nothing without the reason: we show exactly where we failed to connect
       final d = e.detail.length > 140 ? '${e.detail.substring(0, 140)}…' : e.detail;
       return '${e.message}\n$d';
     }
@@ -293,7 +293,7 @@ class HikkaAuth extends ChangeNotifier {
     _setPhase(token.isEmpty ? HikkaAuthPhase.signedOut : HikkaAuthPhase.signedIn);
   }
 
-  /// Оновлює профіль із сервера (аватар, ім'я)
+  /// Refreshes the profile from the server (avatar, name)
   Future<void> refresh() async {
     if (!signedIn) return;
     try {
@@ -304,7 +304,7 @@ class HikkaAuth extends ChangeNotifier {
     }
   }
 
-  /// Вихід: токен відкликається на сервері (якщо вдасться), але локально людина виходить завжди
+  /// Sign-out: the token is revoked on the server (if possible), but locally the person always signs out
   Future<void> signOut() async {
     if (token.isNotEmpty) {
       try {
@@ -351,13 +351,13 @@ class HikkaAuth extends ChangeNotifier {
     if (notify) notifyListeners();
   }
 
-  // ── Розбір коду ────────────────────────────────────────────────
+  // ── Code parsing ────────────────────────────────────────────────
 
   static final RegExp _uuid = RegExp(r'[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}');
   static final RegExp _queryRef = RegExp(r'(?:^|[?&])(?:request_)?reference=([^&#\s]+)');
 
-  /// Дістає код запиту з адреси переспрямування (`…/auth/confirm?reference=…`), з голого коду чи з тексту,
-  /// де він є. `null` — нічого схожого.
+  /// Extracts the request code from a redirect address (`…/auth/confirm?reference=…`), a bare code, or text
+  /// that contains it. `null`: nothing similar.
   static String? parseReference(String input) {
     final s = input.trim();
     if (s.isEmpty) return null;
@@ -375,7 +375,7 @@ class HikkaAuth extends ChangeNotifier {
   }
 }
 
-/// Тимчасовий HTTP-сервер лише на `127.0.0.1`: приймає одне переспрямування від hikka.io й віддає код входу.
+/// A temporary HTTP server on `127.0.0.1` only: accepts one redirect from hikka.io and returns the sign-in code.
 class HikkaLoopback {
   final HttpServer _server;
   final String path;
@@ -385,7 +385,7 @@ class HikkaLoopback {
     _server.listen(_handle, onError: (_) {});
   }
 
-  /// Піднімає сервер. `null` — порт зайнятий чи сокет недоступний.
+  /// Starts the server. `null`: the port is busy or the socket is unavailable.
   static Future<HikkaLoopback?> start({int port = HikkaAuth.loopbackPort, String path = HikkaAuth.loopbackPath}) async {
     try {
       return HikkaLoopback._(await HttpServer.bind(InternetAddress.loopbackIPv4, port), path);
@@ -397,13 +397,13 @@ class HikkaLoopback {
 
   int get port => _server.port;
 
-  /// Код запиту, щойно його принесе браузер; `null` — сервер закрили раніше
+  /// The request code as soon as the browser brings it; `null`: the server was closed earlier
   Future<String?> get reference => _done.future;
 
   Future<void> _handle(HttpRequest req) async {
     final res = req.response;
     try {
-      // Лише запити до нашої адреси й лише від «127.0.0.1»/«localhost» (захист від підміни DNS)
+      // Only requests to our address and only from "127.0.0.1"/"localhost" (protection against DNS spoofing)
       final host = req.headers.host ?? '';
       if (req.method != 'GET' || req.uri.path != path || !(host == '127.0.0.1' || host == 'localhost')) {
         res.statusCode = HttpStatus.notFound;
@@ -425,7 +425,7 @@ class HikkaLoopback {
     }
   }
 
-  /// Кнопка й автоматичне повернення в застосунок (на телефоні система відкриє його за схемою miki://)
+  /// Button and automatic return to the app (on a phone the system opens it via the miki:// scheme)
   static const String _backToApp =
       '<p style="margin-top:18px"><a href="miki://open" style="display:inline-block;padding:11px 20px;border-radius:10px;'
       'background:#e8636a;color:#fff;text-decoration:none;font-weight:bold">Повернутись у застосунок</a></p>'

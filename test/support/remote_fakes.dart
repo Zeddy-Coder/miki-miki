@@ -1,4 +1,4 @@
-// Спільні імітації для тестів серій із сайтів: плеєр, джерело, сховище й «стенд» із драйвером.
+// Shared fakes for site-episode tests: a player, a source, a store and a "stand" with the driver.
 import 'dart:async';
 import 'dart:convert';
 
@@ -13,7 +13,7 @@ import 'package:miki_miki/services/stream_resolver.dart';
 import 'package:miki_miki/services/watch_models.dart';
 import 'package:miki_miki/services/watch_store.dart';
 
-/// Плеєр-імітація: записує, що йому відкривали й додавали
+/// A player fake: records what was opened and added to it
 class FakeEngine implements RemoteEngine {
   final List<({Video video, Duration? start})> opens = [];
   final List<({Track track, bool select})> subs = [];
@@ -42,14 +42,14 @@ class FakeEngine implements RemoteEngine {
   String get lastUrl => opens.last.video.url;
 }
 
-/// Джерело-імітація: плеєри серії задаються в `hosters` за адресою серії
+/// A source fake: the episode's players are set in `hosters` by episode address
 class FakeSource extends AnimeSource {
   FakeSource(this.sid, this.byEpisode);
 
   final String sid;
   final Map<String, List<Hoster>> byEpisode;
   int hosterCalls = 0;
-  Completer<void>? gate; // затримує відповідь, поки тест не дозволить
+  Completer<void>? gate; // delays the response until the test allows it
 
   @override
   String get id => sid;
@@ -172,7 +172,7 @@ class Rig {
   late final RemoteDriver driver;
   final Map<String, int> positions;
 
-  /// Пріоритет мов субтитрів («налаштування»): з кількох зовнішніх доріжок вмикається найвища за ним
+  /// Subtitle language priority ("settings"): of several external tracks the highest by it is turned on
   List<String> subLangs;
   final List<({String key, int pos, int dur})> saved;
   final List<int> entries = [];
@@ -182,7 +182,7 @@ class Rig {
 
   RemoteLaunch launch({String? epKey, WatchGroup? g}) => RemoteLaunch(title: title, group: g ?? group, animeTitle: 'Аніме', epKey: epKey);
 
-  /// Імітує, що плеєр дізнався тривалість (відео почалося)
+  /// Simulates the player learning the duration (the video started)
   void started({Duration dur = const Duration(minutes: 24)}) {
     engine.duration = dur;
     driver.onDuration(dur);

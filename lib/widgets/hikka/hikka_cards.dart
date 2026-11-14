@@ -11,11 +11,11 @@ import '../app_ui_kit.dart';
 import 'hikka_common.dart';
 import 'hikka_my_list_bar.dart';
 
-/// Дії контекстного меню тайтла
+/// Title context menu actions
 enum HikkaItemAction { open, markWatched, remove }
 
-/// Контекстне меню тайтла (довгий дотик / права кнопка миші): «Відкрити», «Позначити як переглянуте» (лише коли
-/// людина ввійшла) і, якщо [canRemove], «Прибрати зі списку». Повертає вибрану дію або null.
+/// Title context menu (long press / right mouse button): "Відкрити", "Позначити як переглянуте" (only when
+/// the person is signed in) and, if [canRemove], "Прибрати зі списку". Returns the chosen action or null.
 Future<HikkaItemAction?> showHikkaItemMenu(BuildContext context, Offset at, double scale, {bool canRemove = true}) async {
   final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
   PopupMenuItem<HikkaItemAction> item(HikkaItemAction v, IconData icon, String text) => PopupMenuItem<HikkaItemAction>(
@@ -45,32 +45,32 @@ Future<HikkaItemAction?> showHikkaItemMenu(BuildContext context, Offset at, doub
   );
 }
 
-/// «Позначити як переглянуте»: статус «Переглянуто», лічильник серій добивається до кінця
+/// "Позначити як переглянуте": status "Переглянуто", the episode counter topped up to the end
 Future<void> markHikkaWatched(HikkaAnime a) async {
   try {
     await HikkaMyList.instance.save(a.slug, status: HikkaWatchStatus.completed, total: a.episodesTotal, anime: a);
   } catch (_) {}
 }
 
-/// Картка аніме: постер з оцінкою, назва в два рядки, тип і рік. Натискання відкриває сторінку аніме.
+/// Anime card: a poster with a score, the title on two lines, type and year. A tap opens the anime page.
 class HikkaAnimeCard extends StatelessWidget {
   final HikkaAnime anime;
   final double scale;
 
-  /// Підпис замість «тип · рік» (наприклад «Сьогодні, 18:30»)
+  /// A label instead of "type · year" (e.g. "Сьогодні, 18:30")
   final String? caption;
 
-  /// Плашка у верхньому лівому куті постера (наприклад «Серія 5»)
+  /// A badge in the top left corner of the poster (e.g. "Серія 5")
   final String? pill;
 
-  /// Колір плашки (за замовчуванням акцент)
+  /// Badge color (accent by default)
   final Color? pillColor;
   final VoidCallback? onTap;
 
-  /// Якщо задано, у контекстному меню (довгий дотик / права кнопка миші) є ще «Прибрати зі списку»
+  /// If set, the context menu (long press / right mouse button) also has "Прибрати зі списку"
   final VoidCallback? onRemove;
 
-  /// Смужка зі статусом зі «Списків» унизу постера (лише коли людина ввійшла й тайтл у її списках)
+  /// A status strip from "Списки" at the bottom of the poster (only when the person is signed in and the title is in their lists)
   final bool showStatus;
 
   const HikkaAnimeCard({
@@ -206,7 +206,7 @@ class HikkaAnimeCard extends StatelessWidget {
   }
 }
 
-/// Картка персонажа: портрет, ім'я в два рядки, підпис (роль чи кількість аніме)
+/// Character card: a portrait, the name on two lines, a label (role or number of anime)
 class HikkaCharacterCard extends StatelessWidget {
   final HikkaCharacter character;
   final double scale;
@@ -257,12 +257,62 @@ class HikkaCharacterCard extends StatelessWidget {
   }
 }
 
-/// Рядок списку: мініатюра постера, назва, дрібні мітки й підпис; праворуч за потреби віджет
+/// Crew member or actor card: a portrait, name, roles; a tap opens the person's page
+class HikkaPersonCard extends StatelessWidget {
+  final HikkaPerson person;
+  final double scale;
+  final String? caption;
+
+  const HikkaPersonCard({super.key, required this.person, required this.scale, this.caption});
+
+  @override
+  Widget build(BuildContext context) {
+    final r = uiTheme.borderRadius(10 * scale);
+    final sub = caption ?? '';
+    return Semantics(
+      button: true,
+      label: sub.isEmpty ? person.name : '${person.name}. $sub',
+      excludeSemantics: true,
+      child: InkWell(
+        onTap: () => HikkaNav.instance.openPerson(person.slug, seed: person),
+        borderRadius: r,
+        splashColor: Colors.transparent,
+        highlightColor: uiTheme.touchHighlight,
+        hoverColor: uiTheme.hoverOverlay,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            HikkaPoster(url: person.image, scale: scale, icon: Symbols.person_rounded),
+            SizedBox(height: 7 * scale),
+            Text(
+              person.name,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontFamily: 'Arial', color: uiTheme.textPrimary, fontSize: 12.5 * scale, fontWeight: FontWeight.w600, height: 1.25),
+            ),
+            if (sub.isNotEmpty)
+              Padding(
+                padding: EdgeInsets.only(top: 3 * scale),
+                child: Text(
+                  sub,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontFamily: 'Arial', color: uiTheme.textMuted, fontSize: 11 * scale, height: 1.25),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// List row: a poster thumbnail, title, small marks and a label; on the right a widget if needed
 class HikkaAnimeRow extends StatelessWidget {
   final HikkaAnime anime;
   final double scale;
 
-  /// Мітка над назвою (зв'язок у франшизі: «Сиквел», «Рекап»)
+  /// Label above the title (a franchise relation: "Сиквел", "Рекап")
   final String? label;
   final bool highlighted;
   final String? subtitle;

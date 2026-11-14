@@ -5,8 +5,8 @@ import '../services/thumbnail_service.dart';
 import '../services/ui_theme_service.dart';
 import 'app_animation_kit.dart';
 
-/// Прев'юшка відео. Бере картинку з кешу; якщо її немає, ставить файл у чергу на
-/// генерацію й показує заглушку, поки кадр не буде готовий.
+/// Video thumbnail. Takes the image from the cache; if there is none, queues the file for
+/// generation and shows a placeholder until the frame is ready.
 class AppMediaThumbnail extends StatefulWidget {
   final String uri;
   final double scale;
@@ -15,10 +15,10 @@ class AppMediaThumbnail extends StatefulWidget {
   final double radius;
   final Color? borderColor;
 
-  /// Заглушка, поки прев'юшки немає (за замовчуванням іконка фільму)
+  /// Placeholder while there is no thumbnail (a film icon by default)
   final Widget? fallback;
 
-  /// Накладка поверх картинки (бейджі, кнопка відтворення тощо)
+  /// Overlay on top of the image (badges, a play button, etc.)
   final Widget? overlay;
 
   const AppMediaThumbnail({

@@ -9,15 +9,15 @@ import '../../services/hikka_nav.dart';
 import '../../services/ui_theme_service.dart';
 import '../app_animation_kit.dart';
 
-/// Опис у Markdown: абзаци, посилання (на аніме й персонажів — усередині застосунку, решта — у браузері),
-/// жирний і курсив, цитати та приховані спойлери.
+/// A Markdown description: paragraphs, links (to anime and characters inside the app, the rest in a browser),
+/// bold and italic, quotes and hidden spoilers.
 class HikkaMarkdownView extends StatefulWidget {
   final String? source;
   final double scale;
   final double fontSize;
   final Color? color;
 
-  /// Куди вести посилання; за замовчуванням — навігація каталогу
+  /// Where to send a link; by default the catalog navigation
   final void Function(String url)? onLink;
 
   const HikkaMarkdownView({
@@ -78,7 +78,7 @@ class _HikkaMarkdownViewState extends State<HikkaMarkdownView> {
         height: 1.5,
       );
 
-  /// Фрагменти рядка → `TextSpan` (посилання отримують розпізнавач натискання)
+  /// Line fragments → `TextSpan` (links get a tap recognizer)
   List<InlineSpan> _spans(List<MdSpan> spans, List<TapGestureRecognizer> sink) {
     return [
       for (final s in spans)
@@ -160,7 +160,7 @@ class _HikkaMarkdownViewState extends State<HikkaMarkdownView> {
           child: HikkaSpoilerBox(
             scale: scale,
             title: b.title,
-            // Внутрішні розпізнавачі живуть стільки ж, скільки решта: вони потрапляють у той самий список
+            // Internal recognizers live as long as the rest: they go into the same list
             childBuilder: () => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [for (final c in b.blocks) _block(c, sink)]),
           ),
         );
@@ -170,7 +170,7 @@ class _HikkaMarkdownViewState extends State<HikkaMarkdownView> {
   @override
   Widget build(BuildContext context) {
     if (_blocks.isEmpty) return const SizedBox.shrink();
-    // Розпізнавачі попереднього кадру знищуємо після побудови нового
+    // Recognizers of the previous frame are destroyed after the new one is built
     final old = List<TapGestureRecognizer>.of(_recognizers);
     _recognizers.clear();
     if (old.isNotEmpty) {
@@ -184,7 +184,7 @@ class _HikkaMarkdownViewState extends State<HikkaMarkdownView> {
   }
 }
 
-/// Прихований блок: рядок «Спойлер» розкривається натисканням (в описах і в статтях)
+/// A hidden block: the "Спойлер" line expands on tap (in descriptions and articles)
 class HikkaSpoilerBox extends StatefulWidget {
   final double scale;
   final String? title;
@@ -256,13 +256,13 @@ class _HikkaSpoilerBoxState extends State<HikkaSpoilerBox> {
   }
 }
 
-/// Згортає довгий вміст до [collapsedHeight] з плавним затемненням і кнопкою «Показати більше»
+/// Collapses long content to [collapsedHeight] with a soft fade and a "Показати більше" button
 class HikkaCollapsible extends StatefulWidget {
   final Widget child;
   final double collapsedHeight;
   final double scale;
 
-  /// Колір фону під вмістом (для затемнення краю)
+  /// Background color under the content (for fading the edge)
   final Color? fadeColor;
 
   const HikkaCollapsible({
@@ -368,7 +368,7 @@ class _HikkaCollapsibleState extends State<HikkaCollapsible> {
   }
 }
 
-/// Повідомляє про розмір дочірнього віджета після розкладки
+/// Reports the size of the child widget after layout
 class _SizeReporter extends SingleChildRenderObjectWidget {
   final ValueChanged<Size> onSize;
 

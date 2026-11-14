@@ -6,10 +6,10 @@ import 'package:flutter/foundation.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
-/// Прев'ю для перемотки: окремий «безголовий» плеєр відкриває той самий локальний файл,
-/// за наведенням на смужку прогресу перемотується на потрібний момент і робить маленький
-/// знімок. Кадри кешуються в пам'яті по «кошиках» часу, тож повторне наведення миттєве.
-/// Лог: префікс [SeekPrev].
+/// Seek preview: a separate "headless" player opens the same local file,
+/// seeks to the needed moment when hovering the progress bar and takes a small
+/// snapshot. Frames are cached in memory by time "buckets", so repeated hovering is instant.
+/// Log: prefix [SeekPrev].
 class SeekPreviewService {
   static const int previewWidth = 320;
 
@@ -26,21 +26,21 @@ class SeekPreviewService {
   static bool _busy = false;
   static int _generation = 0;
 
-  /// Фоновий плеєр звільняється, якщо ним не користувались стільки часу (кадри в кеші лишаються).
-  /// Живий libmpv коштує пам'яті й відкритого файлу, а на телефоні ще й батареї.
+  /// The background player is released if it has not been used for this long (frames stay in the cache).
+  /// A live libmpv costs memory and an open file, and on a phone also battery.
   static const Duration idleRelease = Duration(seconds: 30);
   static Timer? _idleTimer;
 
-  /// Тільки для тестів: підміняє створення фонового плеєра (справжній libmpv у тестах недоступний)
+  /// Tests only: replaces creation of the background player (a real libmpv is unavailable in tests)
   @visibleForTesting
   static Future<Player?> Function(String uri)? debugPlayerFactory;
 
-  // Результат supports() для поточного файлу: його викликають на кожну подію миші над смужкою,
-  // тож щоразу питати файлову систему (stat) не можна — на мережевих шляхах це зависання.
+  // Result of supports() for the current file: it is called on every mouse event over the bar,
+  // so asking the file system (stat) each time is not acceptable; on network paths that is a hang.
   static String? _supportsUri;
   static bool _supportsValue = false;
 
-  /// Лічильник змін: віджет слухає його й перемальовує кадр, коли з'являється новий.
+  /// Change counter: the widget listens to it and repaints the frame when a new one appears.
   static final ValueNotifier<int> revision = ValueNotifier<int>(0);
 
   static void _log(String m) => debugPrint('[SeekPrev] $m');
@@ -65,7 +65,7 @@ class SeekPreviewService {
     return ok;
   }
 
-  /// Готує сервіс до файлу (нічого не запускає, доки не буде першого запиту кадру)
+  /// Prepares the service for a file (starts nothing until the first frame request)
   static void prepare(String? uri, Duration total) {
     if (uri == null || total <= Duration.zero) return;
     if (_uri != uri) {
@@ -78,7 +78,7 @@ class SeekPreviewService {
 
   static int _key(Duration t) => (t.inMilliseconds ~/ _bucketMs);
 
-  /// Кадр для моменту [t]: точний або найближчий уже готовий
+  /// Frame for moment [t]: exact or the nearest one already ready
   static Uint8List? frame(Duration t) {
     if (_cache.isEmpty) return null;
     final k = _key(t);
@@ -105,7 +105,7 @@ class SeekPreviewService {
     _pump();
   }
 
-  /// Фонова черга кадрів (напр. для списку розділів): виконується, коли немає термінових запитів
+  /// Background frame queue (e.g. for the chapter list): runs when there are no urgent requests
   static void requestMany(Iterable<Duration> times) {
     final uri = _uri;
     if (uri == null || !supports(uri)) return;
@@ -117,9 +117,9 @@ class SeekPreviewService {
     _pump();
   }
 
-  /// Відмічає використання: до звільнення плеєра знову 30 с простою.
-  /// Викликається лише при справжній роботі (новий запит кадру, готовий кадр), а не на кожну
-  /// подію миші — кадри з кешу плеєра не потребують.
+  /// Marks usage: another 30 s of idle before the player is released.
+  /// Called only on real work (a new frame request, a ready frame), not on every
+  /// mouse event: frames from the player's cache do not need it.
   static void _touch() {
     _idleTimer?.cancel();
     _idleTimer = Timer(idleRelease, _releaseIdlePlayer);
@@ -128,7 +128,7 @@ class SeekPreviewService {
   static void _releaseIdlePlayer() {
     _idleTimer = null;
     if (_busy || _wanted != null || _backlog.isNotEmpty) {
-      // Ще працює (довгий кадр, черга) — перевіримо знову через повний час простою
+      // Still working (a long frame, the queue): we check again after the full idle time
       _touch();
       return;
     }
@@ -213,12 +213,12 @@ class SeekPreviewService {
         }
       }
 
-      await prop('vf', 'scale=$previewWidth:-2'); // знімок одразу малий — швидке кодування
+      await prop('vf', 'scale=$previewWidth:-2'); // the snapshot is small right away: fast encoding
       await prop('hwdec', 'no');
       await prop('aid', 'no');
       await prop('sid', 'no');
-      await prop('hr-seek', 'no'); // сік по ключових кадрах — значно швидше
-      // Прев'ю не повинно красти процесор у основного відтворення: кілька потоків декодера замість «усі ядра»
+      await prop('hr-seek', 'no'); // seeking by keyframes is much faster
+      // The preview must not steal CPU from the main playback: a few decoder threads instead of "all cores"
       await prop('vd-lavc-threads', '2');
       await prop('vd-lavc-fast', 'yes');
       await p.setVolume(0);
@@ -250,7 +250,7 @@ class SeekPreviewService {
       final before = p.state.position;
       await p.seek(target);
 
-      // чекаємо, поки позиція зміниться (сік завершився)
+      // wait until the position changes (the seek finished)
       final done = Completer<void>();
       final sub = p.stream.position.listen((pos) {
         if (pos != before && !done.isCompleted) done.complete();

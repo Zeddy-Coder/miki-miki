@@ -24,6 +24,7 @@ import 'shortcut_catalog.dart';
 import 'storage_service.dart';
 import 'thumbnail_service.dart';
 import 'seek_preview_service.dart';
+import 'media_controls.dart';
 import 'system_controls.dart';
 import 'touch_hide_timer.dart';
 import 'mpv_config.dart';
@@ -44,8 +45,8 @@ class PlayerStateController extends ChangeNotifier {
   double prevSpeed = 1.0;
   double currentVolume = 100.0;
 
-  /// Гучність і «mute» для повзунка в доці. Окремий нотифікатор: перетягування повзунка чи колесо
-  /// дають десятки подій на секунду, і вони не повинні перебудовувати весь екран.
+  /// Volume and "mute" for the slider in the dock. A separate notifier: dragging the slider or the wheel
+  /// produces dozens of events per second, and they must not rebuild the whole screen.
   final ValueNotifier<VolumeState> volumeState = ValueNotifier<VolumeState>(const VolumeState(100, false));
 
   void _publishVolume() => volumeState.value = VolumeState(currentVolume, isMuted);
@@ -57,17 +58,17 @@ class PlayerStateController extends ChangeNotifier {
   bool isFullscreen = false;
   bool showStatsOverlay = false;
   bool isMiniPlayer = false;
-  /// Плеєр згорнуто в док поверх головної сторінки (відтворення триває)
+  /// The player is collapsed into the dock over the home page (playback continues)
   bool isCollapsed = false;
   Rect? _savedBounds;
 
   String currentFilePath = "";
   String currentTitle = "YouTube Mobile";
   String? activeDrawer;
-  /// Стек навігації всередині меню (Налаштування → Більше → Декодер)
+  /// Navigation stack inside the menu (Settings → More → Decoder)
   final List<String> _drawerStack = [];
-  /// Кнопка, яка відкрила меню: 'settings' / 'subs' / 'audio' / 'speed'.
-  /// Саме за нею підсвічуються кнопки доку, а не за поточною сторінкою меню.
+  /// The button that opened the menu: 'settings' / 'subs' / 'audio' / 'speed'.
+  /// The dock buttons are highlighted by it, not by the current menu page.
   String? drawerOwner;
   String? get activeDrawerPrev => _drawerStack.isEmpty ? null : _drawerStack.last;
 
@@ -89,13 +90,13 @@ class PlayerStateController extends ChangeNotifier {
   List<VideoChapter> currentChapters = [];
   List<CachedSubtitleTrack> cachedSubtitleTracks = [];
   List<CachedAudioTrack> cachedAudioTracks = [];
-  /// Живі показники для «Статистики для нердів». Окремий нотифікатор: опитування раз на ~0,8 с
-  /// не перебудовує весь екран (і саме не заважає вимірюваним пропускам кадрів).
+  /// Live metrics for "Stats for nerds". A separate notifier: polling once per ~0.8 s
+  /// does not rebuild the whole screen (and does not itself disturb the measured frame drops).
   final ValueNotifier<PlaybackStats> liveStats = ValueNotifier<PlaybackStats>(const PlaybackStats());
   PlaybackStats get currentStats => liveStats.value;
   final List<String> mpvLogs = [];
 
-  // ───────── Екранні сповіщення (OSD) ─────────
+  // ───────── On-screen notifications (OSD) ─────────
   final ValueNotifier<OsdMessage?> osd = ValueNotifier<OsdMessage?>(null);
   Timer? _osdTimer;
 
@@ -105,28 +106,31 @@ class PlayerStateController extends ChangeNotifier {
     osd: (message, {duration}) => _pushOsd(message, duration: duration),
   );
 
-  // ───────── Серії із сайтів («Дивитись») ─────────
-  /// Перегляд серій із сайтів-джерел: чергу, пошук посилань, місце, «переглянуто» й автоперехід веде драйвер.
-  /// Для решти інтерфейсу це виглядає як звичайна черга: `playlistItems` — серії, `currentFilePath` — ключ серії.
+  // ───────── Site episodes ("Дивитись") ─────────
+  /// Watching episodes from source sites: the driver handles the queue, link lookup, position, "watched" and auto-advance.
+  /// To the rest of the UI this looks like an ordinary queue: `playlistItems` are the episodes, `currentFilePath` is the episode key.
   late final RemoteDriver remote = RemoteDriver(
     engine: MpvRemoteEngine(player: player, command: mpv),
     registry: SourceRegistry.instance,
     resolver: StreamResolver(maxHeight: () => SourcePrefs.instance.maxHeight, preferredHoster: () => SourcePrefs.instance.hoster),
   );
 
-  // ───────── Гарячі клавіші ─────────
+  // ───────── Hotkeys ─────────
   late final PlayerActions actions = PlayerActions(this);
   KeyScheme keyScheme = KeyScheme.standard;
   bool isAlwaysOnTop = false;
 
-  /// Відкриває довідку з гарячих клавіш (задає екран плеєра, якому відомий контекст і масштаб)
+  /// Opens the hotkey help (set by the player screen, which knows the context and scale)
   VoidCallback? onShowShortcuts;
+
+  /// Gives hotkeys back to the player screen (set by `PlayerScreen`); needed after the window mode changes
+  VoidCallback? onRestoreKeyboardFocus;
 
   Timer? _hideTimer;
   Timer? _positionSaveTimer;
   Timer? _liveStatsTimer;
 
-  /// Палець тримає повзунок прогресу: панелі не ховаються, доки перетягування триває
+  /// A finger holds the progress slider: panels do not hide while dragging continues
   bool seekDragging = false;
 
   void setSeekDragging(bool value) {
@@ -140,7 +144,7 @@ class PlayerStateController extends ChangeNotifier {
     }
   }
 
-  /// Сенсорний екран: панелі ховає цей таймер (4 с без дотиків), а не вихід курсора із зони
+  /// Touch screen: this timer hides the panels (4 s without touches), not the cursor leaving the zone
   late final TouchHideTimer _touchHide = TouchHideTimer(
     shouldStayVisible: () =>
         _disposed || isHome || seekDragging || !player.state.playing || isSpeeding || activeDrawer != null || activeSidePanel != null || showStatsOverlay,
@@ -151,7 +155,7 @@ class PlayerStateController extends ChangeNotifier {
     },
   );
 
-  /// Ключ твору для збереженої затримки звуку: серії із сайту — аніме та озвучка, локальні файли — тека
+  /// Work key for the saved audio delay: site episodes use the anime and dub, local files the folder
   String get audioDelayKey {
     final sess = remote.session;
     if (remote.active && sess != null) return 'r|${sess.animeKey}|${sess.groupLabel}';
@@ -161,7 +165,7 @@ class PlayerStateController extends ChangeNotifier {
     return cut > 0 ? 'l|${path.substring(0, cut)}' : 'l|$path';
   }
 
-  /// Повертає твору його затримку звуку (mpv інакше тягне значення попередньої серії)
+  /// Gives the work its audio delay (otherwise mpv carries over the previous episode's value)
   Future<void> _applyAudioDelay() async {
     final key = audioDelayKey;
     if (key.isEmpty) return;
@@ -173,7 +177,7 @@ class PlayerStateController extends ChangeNotifier {
 
   bool get isHome => currentFilePath.isEmpty && playlistItems.isEmpty;
 
-  /// Показувати головну сторінку (немає медіа або плеєр згорнуто)
+  /// Show the home page (no media, or the player is collapsed)
   bool get showHome => isHome || isCollapsed;
 
   void collapsePlayer() {
@@ -183,7 +187,7 @@ class PlayerStateController extends ChangeNotifier {
     if (showStatsOverlay) closeStatsOverlay();
     AppLog.i('дія', 'плеєр згорнуто в міні-плеєр: $currentTitle');
     isCollapsed = true;
-    notifyListeners(); // орієнтацію при цьому повертає _syncSystemUi
+    notifyListeners(); // the orientation is restored by _syncSystemUi
   }
 
   void expandPlayer() {
@@ -205,11 +209,11 @@ class PlayerStateController extends ChangeNotifier {
     player = Player(
       configuration: PlayerConfiguration(
         libass: true,
-        // Android: у збірці libmpv немає жодного системного шрифту, тож без власного libass не малює субтитри взагалі
+        // Android: the libmpv build has no system fonts at all, so without our own libass draws no subtitles whatsoever
         libassAndroidFont: MpvConfig.androidSubtitleFontAsset,
         libassAndroidFontName: MpvConfig.androidSubtitleFontName,
         bufferSize: 64 * 1024 * 1024,
-        // Детальний журнал: докладніші повідомлення рушія (зміна діє після перезапуску застосунку)
+        // Verbose log: more detailed engine messages (the change takes effect after the app restarts)
         logLevel: AppLog.on ? MPVLogLevel.v : MPVLogLevel.info,
       ),
     );
@@ -225,17 +229,20 @@ class PlayerStateController extends ChangeNotifier {
     keyScheme = KeyScheme.parse(StorageService.getKeyScheme());
     anime4k.load();
     anime4k.addListener(notifyListeners);
-    // Anime4K підключаємо після базового налаштування рушія (і mpv.conf користувача)
+    // We attach Anime4K after the base engine setup (and the user's mpv.conf)
     MpvConfig.configureEngine(player, currentHwdec).then((_) => anime4k.syncToEngine());
 
     _bindStreams();
     _bindRemote();
+    if (MediaControls.active) MediaControls.onButton = _onMediaButton;
     _startHideTimer();
     _diag = PlayerDiagnostics(player, context: _diagContext)..start();
 
     if (AppPlatform.isMobile) {
       _ready = true;
       SystemControls.inPip.addListener(_onPipChanged);
+      SystemControls.onPipToggle = _onPipToggle;
+      SystemControls.onAudioFocus = _onAudioFocus;
       SystemControls.pipSupported().then((ok) {
         if (_disposed) return;
         pipSupported = ok;
@@ -253,7 +260,7 @@ class PlayerStateController extends ChangeNotifier {
     });
 
     player.stream.volume.listen((vol) {
-      // Під час «mute» плеєр повідомляє 0 — запам'ятовуємо реальну гучність, щоб її можна було повернути
+      // During "mute" the player reports 0: we remember the real volume so it can be restored
       if (!isMuted) {
         currentVolume = vol;
         StorageService.saveVolume(vol);
@@ -270,9 +277,13 @@ class PlayerStateController extends ChangeNotifier {
       if (AppPlatform.isMobile) _syncPipArm();
     });
 
-    // Телефон: автоматичний вхід у PiP має бути ввімкнений лише під час відтворення
+    // Phone: automatic PiP entry must be enabled only during playback
     player.stream.playing.listen((_) {
-      if (AppPlatform.isMobile && _ready && !_disposed) _syncPipArm();
+      if (AppPlatform.isMobile && _ready && !_disposed) {
+        _syncPipArm();
+        _syncPlaybackSystem();
+      }
+      _syncMediaControls();
     });
 
     player.stream.tracks.listen((tracks) {
@@ -288,7 +299,7 @@ class PlayerStateController extends ChangeNotifier {
         unawaited(_applyAudioDelay());
       }
       if (remote.active) {
-        // Серія із сайту: місце відновив драйвер (Media.start), розділи — з таймкодів сайту
+        // Site episode: the position was restored by the driver (Media.start), chapters come from the site's timestamps
         if (dur > Duration.zero) {
           remote.onDuration(dur);
           currentChapters = remote.chapters;
@@ -309,7 +320,7 @@ class PlayerStateController extends ChangeNotifier {
     });
 
     player.stream.playlist.listen((pl) {
-      if (remote.active) return; // у mpv лише одне відео; чергу серій веде драйвер
+      if (remote.active) return; // mpv has just one video; the episode queue is handled by the driver
       if (pl.index >= 0 && pl.index < playlistItems.length) {
         currentPlaylistIndex = pl.index;
         currentTitle = playlistItems[pl.index].extras?['title'] ?? currentTitle;
@@ -326,7 +337,7 @@ class PlayerStateController extends ChangeNotifier {
     });
 
     player.stream.log.listen((log) {
-      // Докладні (v / debug / trace) рядки йдуть лише у журнал-файл, щоб не витісняти важливе з вікна статистики
+      // Detailed (v / debug / trace) lines go only to the log file so they do not push important things out of the stats window
       final noisy = log.level == 'v' || log.level == 'debug' || log.level == 'trace';
       if (!noisy) {
         if (mpvLogs.length > 300) mpvLogs.removeAt(0);
@@ -356,7 +367,7 @@ class PlayerStateController extends ChangeNotifier {
 
   String? _liveThumbUri;
 
-  /// Прев'юшка поточного відео береться прямо з плеєра (без повторного декодування файлу)
+  /// The thumbnail of the current video is taken straight from the player (without decoding the file again)
   Future<void> _captureLiveThumbnail() async {
     final pl = player.state.playlist;
     if (pl.index < 0 || pl.index >= pl.medias.length) return;
@@ -365,7 +376,7 @@ class PlayerStateController extends ChangeNotifier {
     _liveThumbUri = uri;
 
     await Future.delayed(const Duration(seconds: 6));
-    // Якщо за цей час переключили файл — знімок вже не той
+    // If the file was switched in the meantime, the snapshot is no longer the right one
     final now = player.state.playlist;
     if (now.index != pl.index || now.index >= now.medias.length || now.medias[now.index].uri != uri) return;
     try {
@@ -377,7 +388,7 @@ class PlayerStateController extends ChangeNotifier {
     }
   }
 
-  /// Курсор у «активній зоні» (верх або низ екрана): інтерфейс показується і не зникає, доки курсор там
+  /// Cursor in the "active zone" (top or bottom of the screen): the UI is shown and does not disappear while the cursor is there
   bool _pointerInZone = false;
 
   void pointerInZone(bool inZone) {
@@ -394,13 +405,13 @@ class PlayerStateController extends ChangeNotifier {
     }
   }
 
-  /// Дія користувача без курсора (клавіатура, відкриття файлу): інтерфейс не показується,
-  /// лише перевіряємо, чи його не пора сховати.
+  /// A user action without the cursor (keyboard, opening a file): the UI is not shown,
+  /// we only check whether it is time to hide it.
   void refreshSettings() => notifyListeners();
 
   void handleInteraction() => _startHideTimer();
 
-  /// Тап по відео на телефоні: показує панелі (і запускає автоприховування) або одразу ховає їх
+  /// Tap on the video on a phone: shows the panels (and starts auto-hide) or hides them at once
   void toggleControlsByTouch() {
     if (isHome) return;
     _hideTimer?.cancel();
@@ -415,38 +426,38 @@ class PlayerStateController extends ChangeNotifier {
     }
   }
 
-  /// Будь-який дотик, поки панелі видно, відкладає їх приховування
+  /// Any touch while the panels are visible postpones hiding them
   void touchActivity() {
     if (showControls && !isHome) _touchHide.arm();
   }
 
-  // ── Телефон: PiP, поворот екрана, системні панелі, кнопка «Назад» ──────────
+  // ── Phone: PiP, screen rotation, system bars, the "Back" button ──────────
 
-  /// Вікно застосунку зараз у режимі «картинка в картинці»
+  /// The app window is currently in picture-in-picture mode
   bool get isInPip => SystemControls.inPip.value;
 
-  /// Пристрій підтримує PiP (кнопка PiP показується лише тоді)
+  /// The device supports PiP (the PiP button is shown only then)
   bool pipSupported = false;
 
-  /// Орієнтація екрана: налаштування «Орієнтація плеєра» діє, поки відео на екрані, а при виході чи згортанні
-  /// в міні-плеєр повертається попередня
+  /// Screen orientation: the "Орієнтація плеєра" setting applies while the video is on screen, and on exit or collapse
+  /// into the mini player the previous one is restored
   late final OrientationPolicy _orientation = OrientationPolicy(
     apply: SystemChrome.setPreferredOrientations,
     preference: () => PlayerOrientation.parse(StorageService.getPlayerOrientation()),
     log: (m) => AppLog.i('орієнтація', m),
   );
 
-  /// Орієнтацію зафіксовано (налаштуванням або кнопкою); інакше її визначає датчик і системне блокування повороту
+  /// Orientation is locked (by the setting or the button); otherwise the sensor and the system rotation lock decide
   bool get rotationLocked => _orientation.locked;
 
-  /// Налаштування «Орієнтація плеєра» змінили: застосувати одразу, якщо відео на екрані
+  /// The "Орієнтація плеєра" setting changed: apply it at once if the video is on screen
   void refreshOrientationPreference() {
     if (AppPlatform.isMobile) _orientation.preferenceChanged();
   }
 
   PlayerDiagnostics? _diag;
 
-  /// Додаткові дані для знімків синхронізації в журналі
+  /// Extra data for sync snapshots in the log
   String _diagContext() {
     final parts = <String>[
       'шейдери: ${anime4k.enabled ? '${anime4k.mode.name}/${anime4k.quality.name}' : 'вимк.'}',
@@ -461,7 +472,7 @@ class PlayerStateController extends ChangeNotifier {
   bool? _pipArmed;
   int _pipArmW = 0, _pipArmH = 0;
 
-  /// `init()` завершено (плеєр створено)
+  /// `init()` finished (the player is created)
   bool _ready = false;
 
   @override
@@ -471,11 +482,12 @@ class PlayerStateController extends ChangeNotifier {
       _syncSystemUi();
       _syncPipArm();
     }
+    _syncMediaControls();
   }
 
-  /// Відео — на весь екран без системних панелей; головна — з ними
+  /// The video is full screen without system bars; home has them
   void _syncSystemUi() {
-    // Плеєр на екрані — діє «Орієнтація плеєра»; вийшов чи згорнувся — повертається попередня
+    // Player on screen: "Орієнтація плеєра" applies; on exit or collapse the previous one is restored
     if (showHome) {
       _orientation.leavePlayer();
     } else {
@@ -485,7 +497,7 @@ class PlayerStateController extends ChangeNotifier {
     if (_systemUiImmersive == immersive) return;
     _systemUiImmersive = immersive;
     SystemChrome.setEnabledSystemUIMode(immersive ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge);
-    // Яскравість, виставлена жестом, діє лише у відео; на головній — системна
+    // Brightness set by a gesture applies only in the video; on home it is the system one
     if (immersive) {
       SystemControls.restoreBrightness();
     } else if (showHome) {
@@ -493,13 +505,13 @@ class PlayerStateController extends ChangeNotifier {
     }
   }
 
-  /// Пропорції кадру для вікна PiP
+  /// Aspect ratio of the frame for the PiP window
   (int, int) _pipSize() {
     final w = player.state.width, h = player.state.height;
     return (w != null && h != null && w > 0 && h > 0) ? (w, h) : (16, 9);
   }
 
-  /// Автоматичний вхід у PiP (жест «додому») — лише поки відео відтворюється
+  /// Automatic PiP entry (the "home" gesture) only while the video is playing
   void _syncPipArm() {
     if (!AppPlatform.isAndroid) return;
     final arm = !showHome && player.state.playing;
@@ -511,8 +523,89 @@ class PlayerStateController extends ChangeNotifier {
     SystemControls.setPipAuto(arm, width: w, height: h);
   }
 
+  /// Passes the playback state to Android: audio focus (other music goes silent) and the button icon in the PiP window
+  void _syncPlaybackSystem() {
+    final playing = player.state.playing;
+    SystemControls.setPipPlaying(playing);
+    // Pause due to a temporary focus loss (a call): we do not give focus up so we can hear "gain" and resume
+    SystemControls.setAudioFocus(playing || _resumeOnFocus);
+  }
+
+  /// The "pause / play" button in the PiP window
+  void _onPipToggle() {
+    if (_disposed) return;
+    AppLog.i('дія', 'кнопка у вікні PiP: ${player.state.playing ? 'пауза' : 'відтворення'}');
+    _resumeOnFocus = false;
+    player.playOrPause();
+  }
+
+  // ───────── Windows media controls (headphone / keyboard media keys) ─────────
+
+  /// Publishes the current title and play state to the system overlay; clears it when nothing is open
+  void _syncMediaControls() {
+    if (_disposed || !MediaControls.active) return;
+    if (isHome) {
+      MediaControls.clear();
+      return;
+    }
+    final total = remote.active ? (remote.session?.entries.length ?? 0) : playlistItems.length;
+    MediaControls.update(
+      title: currentTitle,
+      subtitle: AppIdentity.name,
+      playing: player.state.playing,
+      hasPrevious: currentPlaylistIndex > 0,
+      hasNext: currentPlaylistIndex < total - 1,
+      thumbnail: remote.active ? remote.session?.poster : null,
+    );
+  }
+
+  /// A system media button (headphones, keyboard, the Windows overlay)
+  void _onMediaButton(String button) {
+    if (_disposed || isHome) return;
+    AppLog.i('дія', 'медіа-кнопка: $button');
+    switch (button) {
+      case 'play':
+        player.play();
+      case 'pause':
+      case 'stop':
+        player.pause();
+      case 'toggle':
+        player.playOrPause();
+      case 'next':
+        playNext();
+      case 'previous':
+        playPrevious();
+    }
+  }
+
+  bool _resumeOnFocus = false;
+
+  void _onAudioFocus(String event) {
+    if (_disposed) return;
+    AppLog.i('дія', 'аудіофокус: $event');
+    switch (event) {
+      case 'loss':
+        _resumeOnFocus = false;
+        if (player.state.playing) player.pause();
+      case 'transient':
+        if (player.state.playing) {
+          _resumeOnFocus = true;
+          player.pause();
+        }
+      case 'gain':
+        if (_resumeOnFocus) {
+          _resumeOnFocus = false;
+          player.play();
+        }
+    }
+  }
+
+  /// Anime4K shaders only make sense in a full-size window: in the mini player and in PiP they are paused to save the GPU
+  void _syncShaderSuspension() => unawaited(anime4k.setSuspended(isMiniPlayer || isInPip));
+
   void _onPipChanged() {
     if (_disposed) return;
+    _syncShaderSuspension();
     AppLog.i('дія', isInPip ? 'увійшов у PiP' : 'вийшов із PiP');
     if (isInPip) {
       _clearDrawer();
@@ -522,7 +615,7 @@ class PlayerStateController extends ChangeNotifier {
     } else {
       showControls = true;
       _startHideTimer();
-      // Вікно PiP закрили хрестиком: застосунок уже не на екрані — зупиняємо відтворення
+      // The PiP window was closed with the cross: the app is no longer on screen, so we stop playback
       final life = WidgetsBinding.instance.lifecycleState;
       if (life == AppLifecycleState.paused || life == AppLifecycleState.hidden || life == AppLifecycleState.detached) {
         onAppBackgrounded();
@@ -531,10 +624,10 @@ class PlayerStateController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Екранне сповіщення, зібране ззовні (жести яскравості / гучності / перемотки)
+  /// An on-screen notification assembled from outside (brightness / volume / seek gestures)
   void showOsdMessage(OsdMessage message, {Duration? duration}) => _pushOsd(message, duration: duration);
 
-  /// Кнопка PiP: згортає відео у маленьке вікно поверх інших застосунків
+  /// PiP button: collapses the video into a small window over other apps
   Future<void> enterPip() async {
     if (!AppPlatform.isMobile || showHome) return;
     AppLog.i('дія', 'кнопка PiP');
@@ -552,7 +645,7 @@ class PlayerStateController extends ChangeNotifier {
     }
   }
 
-  /// Кнопка повороту: портрет ↔ альбомна (і фіксує вибір)
+  /// Rotate button: portrait ↔ landscape (and locks the choice)
   Future<void> toggleRotation() async {
     if (!AppPlatform.isMobile) return;
     final view = WidgetsBinding.instance.platformDispatcher.views.first;
@@ -568,7 +661,7 @@ class PlayerStateController extends ChangeNotifier {
     );
   }
 
-  /// Повертає автоповорот (орієнтацію знову визначає датчик)
+  /// Restores auto-rotate (the sensor decides the orientation again)
   Future<void> unlockRotation({bool announce = true}) async {
     if (!AppPlatform.isMobile || !rotationLocked) return;
     AppLog.i('дія', 'автоповорот увімкнено');
@@ -579,7 +672,7 @@ class PlayerStateController extends ChangeNotifier {
     }
   }
 
-  /// Системна кнопка «Назад»: закриває верхній шар інтерфейсу. false — закривати нічого, можна виходити.
+  /// System "Back" button: closes the top UI layer. false: nothing to close, it is OK to exit.
   bool handleBack() {
     AppLog.d('дія', 'системна кнопка «Назад»');
     if (showStatsOverlay) {
@@ -605,7 +698,7 @@ class PlayerStateController extends ChangeNotifier {
     return false;
   }
 
-  /// Застосунок пішов у фон (не PiP): ставимо на паузу й зберігаємо позицію
+  /// The app went to the background (not PiP): pause and save the position
   void onAppBackgrounded() {
     if (_disposed || isInPip) return;
     AppLog.i('дія', 'застосунок у фоні: пауза й збереження позиції (${player.state.position.inSeconds} с)');
@@ -638,21 +731,21 @@ class PlayerStateController extends ChangeNotifier {
       .map((m) => {'uri': m.uri, 'title': (m.extras?['title'] ?? AppFormatters.cleanMediaTitle(m.uri)).toString()})
       .toList();
 
-  /// Зберігає поточну чергу (лише з кількох елементів), щоб її можна було відновити з головної
+  /// Saves the current queue (only if it has several items) so it can be restored from home
   void persistQueue() {
-    if (remote.active || playlistItems.length < 2) return; // серії із сайтів не є «останньою чергою» файлів
+    if (remote.active || playlistItems.length < 2) return; // site episodes are not the "last queue" of files
     StorageService.saveLastQueue(_queueSnapshot(), currentPlaylistIndex);
   }
 
-  /// Відкриває збережену чергу / плейлист, починаючи з [startIndex].
-  /// Локальні файли, яких більше немає на диску, пропускаються.
+  /// Opens a saved queue / playlist, starting at [startIndex].
+  /// Local files that no longer exist on disk are skipped.
   Future<void> openQueue(List<Map<String, String>> items, {int startIndex = 0}) async {
     AppLog.i('дія', 'відкрито чергу: ${items.length} елем., старт з ${startIndex + 1}');
     remote.stop();
     final valid = <Map<String, String>>[];
     String? wantedUri = (startIndex >= 0 && startIndex < items.length) ? items[startIndex]['uri'] : null;
-    // Наявність файлів перевіряємо асинхронно й паралельно: синхронний обхід довгої черги на
-    // повільному диску (SD-картка, мережевий шлях) заморожував би інтерфейс
+    // File presence is checked asynchronously and in parallel: a synchronous walk of a long queue on a
+    // slow disk (SD card, network path) would freeze the UI
     final exists = await Future.wait(items.map((it) async {
       final uri = it['uri'] ?? '';
       if (uri.isEmpty) return false;
@@ -783,7 +876,7 @@ class PlayerStateController extends ChangeNotifier {
     }
   }
 
-  /// [to] — індекс після вилучення елемента (як у ReorderableListView.onReorderItem)
+  /// [to] is the index after removing the item (as in ReorderableListView.onReorderItem)
   void reorderQueue(int from, int to) {
     AppLog.d('дія', 'черга: переміщено $from → $to');
     if (remote.active || from == to || from < 0 || from >= playlistItems.length) return;
@@ -835,7 +928,7 @@ class PlayerStateController extends ChangeNotifier {
     }
   }
 
-  /// Кнопка «наступний»: у черзі файлів — наступний файл, у серіях із сайту — наступна серія
+  /// "Next" button: in a file queue the next file, in site episodes the next episode
   Future<void> playNext() async {
     AppLog.i('дія', 'наступний елемент черги');
     if (!remote.active) {
@@ -845,7 +938,7 @@ class PlayerStateController extends ChangeNotifier {
     if (!await remote.next()) showOsd('Це остання серія', icon: Symbols.queue_music_rounded);
   }
 
-  /// Кнопка «попередній»
+  /// "Previous" button
   Future<void> playPrevious() async {
     AppLog.i('дія', 'попередній елемент черги');
     if (!remote.active) {
@@ -855,14 +948,14 @@ class PlayerStateController extends ChangeNotifier {
     if (!await remote.previous()) showOsd('Це перша серія', icon: Symbols.queue_music_rounded);
   }
 
-  // ───────── Серії із сайтів ─────────
+  // ───────── Site episodes ─────────
 
-  /// Запускає перегляд із сторінки аніме: [launch] несе озвучку, стартову серію й усі варіанти для перемикання
+  /// Starts watching from the anime page: [launch] carries the dub, the starting episode and all variants for switching
   Future<void> openRemote(RemoteLaunch launch) async {
     AppLog.i('дія', 'відкриваю серії із джерела');
     StorageService.flush();
     isCollapsed = false;
-    _hasResumedPlayback = true; // місце відновлює драйвер (Media.start), а не слухач тривалості
+    _hasResumedPlayback = true; // the position is restored by the driver (Media.start), not by the duration listener
     dismissedChapterStartTime = null;
     currentChapters = [];
     _clearDrawer();
@@ -950,7 +1043,7 @@ class PlayerStateController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Відкриває панель (на відміну від [toggleSidePanel], уже відкриту не закриває)
+  /// Opens the panel (unlike [toggleSidePanel], does not close one that is already open)
   void openSidePanel(SidePanelType type) {
     _clearDrawer();
     activeSidePanel = type;
@@ -964,8 +1057,8 @@ class PlayerStateController extends ChangeNotifier {
     closeDrawers();
   }
 
-  // МЕТОДИ ВСТАНОВЛЕННЯ ДОРІЖОК
-  // Вибір людини (з меню чи клавішами) зупиняє автовибір за мовою для цього файлу: він не переб'є її вибір
+  // TRACK SETTING METHODS
+  // A person's choice (from the menu or keys) stops the language auto-selection for this file: it will not override their choice
   void setSubtitleTrack(SubtitleTrack track, {bool closeMenu = true}) {
     AppLog.i('дія', 'субтитри → ${track.id} ${track.language ?? ''} ${track.title ?? ''}');
     _trackChoiceManual = true;
@@ -980,8 +1073,8 @@ class PlayerStateController extends ChangeNotifier {
     if (closeMenu) closeDrawers();
   }
 
-  /// Додає зовнішні субтитри (файл `.srt`, `.ass`, `.vtt` …) до відкритого відео й одразу вмикає їх.
-  /// `false` — відео не відкрито або файл не схожий на субтитри.
+  /// Adds external subtitles (a `.srt`, `.ass`, `.vtt` … file) to the open video and turns them on immediately.
+  /// `false`: no video is open or the file does not look like subtitles.
   Future<bool> addExternalSubtitle(String path) async {
     AppLog.i('дія', 'зовнішні субтитри: $path');
     if (!isSubtitleFile(path) || isHome || player.state.playlist.medias.isEmpty) return false;
@@ -991,7 +1084,7 @@ class PlayerStateController extends ChangeNotifier {
     return true;
   }
 
-  /// Розширення файлів субтитрів, що їх приймає mpv
+  /// Subtitle file extensions mpv accepts
   static const List<String> subtitleExtensions = ['srt', 'ass', 'ssa', 'vtt', 'sub', 'sup', 'smi', 'lrc'];
 
   static bool isSubtitleFile(String path) {
@@ -999,8 +1092,8 @@ class PlayerStateController extends ChangeNotifier {
     return dot >= 0 && subtitleExtensions.contains(path.substring(dot + 1).toLowerCase());
   }
 
-  /// Файли, перетягнуті на вікно: відео відкривається як і раніше (перше з них); самі лише субтитри додаються
-  /// до відкритого відео
+  /// Files dropped on the window: a video opens as before (the first one); subtitles alone are added
+  /// to the open video
   Future<void> handleDroppedFiles(List<String> paths) async {
     if (paths.isEmpty) return;
     final media = paths.where((p) => !isSubtitleFile(p)).toList();
@@ -1015,13 +1108,13 @@ class PlayerStateController extends ChangeNotifier {
     if (!added) showOsd('Субтитри', icon: Symbols.subtitles_off_rounded, detail: 'Спершу відкрийте відео');
   }
 
-  /// «Додати файл субтитрів…» у меню субтитрів
+  /// "Додати файл субтитрів…" in the subtitle menu
   Future<void> pickSubtitleFile() async {
     closeDrawers();
     String? path;
     try {
       final result = await FilePicker.pickFiles(
-        // Android не знає типів .srt / .ass, тож там вибір без фільтра, а розширення перевіряємо після нього
+        // Android does not know the .srt / .ass types, so the picker there has no filter and we check the extension afterwards
         type: AppPlatform.isMobile ? FileType.any : FileType.custom,
         allowedExtensions: AppPlatform.isMobile ? null : subtitleExtensions,
       );
@@ -1031,21 +1124,21 @@ class PlayerStateController extends ChangeNotifier {
     if (!await addExternalSubtitle(path)) showOsd('Субтитри', icon: Symbols.subtitles_off_rounded, detail: 'Це не файл субтитрів');
   }
 
-  // ───────── Автовибір доріжок за мовою з налаштувань ─────────
+  // ───────── Auto-selecting tracks by the language from settings ─────────
   bool _trackChoiceManual = false;
   String? _autoSubId;
   String? _autoAudioId;
 
-  /// Новий файл: автовибір знову дозволений
+  /// New file: auto-selection is allowed again
   void _resetAutoTracks() {
     _trackChoiceManual = false;
     _autoSubId = null;
     _autoAudioId = null;
   }
 
-  /// Вмикає субтитри й звук за пріоритетом мов (див. [TrackDefaults]). Викликається щоразу, як змінився перелік
-  /// доріжок (зовнішні субтитри mpv додає трохи згодом), але одну й ту саму доріжку вмикає лише раз.
-  /// Серії із сайтів сюди не входять: їхні субтитри вмикає драйвер.
+  /// Turns on subtitles and audio by language priority (see [TrackDefaults]). Called every time the track list
+  /// changes (mpv adds external subtitles a bit later), but turns on the same track only once.
+  /// Site episodes are not included: the driver turns on their subtitles.
   void _applyTrackDefaults(Tracks tracks) {
     if (_trackChoiceManual || _disposed || remote.active) return;
     final plan = TrackDefaults.plan(
@@ -1058,7 +1151,7 @@ class PlayerStateController extends ChangeNotifier {
     if (sub != null && sub.id != _autoSubId) {
       _autoSubId = sub.id;
       player.setSubtitleTrack(sub);
-      // Коротко повідомляємо, що ввімкнено: так видно, що субтитри обрано, і яку саме доріжку
+      // We briefly report what was turned on: this shows that subtitles were chosen and which track exactly
       if (sub.id != 'no') showOsd('Субтитри', icon: Symbols.subtitles_rounded, detail: AppFormatters.formatTrackTitle(sub.language, sub.title));
     }
     final audio = plan.audio;
@@ -1083,11 +1176,11 @@ class PlayerStateController extends ChangeNotifier {
 
   Future<void> toggleFullscreen() async {
     AppLog.i('дія', 'повноекранний режим');
-    // Телефон: окремого повноекранного режиму немає — системні панелі в плеєрі приховані завжди
+    // Phone: there is no separate full-screen mode; system bars in the player are always hidden
     if (!AppPlatform.isDesktop) return;
     final isFull = await windowManager.isFullScreen();
     if (!isFull) {
-      // З розгорнутого вікна повноекранний режим не вмикається коректно — спершу повертаємо звичайний стан
+      // Full-screen mode does not enable correctly from a maximized window, so we first restore the normal state
       _wasMaximized = await windowManager.isMaximized();
       if (_wasMaximized) {
         await windowManager.unmaximize();
@@ -1104,12 +1197,27 @@ class PlayerStateController extends ChangeNotifier {
     }
     isFullscreen = !isFull;
     notifyListeners();
+    _restoreKeyboardFocus();
   }
 
-  /// Міні-плеєр: маленьке вікно поверх усіх з відео та мінімальним керуванням
+  /// After a switch to / from full screen (especially via the button) the window and the focused button lose keyboard focus,
+  /// so hotkeys stop working: refocus the window and the player's key handler (the window settles a moment later, hence two tries)
+  void _restoreKeyboardFocus() {
+    for (final ms in const [0, 250]) {
+      Future.delayed(Duration(milliseconds: ms), () async {
+        if (!AppPlatform.isDesktop) return;
+        try {
+          await windowManager.focus();
+        } catch (_) {}
+        onRestoreKeyboardFocus?.call();
+      });
+    }
+  }
+
+  /// Mini player: a small window above everything with the video and minimal controls
   Future<void> enterMiniPlayer() async {
     AppLog.i('дія', 'вікно міні-плеєра');
-    if (!AppPlatform.isDesktop) return; // міні-вікно є лише на десктопі
+    if (!AppPlatform.isDesktop) return; // the mini window exists only on desktop
     if (isMiniPlayer || isHome) return;
     _clearDrawer();
     activeSidePanel = null;
@@ -1125,6 +1233,7 @@ class PlayerStateController extends ChangeNotifier {
     } catch (_) {}
     isMiniPlayer = true;
     showControls = true;
+    _syncShaderSuspension();
     notifyListeners();
 
     try {
@@ -1143,6 +1252,7 @@ class PlayerStateController extends ChangeNotifier {
     AppLog.i('дія', 'вихід із вікна міні-плеєра');
     if (!isMiniPlayer) return;
     isMiniPlayer = false;
+    _syncShaderSuspension();
     notifyListeners();
     try {
       await windowManager.setAlwaysOnTop(false);
@@ -1162,10 +1272,10 @@ class PlayerStateController extends ChangeNotifier {
   Future<void> returnToHome() async {
     AppLog.i('дія', 'повернення на головну: відео закрито ($currentTitle)');
     SeekPreviewService.dispose();
-    // Згорнутий плеєр лишається згорнутим до самого кінця: інакше будь-яке сповіщення під час await нижче
-    // «розгортало» б плеєр (з його орієнтацією екрана), а вже потім він закривався
+    // A collapsed player stays collapsed until the very end: otherwise any notification during the awaits below
+    // would "expand" the player (with its screen orientation) and only then would it close
     if (isMiniPlayer) await exitMiniPlayer();
-    remote.stop(); // зберігає місце серії, поки плеєр ще знає позицію
+    remote.stop(); // saves the episode position while the player still knows it
     persistQueue();
     if (currentFilePath.isNotEmpty && player.state.duration.inMilliseconds > 0) {
       StorageService.savePlaybackPosition(currentFilePath, player.state.position.inMilliseconds, player.state.duration.inMilliseconds);
@@ -1178,7 +1288,7 @@ class PlayerStateController extends ChangeNotifier {
     _clearDrawer();
     activeSidePanel = null;
     dismissedChapterStartTime = null;
-    isCollapsed = false; // тепер showHome стає true, тож орієнтація повертається одразу, без проміжного плеєра
+    isCollapsed = false; // now showHome becomes true, so the orientation is restored at once, without an intermediate player
     notifyListeners();
     unlockRotation(announce: false);
   }
@@ -1241,9 +1351,9 @@ class PlayerStateController extends ChangeNotifier {
     _publishVolume();
   }
 
-  // ───────── Прямий доступ до mpv ─────────
+  // ───────── Direct access to mpv ─────────
 
-  /// Виконує команду mpv (`add contrast 1`, `frame-step`, `change-list …`). Помилки не кидає.
+  /// Runs an mpv command (`add contrast 1`, `frame-step`, `change-list …`). Does not throw errors.
   Future<void> mpv(List<String> args) async {
     try {
       final dynamic platform = player.platform;
@@ -1254,7 +1364,7 @@ class PlayerStateController extends ChangeNotifier {
     }
   }
 
-  /// Значення властивості mpv у вигляді рядка (порожній рядок, якщо недоступна)
+  /// The value of an mpv property as a string (an empty string if unavailable)
   Future<String> mpvGet(String property) async {
     try {
       final dynamic platform = player.platform;
@@ -1265,7 +1375,7 @@ class PlayerStateController extends ChangeNotifier {
     }
   }
 
-  // ───────── Екранні сповіщення ─────────
+  // ───────── On-screen notifications ─────────
 
   void showOsd(
     String title, {
@@ -1277,7 +1387,7 @@ class PlayerStateController extends ChangeNotifier {
     Duration? duration,
     bool onlyWhenControlsHidden = false,
   }) {
-    // Коли видно панель керування, значення (гучність, позиція) і так видно на ній
+    // When the control panel is visible, the value (volume, position) is already visible on it
     if (onlyWhenControlsHidden && showControls) return;
     _pushOsd(
       OsdMessage(icon: icon, title: title, detail: detail, keys: keys, progress: progress?.clamp(0.0, 1.0), isError: isError),
@@ -1291,7 +1401,7 @@ class PlayerStateController extends ChangeNotifier {
     _osdTimer = Timer(duration ?? const Duration(milliseconds: 1700), () => osd.value = null);
   }
 
-  // ───────── Клавіатура, вікно, знімки ─────────
+  // ───────── Keyboard, window, screenshots ─────────
 
   void setKeyScheme(KeyScheme scheme) {
     if (keyScheme == scheme) return;
@@ -1311,7 +1421,7 @@ class PlayerStateController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Зберігає знімок поточного кадру в `Зображення/MikiMiki`
+  /// Saves a snapshot of the current frame to `Pictures/MikiMiki`
   Future<void> takeScreenshot({bool withSubtitles = true}) async {
     AppLog.i('дія', 'знімок екрана (субтитри: $withSubtitles)');
     try {
@@ -1321,7 +1431,7 @@ class PlayerStateController extends ChangeNotifier {
         return;
       }
       final home = Platform.environment['USERPROFILE'] ?? Platform.environment['HOME'];
-      // Android: спільна папка «Зображення» (із кешу застосунку знімок не дістати); якщо не вийшло — кеш
+      // Android: the shared "Pictures" folder (the snapshot cannot be retrieved from the app cache); if that fails, the cache
       final bases = <String>[
         if (Platform.isAndroid) '/storage/emulated/0/Pictures' else if (home != null) '$home/Pictures',
         Directory.systemTemp.path,
@@ -1358,6 +1468,10 @@ class PlayerStateController extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     SystemControls.inPip.removeListener(_onPipChanged);
+    if (SystemControls.onPipToggle == _onPipToggle) SystemControls.onPipToggle = null;
+    if (SystemControls.onAudioFocus == _onAudioFocus) SystemControls.onAudioFocus = null;
+    if (MediaControls.onButton == _onMediaButton) MediaControls.onButton = null;
+    MediaControls.clear();
     _hideTimer?.cancel();
     _touchHide.cancel();
     _positionSaveTimer?.cancel();

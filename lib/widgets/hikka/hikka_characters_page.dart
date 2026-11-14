@@ -11,7 +11,7 @@ import 'hikka_cards.dart';
 import 'hikka_common.dart';
 import 'hikka_page_kit.dart';
 
-/// Вкладка «Персонажі»: пошук за іменем; без запиту — найпопулярніші.
+/// The "Персонажі" tab: search by name; without a query, the most popular.
 class HikkaCharactersPage extends StatefulWidget {
   final double scale;
   final double bottomInset;
@@ -64,7 +64,7 @@ class _HikkaCharactersPageState extends State<HikkaCharactersPage> {
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 450), () {
       final q = text.trim();
-      // API шукає від двох символів; коротший запит дорівнює порожньому
+      // The API searches from two characters; a shorter query equals an empty one
       final effective = q.length >= 2 ? q : '';
       if (!mounted || effective == _query) return;
       _query = effective;
@@ -76,7 +76,7 @@ class _HikkaCharactersPageState extends State<HikkaCharactersPage> {
   @override
   Widget build(BuildContext context) {
     final scale = widget.scale;
-    // Пошук — вкладена шапка: закріплена на верху, ховається разом із прокруткою (як у каталозі)
+    // Search is a nested header: pinned at the top, hides with scrolling (as in the catalog)
     return HikkaCollapsingHeader(
       header: HikkaSearchBar(scale: scale, controller: _search, hint: 'Пошук персонажа за іменем…', onChanged: _onQuery),
       body: HikkaPagedGrid<HikkaCharacter>(

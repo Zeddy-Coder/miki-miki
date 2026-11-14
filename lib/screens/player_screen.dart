@@ -1,3 +1,5 @@
+import '../services/app_updater.dart';
+import '../services/episode_alerts.dart';
 import '../services/hikka_nav.dart';
 import '../services/app_layers.dart';
 import '../services/video_zoom.dart';
@@ -54,7 +56,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   final GlobalKey _volumeKey = GlobalKey();
   final GlobalKey _playerAreaKey = GlobalKey();
 
-  /// Збільшення відео щипком (телефон)
+  /// Pinch zoom of the video (phone)
   final VideoZoomController _zoom = VideoZoomController();
   Size get _playerSize {
     final box = _playerAreaKey.currentContext?.findRenderObject();
@@ -68,15 +70,20 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   void initState() {
     super.initState();
     state.init();
-    WatchLauncher.attach(state.openRemote); // кнопка «Дивитись» на сторінках Hikka запускає серії тут
+    WatchLauncher.attach(state.openRemote); // the "Дивитись" button on Hikka pages starts episodes here
     GestureBinding.instance.pointerRouter.addGlobalRoute(_onPointer);
     WidgetsBinding.instance.addObserver(this);
   }
 
-  /// Застосунок пішов у фон (не PiP): пауза й збереження позиції
+  /// The app went to the background (not PiP): pause and save the position
   @override
   void didChangeAppLifecycleState(AppLifecycleState lifecycle) {
     if (AppPlatform.isMobile && lifecycle == AppLifecycleState.paused) state.onAppBackgrounded();
+    // The app may sit in the background for days: also check for a new version on return
+    if (lifecycle == AppLifecycleState.resumed) {
+      AppUpdater.instance.check(auto: true);
+      EpisodeAlerts.instance.check().then((_) {}, onError: (Object _) {});
+    }
   }
 
   bool _over(GlobalKey key, Offset p) {
@@ -86,10 +93,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     return r.inflate(4).contains(p);
   }
 
-  /// Колесо миші та дотики: глобальний маршрут, не залежить від hit-test віджетів.
+  /// Mouse wheel and touches: a global route that does not depend on widget hit-testing.
   void _onPointer(PointerEvent e) {
     if (!mounted) return;
-    // Телефон: кожен дотик (тап, перетягування повзунка) відкладає приховування панелей
+    // Phone: every touch (tap, dragging the slider) postpones hiding the panels
     if (AppPlatform.isMobile && e.kind == PointerDeviceKind.touch && (e is PointerDownEvent || e is PointerMoveEvent || e is PointerUpEvent)) {
       state.touchActivity();
       return;
@@ -133,7 +140,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
 
   @override
   Widget build(BuildContext context) {
-    // Реактивно слухаємо і стан плеєра, і глобальну тему
+    // Reactively listen to both the player state and the global theme
     return ListenableBuilder(
       listenable: Listenable.merge([state, uiTheme]),
       builder: (context, _) {
@@ -154,10 +161,16 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                 final bool mobile = AppPlatform.isMobile;
                 final double screenHeight = constraints.maxHeight;
                 final double rawScale = screenHeight / 720.0;
-                // Телефон: масштаб не залежить від висоти (в альбомній вона мала); розміри нових віджетів задано в dp
+                // Phone: scale does not depend on height (it is small in landscape); sizes of new widgets are in dp
                 final double scale = mobile ? AppPlatform.mobileScale : (1.0 + (rawScale - 1.0) * 0.40).clamp(0.80, 1.25);
-                // Довідка з гарячих клавіш (клавіші ? та F1) відкривається з контексту цього екрана
+                // The hotkey help (keys ? and F1) opens from this screen's context
                 state.onShowShortcuts = () => ShortcutsDialog.show(context, scale, state);
+                state.onRestoreKeyboardFocus = () {
+                  if (!mounted || _keyboardFocusNode.hasPrimaryFocus) return;
+                  // Do not steal focus from a text field (a dialog with input)
+                  if (FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<EditableText>() != null) return;
+                  _keyboardFocusNode.requestFocus();
+                };
 
                 return DropTarget(
                   onDragEntered: (_) => state.isDraggingFile = true,
@@ -196,7 +209,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     );
   }
 
-  // ── Телефон: кнопка «Назад», кольори системних панелей ─────────────────────
+  // ── Phone: the Back button, system bar colors ─────────────────────
 
   Widget _wrapMobile(Widget child) {
     final bool darkIcons = uiTheme.isLight && state.showHome;
@@ -205,8 +218,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
-        // Закриває верхній шар (меню, панель, плеєр → головна); на головній — спершу сторінка каталогу,
-        // а коли закривати нічого — вихід із застосунку
+        // Closes the top layer (menu, panel, player → home); on home, first a catalog page,
+        // and when there is nothing to close, exit the app
         if (state.handleBack()) return;
         if (HomeHub.backHandler?.call() ?? false) return;
         SystemNavigator.pop();
@@ -224,13 +237,13 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     );
   }
 
-  // ── Головна ────────────────────────────────────────────────────────────────
+  // ── Home ────────────────────────────────────────────────────────────────
 
   Widget _homeLayer(BuildContext context, double scale) {
     final bool mobile = AppPlatform.isMobile;
     final bool compact = HomeHub.isCompact(context);
     final EdgeInsets pad = mobile ? MediaQuery.paddingOf(context) : EdgeInsets.zero;
-    // Згорнутий плеєр: на вузькому екрані — над нижньою навігацією на всю ширину, інакше в куті
+    // Collapsed player: on a narrow screen full width above the bottom navigation, otherwise in a corner
     final double bottom = compact ? HomeHub.bottomNavHeight + pad.bottom + 12 : 24 * scale + pad.bottom;
     return KeyedSubtree(
       key: const ValueKey('home'),
@@ -253,7 +266,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
             bottom: bottom,
             child: ValueListenableBuilder<int>(
               valueListenable: AppLayers.blockers,
-              // Шторка чи сторінка налаштувань відкрита — мініплеєр стоїть під нею, а не поверх кнопок
+              // A drawer or the settings page is open: the mini player sits under it, not over the buttons
               builder: (context, blockers, child) => IgnorePointer(
                 ignoring: blockers > 0,
                 child: AppPresence(
@@ -279,7 +292,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     );
   }
 
-  // ── Десктоп: відео + панелі наведенням миші, бічна панель ──────────────────
+  // ── Desktop: video + panels on mouse hover, side panel ──────────────────
 
   Widget _desktopPlayer(double scale) {
     return KeyedSubtree(
@@ -287,8 +300,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       child: Row(
         children: [
           Expanded(
-            // Без LayoutBuilder: під час висування бокової панелі область відео лише
-            // перелаштовується, а не перебудовується щокадру (розміри читаємо за ключем).
+            // No LayoutBuilder: while the side panel slides out, the video area is only
+            // re-laid out, not rebuilt every frame (sizes are read by key).
             child: Builder(
               builder: (context) {
                 return MouseRegion(
@@ -424,7 +437,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     );
   }
 
-  /// Подвійний тап: перемотка на крок (null — вимкнено в налаштуваннях)
+  /// Double tap: seek by a step (null means disabled in settings)
   ValueChanged<bool>? _doubleTapSeek() {
     if (!StorageService.getDoubleTapSeek()) return null;
     return (forward) {
@@ -434,13 +447,13 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     };
   }
 
-  /// «Статистика для нердів» на весь екран
+  /// "Stats for nerds" full screen
   Widget _statsLayer(double scale) {
     return Positioned.fill(
       child: AppFadeSwitcher(
         expand: true,
         child: state.showStatsOverlay
-            // Показники оновлюються окремим нотифікатором — без перебудови всього екрана
+            // Metrics are updated by a separate notifier, without rebuilding the whole screen
             ? ValueListenableBuilder<PlaybackStats>(
                 key: const ValueKey('stats-on'),
                 valueListenable: state.liveStats,
@@ -461,7 +474,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     );
   }
 
-  // ── Телефон: відео на весь екран, великі кнопки, жести, меню-панелі ────────
+  // ── Phone: full-screen video, large buttons, gestures, menu panels ────────
 
   Widget _mobilePlayer(BuildContext context, double scale) {
     final EdgeInsets pad = MediaQuery.paddingOf(context);
@@ -469,7 +482,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     final sub = state.player.state.track.subtitle;
     final bool subtitlesOn = sub.id != 'no' && sub.id.isNotEmpty && state.cachedSubtitleTracks.isNotEmpty;
     final int queue = state.playlistItems.length;
-    final rd = state.remote; // серії із сайту: свої «попередній / наступний» і підпис
+    final rd = state.remote; // site episodes: their own "previous / next" and label
 
     return KeyedSubtree(
       key: const ValueKey('player'),
@@ -495,11 +508,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
           } else if (state.activeDrawer != null) {
             state.closeDrawers();
           } else {
-            // Тап показує / ховає панелі; пауза — кнопка по центру
+            // Tap shows / hides the panels; pause is the button in the center
             state.toggleControlsByTouch();
           }
         },
-        // У вікні PiP лишається тільки відео (кнопки дає сама система)
+        // Only the video remains in the PiP window (the buttons come from the system)
         overlays: state.isInPip
             ? const []
             : [
@@ -556,7 +569,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                   onAudio: () => state.openDrawer('audio', _audioKey),
                   onEpisodes: () => state.toggleSidePanel(SidePanelType.episodes),
                 ),
-                // Меню: у портреті нижня панель, в альбомній — бічна
+                // Menu: a bottom panel in portrait, a side panel in landscape
                 MobileSheetFrame(
                   open: state.activeDrawer != null,
                   onDismiss: state.closeDrawers,

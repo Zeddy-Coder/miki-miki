@@ -4,13 +4,13 @@ import 'dart:io';
 
 import 'app_log.dart';
 
-/// Запасне визначення IP-адреси хоста через DNS-over-HTTPS, коли системний DNS не відповідає на потрібну адресу
-/// (DNS-фільтри, провайдер, налаштований Private DNS). Запит іде на сам IP провайдера (1.1.1.1, 8.8.8.8), тож
-/// власного DNS не потребує. Використовується лише як запасний шлях для служб самого застосунку.
+/// Fallback host IP lookup via DNS-over-HTTPS when the system DNS does not answer for the needed address
+/// (DNS filters, the provider, a configured Private DNS). The request goes to the provider's IP itself (1.1.1.1, 8.8.8.8), so it
+/// needs no DNS of its own. Used only as a fallback path for the app's own services.
 class DohResolver {
   DohResolver._();
 
-  /// Провайдери за чергою; `(IP, шлях, потрібен заголовок accept)`
+  /// Providers in queue order; `(IP, path, whether the accept header is needed)`
   static const List<(String, String)> providers = [
     ('1.1.1.1', '/dns-query'),
     ('1.0.0.1', '/dns-query'),
@@ -20,14 +20,14 @@ class DohResolver {
 
   static final Map<String, (DateTime, List<String>)> _cache = {};
 
-  /// Лише для тестів: підміна мережевого виклику `(провайдерIP, шлях, хост) -> тіло відповіді`
+  /// Tests only: replaces the network call `(providerIP, path, host) -> response body`
   static Future<String> Function(String ip, String path, String host)? debugFetch;
 
-  /// IPv4-адреси хоста; порожній список, якщо жоден провайдер не відповів
+  /// IPv4 addresses of the host; an empty list if no provider answered
   static Future<List<String>> resolve(String host) async {
     final hit = _cache[host];
     if (hit != null && hit.$1.isAfter(DateTime.now())) return hit.$2;
-    // Усі провайдери одночасно: перший, хто дасть адресу, виграє (одна мережева перешкода не затримує решту)
+    // All providers at once: the first to give an address wins (one network obstacle does not delay the rest)
     final done = Completer<List<String>>();
     var pending = providers.length;
     for (final (ip, path) in providers) {
@@ -52,7 +52,7 @@ class DohResolver {
     return const [];
   }
 
-  /// Дістає A-записи з відповіді формату `application/dns-json`
+  /// Extracts A records from a response in `application/dns-json` format
   static List<String> parse(String body) {
     try {
       final j = jsonDecode(body);

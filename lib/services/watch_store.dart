@@ -1,5 +1,5 @@
-/// Що людина вже подивилась і де зупинилась + запамʼятовані зіставлення Hikka ↔ сайти.
-/// Позиції всередині серій зберігає `StorageService.savePlaybackPosition` (ключ — `RemoteEntry.key`).
+/// What the person has already watched and where they stopped + remembered Hikka ↔ site matches.
+/// Positions inside episodes are stored by `StorageService.savePlaybackPosition` (the key is `RemoteEntry.key`).
 library;
 
 import 'package:flutter/foundation.dart';
@@ -7,7 +7,7 @@ import 'package:flutter/foundation.dart';
 import '../models/source_models.dart';
 import 'storage_service.dart';
 
-/// Остання серія, яку відкривали
+/// The last episode opened
 class WatchLast {
   final String epKey;
   final String groupId;
@@ -54,7 +54,7 @@ class WatchStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ── Переглянуте ──────────────────────────────────────────────────────────────
+  // ── Watched ──────────────────────────────────────────────────────────────────
 
   Set<String> watched(String animeKey) => {for (final x in (_map('watched')[animeKey] as List? ?? const [])) '$x'};
 
@@ -71,7 +71,7 @@ class WatchStore extends ChangeNotifier {
     _commit();
   }
 
-  /// Позначити всі серії до [upToEpKey] включно (за порядком [order])
+  /// Mark all episodes up to [upToEpKey] inclusive (by the order [order])
   void markUpTo(String animeKey, List<String> order, String upToEpKey) {
     final i = order.indexOf(upToEpKey);
     if (i < 0) return;
@@ -80,7 +80,7 @@ class WatchStore extends ChangeNotifier {
     _commit();
   }
 
-  // ── Остання серія й обрана озвучка ────────────────────────────────────────────
+  // ── Last episode and the chosen dub ────────────────────────────────────────────
 
   WatchLast? last(String animeKey) {
     final j = _map('last')[animeKey];
@@ -90,7 +90,7 @@ class WatchStore extends ChangeNotifier {
     return WatchLast(ep, (j['g'] as String?) ?? '', DateTime.fromMillisecondsSinceEpoch((j['t'] as num?)?.toInt() ?? 0));
   }
 
-  /// Записує останню відкриту серію; найстаріші записи понад ліміт відкидаються
+  /// Records the last opened episode; the oldest entries beyond the limit are dropped
   void setLast(String animeKey, String epKey, String groupId) {
     final m = _map('last');
     m[animeKey] = {'e': epKey, 'g': groupId, 't': _now().millisecondsSinceEpoch};
@@ -105,23 +105,23 @@ class WatchStore extends ChangeNotifier {
     _commit();
   }
 
-  /// Прибирає тайтл зі списку «Продовжити перегляд»; позначки переглянутих серій лишаються
+  /// Removes a title from the "Продовжити перегляд" list; marks of watched episodes stay
   void forgetLast(String animeKey) {
     if (_map('last').remove(animeKey) == null) return;
     _commit();
   }
 
-  /// Тайтли з недавніми переглядами, найновіші першими
+  /// Titles with recent views, newest first
   List<String> recentTitles({int limit = 20}) {
     final m = _map('last');
     final keys = m.keys.toList()..sort((a, b) => ((m[b] as Map)['t'] as num).compareTo((m[a] as Map)['t'] as num));
     return keys.take(limit).toList();
   }
 
-  // ── Скільки серій є в озвучці, яку обрано для тайтлу ──────────────────────────
+  // ── How many episodes the title's chosen dub has ──────────────────────────
 
-  /// Скільки серій востаннє було у варіанті [groupId] цього тайтлу (і як він називається; `prev` — скільки було до останнього
-  /// збільшення); `null` — ще не перевіряли
+  /// How many episodes variant [groupId] of this title had last time (and what it is called; `prev` is how many it had before the last
+  /// increase); `null`: not checked yet
   ({String groupId, String label, int count, int prev, DateTime at})? available(String animeKey) {
     final j = _map('avail')[animeKey];
     if (j is! Map || j['g'] is! String) return null;
@@ -134,13 +134,13 @@ class WatchStore extends ChangeNotifier {
     );
   }
 
-  /// Запам'ятовує кількість серій обраного варіанта. Записується (й сповіщає), лише якщо щось змінилось або дані
-  /// старіші за пів години, щоб часті перевірки не дзвеніли по всьому застосунку
+  /// Remembers the episode count of the chosen variant. It is recorded (and notifies) only if something changed or the data is
+  /// older than half an hour, so frequent checks do not ring across the whole app
   void setAvailable(String animeKey, String groupId, String label, int count) {
     final old = available(animeKey);
     final same = old != null && old.groupId == groupId && old.count == count && old.label == label;
     if (same && _now().difference(old.at) < const Duration(minutes: 30)) return;
-    // prev — скільки серій було доступно до останнього збільшення: за ним видно, чи глядач був «наздогнаний» на момент виходу нової
+    // prev is how many episodes were available before the last increase: it shows whether the viewer was "caught up" when the new one came out
     final prev = old == null || old.groupId != groupId ? count : (count > old.count ? old.count : (count < old.prev ? count : old.prev));
     _map('avail')[animeKey] = {'g': groupId, 'l': label, 'n': count, 'p': prev, 't': _now().millisecondsSinceEpoch};
     if (same) {
@@ -152,8 +152,8 @@ class WatchStore extends ChangeNotifier {
 
   String? preferredGroup(String animeKey) => _map('group')[animeKey] as String?;
 
-  /// Озвучка, яку людина обрала вручну для цього тайтлу (список на сторінці чи плеєр): вона сильніша за пріоритет
-  /// команд і автоперемикання. Автозапуск її не ставить
+  /// The dub the person chose manually for this title (the list on the page or the player): it outranks the team priority
+  /// and auto-switching. Autostart does not set it
   String? pinnedGroup(String animeKey) => _map('pin')[animeKey] as String?;
 
   void setPinnedGroup(String animeKey, String groupId) {
@@ -172,8 +172,8 @@ class WatchStore extends ChangeNotifier {
     _commit();
   }
 
-  /// Озвучки й субтитри (`choiceKeyOf`), які людина свідомо обирала в плеєрі, найновіші першими: з них у нових тайтлах
-  /// береться знайоме (див. `pickGroup`)
+  /// Dubs and subtitles (`choiceKeyOf`) the person deliberately chose in the player, newest first: a familiar one
+  /// is taken from them in new titles (see `pickGroup`)
   List<String> get favoriteChoices => List.unmodifiable((_data['favorites'] as List?) ?? const <String>[]);
 
   static const int _maxFavorites = 8;
@@ -188,7 +188,7 @@ class WatchStore extends ChangeNotifier {
     _commit();
   }
 
-  // ── Зіставлення Hikka ↔ сайти ────────────────────────────────────────────────
+  // ── Hikka ↔ site matches ────────────────────────────────────────────────
 
   static String _linkKey(String hikkaSlug, String sourceId) => '$hikkaSlug|$sourceId';
 

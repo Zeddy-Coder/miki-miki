@@ -13,8 +13,8 @@ import '../app_ui_kit.dart';
 import 'hikka_common.dart';
 import 'hikka_watch_dialogs.dart';
 
-/// «Джерела перегляду»: які сайти шукають озвучки й субтитри, найбільша якість, плеєр за замовчуванням,
-/// необов'язковий ключ Mikai. Зміни застосовуються одразу; ключ зберігається з невеликою затримкою після набору.
+/// "Джерела перегляду": which sites search for dubs and subtitles, the highest quality, the default player,
+/// an optional Mikai key. Changes apply immediately; the key is saved with a small delay after typing.
 class SourcesDialog extends StatelessWidget {
   final double scale;
   final SourceRegistry registry;
@@ -25,11 +25,11 @@ class SourcesDialog extends StatelessWidget {
     return AppDialogs.show<void>(context, builder: (ctx) => SourcesDialog(scale: scale, registry: registry));
   }
 
-  /// Відбиток налаштувань, від яких залежить результат пошуку (які сайти й який ключ): змінився — пошук варто повторити
+  /// A fingerprint of the settings the search result depends on (which sites and which key): if it changed, the search should be repeated
   static String searchSignature(SourceRegistry registry) =>
       '${[for (final s in registry.enabled) s.id].join(',')}|${registry.prefs.mikaiKey}';
 
-  /// Плеєри, які можна вибрати за замовчуванням (порожній — «Авто»: за порядком джерела)
+  /// Players that can be chosen by default (empty is "Авто": by the source's order)
   static const List<String> hosters = ['', 'Moon'];
 
   @override
@@ -41,12 +41,12 @@ class SourcesDialog extends StatelessWidget {
       );
 }
 
-/// Сам вміст «Джерел перегляду» без рамки: його показують і вікно [SourcesDialog], і вкладка «Каталог» налаштувань
+/// The content of "Джерела перегляду" itself without a frame: shown by both the [SourcesDialog] window and the settings' "Каталог" tab
 class SourcesSettings extends StatefulWidget {
   final double scale;
   final SourceRegistry registry;
 
-  /// [heading] — показати заголовок «Сайти» з поясненням (у вкладці налаштувань його немає: сайти й так підписані)
+  /// [heading]: show the "Сайти" heading with an explanation (the settings tab has none: the sites are labeled anyway)
   final bool heading;
 
   const SourcesSettings({super.key, required this.scale, required this.registry, this.heading = true});
@@ -58,7 +58,7 @@ class SourcesSettings extends StatefulWidget {
 class _SourcesSettingsState extends State<SourcesSettings> {
   late List<String> _priority = StorageService.getWatchTeamPriority();
 
-  /// Усі команди озвучення Mikai (зі збереженого на диску списку, оновлюється раз на добу)
+  /// All Mikai dub teams (from the list saved on disk, refreshed once a day)
   List<MikaiTeam> _remote = const [];
   bool _teamsLoading = true;
 
@@ -91,7 +91,7 @@ class _SourcesSettingsState extends State<SourcesSettings> {
         _teamsLoading = false;
       });
     } catch (_) {
-      // немає мережі й збереженого списку: лишаються знайомі команди й ручний ввід
+      // no network and no saved list: familiar teams and manual input remain
       if (mounted) setState(() => _teamsLoading = false);
     }
   }
@@ -136,7 +136,7 @@ class _SourcesSettingsState extends State<SourcesSettings> {
     );
   }
 
-  /// Аватарка команди за назвою (лише для команд Mikai)
+  /// Team avatar by name (Mikai teams only)
   String? _avatarOf(String name) {
     final n = name.toLowerCase();
     for (final t in _remote) {
@@ -145,7 +145,7 @@ class _SourcesSettingsState extends State<SourcesSettings> {
     return null;
   }
 
-  /// Усі відомі команди: з Mikai (за популярністю), знайомі з інших сайтів і вже додані вручну; без повторів
+  /// All known teams: from Mikai (by popularity), familiar ones from other sites and already added manually; without repeats
   List<(String, String?)> get _allTeams {
     final all = <(String, String?)>[
       for (final t in _remote) (t.name, t.avatarUrl),
@@ -156,7 +156,7 @@ class _SourcesSettingsState extends State<SourcesSettings> {
     return [for (final t in all) if (seen.add(t.$1.toLowerCase())) (t.$1, t.$2 ?? _avatarOf(t.$1))];
   }
 
-  /// Додає команду в кінець пріоритету або прибирає, якщо вона вже там
+  /// Adds a team to the end of the priority or removes it if it is already there
   void _toggleTeam(String name) {
     final i = _priority.indexWhere((x) => x.toLowerCase() == name.toLowerCase());
     _setPriority(i < 0 ? [..._priority, name] : ([..._priority]..removeAt(i)));
@@ -252,7 +252,7 @@ class _SourcesSettingsState extends State<SourcesSettings> {
         builder: (context, _) => Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Перемикачі сайтів потрібні, лише коли джерел кілька (зараз є тільки Mikai)
+            // Site switches are needed only when there are several sources (currently only Mikai)
             if (widget.registry.all.length > 1) ...[
               if (widget.heading) _title('Сайти', hint: 'Де шукати українські озвучки й субтитри. Вимкнені сайти не опитуються.'),
               for (final s in widget.registry.all) ...[

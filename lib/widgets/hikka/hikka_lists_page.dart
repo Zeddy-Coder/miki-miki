@@ -8,6 +8,7 @@ import '../../models/hikka_user_models.dart';
 import '../../services/hikka_api.dart';
 import '../../services/hikka_auth.dart';
 import '../../services/hikka_lists.dart';
+import '../../services/hikka_nav.dart';
 import '../../services/hikka_pager.dart';
 import '../../services/hikka_prefs.dart';
 import '../../services/ui_theme_service.dart';
@@ -23,15 +24,15 @@ import 'hikka_filter_sheet.dart';
 import 'hikka_my_list_bar.dart';
 import 'hikka_page_kit.dart';
 
-/// Вкладка «Списки»: списки перегляду Hikka (дивлюсь, у планах, переглянуто, відкладено, кинуто) й улюблене.
-/// Без входу — запрошення увійти й перелік того, що з'явиться.
+/// The "Списки" tab: Hikka watch lists (watching, planned, completed, on hold, dropped) and favorites.
+/// Without sign-in: an invitation to sign in and a list of what will appear.
 class HikkaListsPage extends StatefulWidget {
   final double scale;
   final double bottomInset;
 
   const HikkaListsPage({super.key, required this.scale, this.bottomInset = 0});
 
-  /// Що дасть вхід: значок, назва, пояснення
+  /// What signing in gives: an icon, a title, an explanation
   static const List<(IconData, String, String)> planned = [
     (Symbols.play_circle_rounded, 'Дивлюсь', 'Що ви дивитеся просто зараз'),
     (Symbols.bookmark_rounded, 'У планах', 'Відкладено «на потім»'),
@@ -60,7 +61,7 @@ class _HikkaListsPageState extends State<HikkaListsPage> {
   int _filterRev = 0;
   final Map<int, HikkaPager<HikkaWatchEntry>> _pagers = {};
 
-  /// Номер вкладки: 0…4 — статуси за порядком [HikkaWatchStatus.values], 5 — улюблене
+  /// Tab number: 0…4 are the statuses in the order of [HikkaWatchStatus.values], 5 is favorites
   int _tab = 0;
   static const int _favouriteTab = 5;
 
@@ -80,13 +81,31 @@ class _HikkaListsPageState extends State<HikkaListsPage> {
     _seenVersion = _list.version;
     _auth.addListener(_onChange);
     _list.addListener(_onChange);
+    HikkaNav.instance.listsTab.addListener(_onTabRequest);
+    final want = HikkaNav.instance.listsTab.value;
+    if (want != null) {
+      HikkaNav.instance.listsTab.value = null;
+      if (want >= 0 && want <= _favouriteTab) _tab = want;
+    }
     if (_user.isNotEmpty) unawaited(_loadStats());
+  }
+
+  /// The profile asks to open a particular status (`HikkaNav.openLists`)
+  void _onTabRequest() {
+    final want = HikkaNav.instance.listsTab.value;
+    if (want == null) return;
+    HikkaNav.instance.listsTab.value = null;
+    if (want < 0 || want > _favouriteTab) return;
+    if (!mounted || want == _tab) return;
+    if (_scroll.hasClients) _scroll.jumpTo(0);
+    setState(() => _tab = want);
   }
 
   @override
   void dispose() {
     _auth.removeListener(_onChange);
     _list.removeListener(_onChange);
+    HikkaNav.instance.listsTab.removeListener(_onTabRequest);
     _disposePagers();
     _scroll.dispose();
     super.dispose();
@@ -124,7 +143,7 @@ class _HikkaListsPageState extends State<HikkaListsPage> {
       final s = await _list.stats(refresh: true);
       if (mounted) setState(() => _stats = s);
     } on HikkaException {
-      // Лічильники — прикраса: без них вкладки просто без цифр
+      // Counters are decoration: without them the tabs just have no numbers
     }
   }
 
@@ -234,7 +253,7 @@ class _HikkaListsPageState extends State<HikkaListsPage> {
     }
   }
 
-  // ── Вкладки ────────────────────────────────────────────────────
+  // ── Tabs ────────────────────────────────────────────────────
 
   Widget _tabs(double pad) {
     final scale = _scale;
@@ -305,7 +324,7 @@ class _HikkaListsPageState extends State<HikkaListsPage> {
               _auth.username.isEmpty ? 'Ваш перегляд на Hikka' : _auth.username,
           actions: [
             if (tab != _favouriteTab) _filterButton(scale),
-            // На телефоні оновлення — потяг вниз
+            // On a phone, refresh is a pull-down
             if (!AppPlatform.isMobile)
               HikkaIconButton(
                 icon: Symbols.refresh_rounded,

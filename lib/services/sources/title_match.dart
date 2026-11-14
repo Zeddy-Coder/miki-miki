@@ -1,6 +1,6 @@
-/// Зіставлення назв аніме з різних сайтів: «Хвіст Феї (1 cезон)» ↔ «Fairy Tail», «Монолог травниці - 3 сезон» ↔ «Kusuriya no Hitorigoto 3rd Season».
-/// Чиста Dart-логіка. Назви нормалізуються (регістр, дужки, розділові знаки, номер сезону, тип OVA / фільм),
-/// порівнюються за біграмами, а розбіжність сезону чи типу сильно знижує оцінку.
+/// Matching anime titles from different sites: "Хвіст Феї (1 cезон)" ↔ "Fairy Tail", "Монолог травниці - 3 сезон" ↔ "Kusuriya no Hitorigoto 3rd Season".
+/// Pure Dart logic. Titles are normalized (case, brackets, punctuation, season number, OVA / movie type),
+/// compared by bigrams, and a season or type mismatch lowers the score sharply.
 library;
 
 import '../../models/source_models.dart';
@@ -9,7 +9,7 @@ final RegExp _brackets = RegExp(r'[\(\[\{][^\)\]\}]*[\)\]\}]');
 final RegExp _punct = RegExp(r'[^\p{L}\p{N}\s]+', unicode: true);
 final RegExp _spaces = RegExp(r'\s+');
 
-// У сайтів трапляється латинська «c» замість кириличної «с» («cезон»), тож у шаблонах обидві.
+// Sites sometimes have a Latin "c" instead of a Cyrillic "с" ("cезон"), so both appear in the patterns.
 final List<RegExp> _seasonPatterns = [
   RegExp(r'(\d+)\s*[-–]?\s*(?:й|ий|ій|го)?\s*[cс]езон', unicode: true),
   RegExp(r'[cс]езон\s*[:№#-]?\s*(\d+)', unicode: true),
@@ -25,10 +25,10 @@ const Map<String, int> _roman = {'ii': 2, 'iii': 3, 'iv': 4, 'v': 5, 'vi': 6};
 
 const Set<String> _typeWords = {'ova', 'ona', 'oad', 'special', 'specials', 'movie', 'film', 'фільм', 'ова', 'спешл', 'спецвипуск'};
 
-/// Приводить рядок до порівнянного вигляду без номера сезону й дужок.
+/// Brings a string to a comparable form without the season number and brackets.
 String normalizeTitle(String s) => _base(s).text;
 
-/// Номер сезону, якщо назва його містить (`null` — не вказано, тобто перший)
+/// The season number if the title contains it (`null` means not specified, i.e. the first)
 int? seasonOfTitle(String s) => _base(s).season;
 
 class _Norm {
@@ -41,7 +41,7 @@ class _Norm {
 _Norm _base(String raw) {
   var s = raw.toLowerCase().replaceAll(RegExp("[’'ʼ`]"), '').replaceAll('ё', 'е');
   int? season;
-  // сезон шукаємо до видалення дужок: «Хвіст Феї (1 cезон)»
+  // we look for the season before removing the brackets: "Хвіст Феї (1 cезон)"
   for (final p in _seasonPatterns) {
     final m = p.firstMatch(s);
     if (m != null) {
@@ -83,7 +83,7 @@ double _dice(String a, String b) {
   return 2 * common / (x.length + y.length);
 }
 
-/// Схожість двох назв, 0..1. Різні сезони чи типи (OVA ↔ серіал) дають значно меншу оцінку.
+/// Similarity of two titles, 0..1. Different seasons or types (OVA ↔ series) give a much lower score.
 double titleSimilarity(String a, String b) {
   final x = _base(a), y = _base(b);
   if (x.text.isEmpty || y.text.isEmpty) return 0;
@@ -101,8 +101,8 @@ class TitleMatch {
   const TitleMatch(this.anime, this.score);
 }
 
-/// Найкращий збіг серед кандидатів: порівнюються всі назви Hikka з усіма назвами кандидата (укр. + оригінальна).
-/// Нижче порогу — `null`. Якщо є рік і в кандидата він відомий та різниться більш ніж на рік — оцінка знижується.
+/// The best match among candidates: all Hikka titles are compared with all candidate titles (Ukr. + original).
+/// Below the threshold, `null`. If the year is known and the candidate's is known and differs by more than a year, the score is lowered.
 TitleMatch? bestAnimeMatch(List<String> wanted, List<SAnime> candidates, {int? year, double threshold = 0.74}) {
   final titles = wanted.where((t) => t.trim().isNotEmpty).toList();
   if (titles.isEmpty) return null;

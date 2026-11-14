@@ -1,8 +1,8 @@
-/// Референс вбудованого клієнта Hikka для входу в акаунт (застосунок «Miki Miki»).
+/// Reference of the built-in Hikka client for account sign-in (the "Miki Miki" app).
 ///
-/// Референс не секрет: він і так стоїть у адресі сторінки дозволу на hikka.io. Секрету клієнта в застосунку немає:
-/// код входу на токен міняє бекенд (`BackendClient.hikkaToken`), секрет лежить там у Secret Manager.
-/// Свій клієнт (референс і секрет) користувач може вписати в налаштуваннях: тоді обмін іде напряму.
+/// The reference is not a secret: it is already in the address of the consent page on hikka.io. The app has no client secret:
+/// the backend exchanges the sign-in code for a token (`BackendClient.hikkaToken`), and the secret is kept there in Secret Manager.
+/// The user can enter their own client (reference and secret) in settings: then the exchange goes directly.
 library;
 
 class HikkaClientKey {
@@ -20,12 +20,12 @@ class HikkaClientKey {
     0x03, 0x1e, 0x84, 0x40, 0x6d, 0x00, 0x60, 0xdc, 0x4e, 0x97, 0x57, 0xa6
   ];
 
-  /// Для тестів: підміна референсу вбудованого клієнта (`null` — справжній)
+  /// For tests: overrides the built-in client's reference (`null` means the real one)
   static String? testReference;
 
   static String _unmask(List<int> a, List<int> b) => String.fromCharCodes([for (int i = 0; i < a.length; i++) a[i] ^ b[i]]);
 
-  /// Референс клієнта (збирається в пам'яті щоразу)
+  /// The client reference (assembled in memory each time)
   static String get reference => testReference ?? _unmask(_refA, _refB);
 
 }

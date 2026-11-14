@@ -1,42 +1,42 @@
-/// Звірка серій озвучки/плеєра з тим, що вказано на Hikka. Потрібна для чесного дисклеймера й для майбутньої
-/// синхронізації «переглянуто» з Hikka: відмітки можна передавати лише тоді, коли номер серії в джерелі
-/// гарантовано означає ту саму серію на Hikka.
+/// Reconciliation of dub/player episodes with what Hikka states. Needed for an honest disclaimer and for the future
+/// "watched" sync with Hikka: marks can be sent only when the episode number in the source
+/// guaranteed to mean the same episode on Hikka.
 ///
-/// Типові халепи, які тут ловляться:
-///  • кілька частин сезону злито в одну купу: «24 з 12» на першій частині й «0 з 12» на другій;
-///  • наскрізна нумерація (13–24) на сторінці другої частини;
-///  • номери починаються знову (1–12, 1–12) — повтори;
-///  • OVA / спецвипуск додано останньою серією (13 при 12) або вставлено посеред сезону;
-///  • пропуски в нумерації, кілька сезонів у одному варіанті, відсутні номери.
+/// Typical pitfalls caught here:
+///  • several parts of a season merged into one pile: "24 of 12" on the first part and "0 of 12" on the second;
+///  • continuous numbering (13–24) on the second part's page;
+///  • numbering restarts (1–12, 1–12), which gives duplicates;
+///  • an OVA / special added as the last episode (13 of 12) or inserted mid-season;
+///  • gaps in numbering, several seasons in one variant, missing numbers.
 library;
 
 import '../models/source_models.dart';
 import 'watch_models.dart';
 
 enum EpisodeCheckLevel {
-  /// Кількість і нумерація збігаються з Hikka
+  /// Count and numbering match Hikka
   match,
 
-  /// На Hikka нічого порівняти (кількість невідома)
+  /// Nothing to compare on Hikka (the count is unknown)
   unknown,
 
-  /// Тайтл ще виходить: озвучено менше, ніж вийшло, — це нормально, але варто сказати
+  /// The title is still airing: fewer are dubbed than aired, which is normal but worth mentioning
   lag,
 
-  /// Тайтл завершено, а тут не всі серії
+  /// The title has finished but not all episodes are here
   incomplete,
 
-  /// Тайтл виходить, у джерелі вже більше серій, ніж Hikka знає про вихід
+  /// The title is airing and the source already has more episodes than Hikka knows have aired
   lead,
 
-  /// Основні серії збігаються, але в кінці є зайві (OVA / спецвипуск), яких на Hikka нема
+  /// The main episodes match, but there are extras at the end (OVA / special) that Hikka does not have
   extra,
 
-  /// Нумерація не збігається з Hikka (зсув, пропуски, повтори, кілька сезонів, немає номерів, більше за «всього»)
+  /// Numbering does not match Hikka (shift, gaps, repeats, several seasons, no numbers, more than "total")
   mismatch,
 }
 
-/// Що Hikka каже про кількість серій
+/// What Hikka says about the episode count
 class HikkaEpisodeInfo {
   final int? released;
   final int? total;
@@ -46,35 +46,35 @@ class HikkaEpisodeInfo {
 
   bool get known => (released ?? 0) > 0 || (total ?? 0) > 0;
 
-  /// Скільки серій очікуємо побачити в повній озвучці
+  /// How many episodes we expect to see in a full dub
   int? get expected => finished ? (total ?? released) : (released ?? total);
 }
 
 class EpisodeCheck {
   final EpisodeCheckLevel level;
 
-  /// Скільки основних серій (з цілими номерами, без зайвих OVA в кінці) у варіанті
+  /// How many main episodes (integer numbers, without extra OVAs at the end) the variant has
   final int count;
   final int? expected;
 
-  /// Коротко: «5 з 12»
+  /// Short form: "5 з 12"
   final String summary;
 
-  /// Пояснення для дисклеймера (порожнє, коли все гаразд)
+  /// Explanation for the disclaimer (empty when all is well)
   final String note;
 
-  /// Якщо задано — з Hikka можна синхронізувати лише серії до цього номера включно (зайві в кінці ігноруються)
+  /// If set, only episodes up to this number inclusive can be synced with Hikka (extras at the end are ignored)
   final int? syncLimit;
 
   const EpisodeCheck(this.level, this.count, this.expected, this.summary, this.note, {this.syncLimit});
 
-  /// Показувати дисклеймер
+  /// Show the disclaimer
   bool get hasNote => note.isNotEmpty;
 
-  /// Серйозна розбіжність нумерації (червоний прапорець)
+  /// A serious numbering mismatch (red flag)
   bool get isWarning => level == EpisodeCheckLevel.mismatch;
 
-  /// Чи можна синхронізувати «переглянуто» цього варіанта з Hikka без ризику плутанини
+  /// Whether this variant's "watched" can be synced with Hikka without risk of confusion
   bool get syncSafe => level != EpisodeCheckLevel.mismatch;
 }
 
@@ -86,22 +86,22 @@ String _list(List<int> v, {int max = 6}) {
 const String _extraWords =
     r'ova|ona|oad|special|specials|movie|film|спешл|спеціальн\p{L}*|спецвипуск\p{L}*|ова|оад|фільм|позасюжетн\p{L}*';
 
-/// «OVA 1», «[OVA] …», «Спешл», «Спеціальний випуск» — позначка на початку назви
+/// "OVA 1", "[OVA] …", "Спешл", "Спеціальний випуск": a marker at the start of the title
 final RegExp _extraLead = RegExp(
   r'''^[\s\[\(«"'\-–—:]*(?:''' + _extraWords + r')(?![\p{L}\p{N}])',
   caseSensitive: false,
   unicode: true,
 );
 
-/// «Серія 13 (OVA)», «13 [Special]» — позначка в дужках
+/// "Серія 13 (OVA)", "13 [Special]": a marker in brackets
 final RegExp _extraBracket = RegExp(
   r'[\[\(][^\]\)]*?(?<![\p{L}\p{N}])(?:' + _extraWords + r')(?![\p{L}\p{N}])[^\]\)]*[\]\)]',
   caseSensitive: false,
   unicode: true,
 );
 
-/// Назва схожа на OVA / спецвипуск / фільм (а не на звичайну серію). Слово в середині довільної назви
-/// серії («Серія 5. Special Training») не рахується — щоб не прийняти звичайну серію за зайву.
+/// The title looks like an OVA / special / movie (not like a regular episode). A word in the middle of an arbitrary episode
+/// title ("Серія 5. Special Training") does not count, so a regular episode is not mistaken for an extra.
 bool looksLikeExtra(String name) {
   for (final part in name.split('·')) {
     if (_extraLead.hasMatch(part)) return true;
@@ -111,11 +111,11 @@ bool looksLikeExtra(String name) {
 
 const String _syncOff = 'Відмітки «переглянуто» передаватимуться на Hikka за номером серії, не більше за кількість серій там.';
 
-/// Звіряє серії [episodes] із даними Hikka [info].
+/// Reconciles the [episodes] with Hikka's [info].
 EpisodeCheck checkEpisodes(List<SEpisode> episodes, HikkaEpisodeInfo info) {
   final expected = info.expected;
   if (episodes.isEmpty) {
-    // «0 з 12»: сторінку знайдено, а серій на ній немає (часто їх додано на сторінку іншої частини сезону)
+    // "0 з 12": the page was found but has no episodes (often they were added to another part's page)
     if (expected == null || expected <= 0) return const EpisodeCheck(EpisodeCheckLevel.unknown, 0, null, '0 з ?', '');
     return EpisodeCheck(
       info.finished ? EpisodeCheckLevel.incomplete : EpisodeCheckLevel.lag,
@@ -137,7 +137,7 @@ EpisodeCheck checkEpisodes(List<SEpisode> episodes, HikkaEpisodeInfo info) {
     if (n == null) {
       unnumbered++;
     } else if (n == n.roundToDouble()) {
-      // дробові номери (5.5) — позасюжетні випуски, до основного рахунку не входять
+      // fractional numbers (5.5) are off-plot releases and are not counted in the main total
       if (!seen.add(n.toInt())) dups.add(n.toInt());
     }
   }
@@ -156,7 +156,7 @@ EpisodeCheck checkEpisodes(List<SEpisode> episodes, HikkaEpisodeInfo info) {
     return mismatch(seen.length, 'Номери серій повторюються (${_list(d)}): схоже, тут зібрано кілька частин підряд.');
   }
 
-  // Зайві OVA / спецвипуски: якщо вони всі в кінці — відкидаємо їх із рахунку, а якщо серед основних — зсув нумерації
+  // Extra OVAs / specials: if they are all at the end, drop them from the count; if among the main ones, it is a numbering shift
   final numbered = [for (final e in episodes) if (e.number != null && e.number == e.number!.roundToDouble()) e]
     ..sort((a, b) => a.number!.compareTo(b.number!));
   final extras = [for (final e in numbered) if (looksLikeExtra(e.name)) e];
@@ -242,5 +242,5 @@ EpisodeCheck checkEpisodes(List<SEpisode> episodes, HikkaEpisodeInfo info) {
   );
 }
 
-/// Те саме для групи
+/// The same for a group
 EpisodeCheck checkGroup(WatchGroup group, HikkaEpisodeInfo info) => checkEpisodes(group.episodes, info);

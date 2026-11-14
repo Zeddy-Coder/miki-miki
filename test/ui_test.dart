@@ -30,7 +30,7 @@ Widget host(void Function(BuildContext) opener) => MaterialApp(
       ),
     );
 
-/// Перший pump будує кадр, другий проганяє анімацію (інакше вона стоїть на нулі)
+/// The first pump builds the frame, the second runs the animation (otherwise it stays at zero)
 Future<void> tick(WidgetTester tester, [int ms = 600]) async {
   await tester.pump();
   await tester.pump(Duration(milliseconds: ms));
@@ -137,36 +137,36 @@ void main() {
     test('пошук комбінації: клавіші збігаються в межах однієї комбінації, «+» і пробіл рівноцінні', () {
       ShortcutDef def(String id) => ShortcutCatalog.byId[id]!;
       const s = KeyScheme.standard;
-      // «1» у «0,1 с» не має чіплятися за «ctrl 1»
+      // The "1" in "0,1 с" must not latch onto "ctrl 1"
       expect(ShortcutsView.matches(def('audio_delay_down'), s, 'ctrl 1'), isFalse);
       expect(ShortcutsView.matches(def('audio_delay_up'), s, 'ctrl 1'), isFalse);
       for (final q in ['ctrl 1', 'ctrl+1', 'Ctrl + 1', 'CTRL+1']) {
         expect(ShortcutsView.matches(def('a4k_mode_1'), s, q), isTrue, reason: q);
         expect(ShortcutsView.matches(def('a4k_mode_2'), s, q), isFalse, reason: q);
       }
-      // Клавіші мають бути в одній комбінації: у «Пауза» є Space, K, P, але не «k p»
+      // The keys must be in one combination: "Пауза" has Space, K, P, but not "k p"
       expect(ShortcutsView.matches(def('play_pause'), s, 'space'), isTrue);
       expect(ShortcutsView.matches(def('play_pause'), s, 'k p'), isFalse);
-      // «ctrl++» — Ctrl і клавіша «+», «ctrl+» — ще не дописана комбінація
+      // "ctrl++" is Ctrl and the "+" key, "ctrl+" is a not-yet-finished combination
       expect(ShortcutsView.matches(def('audio_delay_up'), s, 'ctrl++'), isTrue);
       expect(ShortcutsView.matches(def('audio_delay_down'), s, 'ctrl++'), isFalse);
       expect(ShortcutsView.matches(def('audio_delay_down'), s, 'ctrl+'), isTrue);
       expect(ShortcutsView.matches(def('audio_delay_down'), s, 'ctrl −'), isTrue, reason: 'Unicode-мінус');
       expect(ShortcutsView.matches(def('audio_delay_down'), s, 'ctrl -'), isTrue);
-      // Початок назви клавіші й псевдоніми
+      // The start of a key name and aliases
       expect(ShortcutsView.matches(def('a4k_mode_1'), s, 'ctr'), isTrue);
       expect(ShortcutsView.matches(def('play_pause'), s, 'пробіл'), isTrue);
       expect(ShortcutsView.matches(def('next_file'), s, 'ентер'), isTrue);
       expect(ShortcutsView.matches(def('seek_back_5'), s, 'вліво'), isTrue);
       expect(ShortcutsView.matches(def('seek_fwd_5'), s, 'вліво'), isFalse);
       expect(ShortcutsView.matches(def('seek_fwd_5'), s, 'right'), isTrue);
-      // Односимвольне слово — лише клавіша
+      // A single-character word is a key only
       expect(ShortcutsView.matches(def('mute'), s, 'm'), isTrue);
       expect(ShortcutsView.matches(def('audio_delay_down'), s, '1'), isFalse);
-      // Слово з назви + клавіша
+      // A word from the name + a key
       expect(ShortcutsView.matches(def('play_pause'), s, 'пауза k'), isTrue);
       expect(ShortcutsView.matches(def('play_pause'), s, 'пауза z'), isFalse);
-      // Список для «ctrl 1»: тільки Anime4K → Режим A
+      // The list for "ctrl 1": only Anime4K → Режим A
       final found = ShortcutsView.sections(s, 'ctrl 1').expand((e) => e.items).map((d) => d.id).toList();
       expect(found, ['a4k_mode_1']);
     });
@@ -185,7 +185,7 @@ void main() {
     });
 
     test('приховані комбінації не шукаються', () {
-      // У каталозі Shift+Q прихована (дублікат Q), у довідці її немає
+      // In the catalog Shift+Q is hidden (a duplicate of Q), it is not in the help
       expect(ShortcutsView.matches(ShortcutCatalog.byId['quit_video']!, KeyScheme.standard, 'shift q'), isFalse);
       expect(ShortcutsView.matches(ShortcutCatalog.byId['quit_video']!, KeyScheme.standard, 'ctrl w'), isTrue);
     });
@@ -422,7 +422,7 @@ void main() {
       await tick(tester);
       await shot(tester, 'settings_a4k_bb_hq');
 
-      // До застосування рушій не чіпали
+      // The engine was not touched before applying
       expect(c.anime4k.enabled, isFalse);
       await tester.tap(find.text('Застосувати'));
       await settle(tester, () => c.commands.any((a) => a.contains('glsl-shaders')));
@@ -434,7 +434,7 @@ void main() {
       expect(c.anime4k.skipHeight, 1440);
       final set = c.commands.lastWhere((a) => a.contains('glsl-shaders'));
       expect(set[3].split(':').map((p) => p.split('/').last).toList(), Anime4kService.chain(Anime4kMode.bb, Anime4kQuality.hq));
-      // Кнопки «Застосувати» / «Скасувати» зникли — змін більше немає
+      // The "Застосувати" / "Скасувати" buttons disappeared: there are no more changes
       expect(find.text('Застосувати'), findsNothing);
     });
 

@@ -10,8 +10,8 @@ import 'hikka_common.dart';
 import 'hikka_community_cards.dart';
 import 'hikka_paged_list.dart';
 
-/// Розділ «Статті»: новини, огляди й авторські тексти спільноти Hikka. Фільтр за категорією та порядок
-/// (найновіші чи найвище оцінені).
+/// The "Статті" section: news, reviews and original texts of the Hikka community. A category filter and order
+/// (newest or top rated).
 class HikkaArticlesPage extends StatefulWidget {
   final double scale;
   final double bottomInset;
@@ -24,7 +24,7 @@ class HikkaArticlesPage extends StatefulWidget {
 }
 
 class _HikkaArticlesPageState extends State<HikkaArticlesPage> {
-  /// Категорії, які можна вибрати (системні повідомлення сайту в стрічку не потрапляють)
+  /// Categories that can be chosen (the site's system messages do not get into the feed)
   static const List<(String? key, String label)> _categories = [
     (null, 'Усі'),
     ('news', 'Новини'),

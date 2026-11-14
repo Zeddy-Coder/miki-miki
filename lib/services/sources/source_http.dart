@@ -1,5 +1,5 @@
-/// HTTP для джерел перегляду (аналог `NetworkHelper` / OkHttp в Aniyomi): куки, перенаправлення,
-/// форми, повтор при збої. Без сторонніх пакетів — `dart:io`; транспорт один-стрибковий і підміняється в тестах.
+/// HTTP for watch sources (analogous to Aniyomi's `NetworkHelper` / OkHttp): cookies, redirects,
+/// forms, retry on failure. No third-party packages, only `dart:io`; the transport is single-hop and replaced in tests.
 library;
 
 import 'dart:async';
@@ -14,12 +14,12 @@ class SourceException implements Exception {
   final SourceErrorKind kind;
   final int? status;
 
-  /// Технічний опис (для логів)
+  /// Technical description (for logs)
   final String detail;
 
   const SourceException(this.kind, this.detail, {this.status});
 
-  /// Повідомлення для користувача
+  /// Message for the user
   String get message => switch (kind) {
         SourceErrorKind.network => 'Немає зв’язку із сайтом. Перевірте інтернет.',
         SourceErrorKind.timeout => 'Сайт довго не відповідає. Спробуйте ще раз.',
@@ -40,11 +40,11 @@ class SourceRequest {
   final Uri url;
   final Map<String, String> headers;
 
-  /// Тіло запиту (уже закодоване)
+  /// Request body (already encoded)
   final List<int>? body;
 
-  /// Скільки байтів відповіді читати (решту транспорт відкидає й закриває зʼєднання); `null` — все.
-  /// Потрібно, щоб дізнатися кінцеву адресу відео, не завантажуючи сам файл.
+  /// How many response bytes to read (the transport discards the rest and closes the connection); `null` means all.
+  /// Needed to learn a video's final address without downloading the file itself.
   final int? maxBodyBytes;
 
   const SourceRequest(this.method, this.url, {this.headers = const {}, this.body, this.maxBodyBytes});
@@ -61,10 +61,10 @@ class SourceRequest {
 class SourceResponse {
   final int status;
 
-  /// Адреса, з якої прийшла відповідь (після перенаправлень)
+  /// The address the response came from (after redirects)
   final Uri url;
 
-  /// Заголовки з малими літерами в назвах; повторні значення через кому (`set-cookie` — окремо в `setCookies`)
+  /// Headers with lowercase names; repeated values joined by a comma (`set-cookie` separately in `setCookies`)
   final Map<String, String> headers;
   final List<String> setCookies;
   final List<int> bodyBytes;
@@ -75,7 +75,7 @@ class SourceResponse {
 
   String? get location => headers['location'];
 
-  /// Текст відповіді з урахуванням кодування (UTF-8 за замовчуванням, підтримано й windows-1251)
+  /// Response text taking the encoding into account (UTF-8 by default, windows-1251 is supported too)
   String get text {
     final m = RegExp(r'charset\s*=\s*"?([\w-]+)', caseSensitive: false).firstMatch(contentType);
     final cs = m?.group(1)?.toLowerCase();
@@ -92,7 +92,7 @@ class SourceResponse {
     }
   }
 
-  /// Схоже на сторінку захисту Cloudflare (а не на справжню відповідь сайту чи API)
+  /// Looks like a Cloudflare protection page (not a real response of the site or API)
   bool get looksBlocked {
     if (status != 403 && status != 429 && status != 503) return false;
     final head = text.length > 6000 ? text.substring(0, 6000) : text;
@@ -102,16 +102,16 @@ class SourceResponse {
         head.contains('challenge-platform')) {
       return true;
     }
-    // відповідь API (JSON) і «Забагато запитів» — не блокування
+    // an API response (JSON) and "Too many requests" are not blocking
     if (contentType.contains('json') || status == 429) return false;
     return (headers['server'] ?? '').toLowerCase().contains('cloudflare');
   }
 }
 
-/// Один HTTP-запит без перенаправлень і куків (їх веде `SourceHttp`)
+/// One HTTP request without redirects and cookies (they are handled by `SourceHttp`)
 typedef SourceSender = Future<SourceResponse> Function(SourceRequest request);
 
-/// Справжній транспорт на `dart:io`
+/// The real transport on `dart:io`
 class IoSourceTransport {
   static HttpClient? _client;
 
@@ -138,7 +138,7 @@ class IoSourceTransport {
     final cap = r.maxBodyBytes;
     await for (final chunk in res.timeout(const Duration(seconds: 25))) {
       bytes.addAll(chunk);
-      if (cap != null && bytes.length >= cap) break; // вихід із циклу скасовує читання й закриває зʼєднання
+      if (cap != null && bytes.length >= cap) break; // leaving the loop cancels reading and closes the connection
     }
     final headers = <String, String>{};
     res.headers.forEach((k, v) {
@@ -154,7 +154,7 @@ class IoSourceTransport {
   }
 }
 
-/// Куки за доменами (спрощено: без шляхів і термінів, окрім явного видалення)
+/// Cookies by domain (simplified: no paths or lifetimes except explicit deletion)
 class CookieJar {
   final Map<String, Map<String, String>> _byDomain = {};
 
@@ -212,7 +212,7 @@ DateTime? _tryParseHttpDate(String s) {
   }
 }
 
-/// Типовий браузерний User-Agent: більшість сайтів із захистом відсікають «порожні» агенти
+/// A typical browser User-Agent: most protected sites cut off "empty" agents
 const String kBrowserUserAgent =
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
@@ -221,21 +221,21 @@ class SourceHttp {
   final CookieJar cookies = CookieJar();
   final String userAgent;
 
-  /// Пауза перед повтором після збою (у тестах — нуль)
+  /// Pause before a retry after a failure (zero in tests)
   final Duration retryDelay;
   final int maxRedirects;
 
-  /// Скільки запитів реально пішло в мережу (для тестів і діагностики)
+  /// How many requests actually went to the network (for tests and diagnostics)
   int networkCalls = 0;
 
   SourceHttp({SourceSender? sender, this.userAgent = kBrowserUserAgent, this.retryDelay = const Duration(milliseconds: 600), this.maxRedirects = 8})
       : _send = sender ?? IoSourceTransport.send;
 
-  /// Кодує поля форми як `application/x-www-form-urlencoded` (пробіл → `+`, UTF-8)
+  /// Encodes form fields as `application/x-www-form-urlencoded` (space → `+`, UTF-8)
   static List<int> encodeForm(Map<String, String> form) =>
       utf8.encode(form.entries.map((e) => '${Uri.encodeQueryComponent(e.key)}=${Uri.encodeQueryComponent(e.value)}').join('&'));
 
-  /// Розбирає адресу так, як це робить браузер: пропуски й кирилиця в шляху не заважають
+  /// Parses an address as a browser does: spaces and Cyrillic in the path do not interfere
   static Uri parseUrl(String s, [Uri? base]) {
     final t = s.trim();
     Uri u;
@@ -257,8 +257,8 @@ class SourceHttp {
         throwOnError: throwOnError,
       );
 
-  /// Кінцева адреса після всіх перенаправлень — без завантаження файлу (читається не більше кількох КБ).
-  /// Повертає також код відповіді кінцевої адреси.
+  /// The final address after all redirects, without downloading the file (at most a few KB are read).
+  /// Also returns the response code of the final address.
   Future<({Uri url, int status, String contentType})> resolve(String url, {Map<String, String>? headers}) async {
     final res = await send(
       SourceRequest('GET', parseUrl(url), headers: {'Range': 'bytes=0-0', ...?headers}, maxBodyBytes: 2048),
@@ -267,8 +267,8 @@ class SourceHttp {
     return (url: res.url, status: res.status, contentType: res.contentType);
   }
 
-  /// Виконує запит: підставляє куки й заголовки, йде за перенаправленнями, повторює при збої.
-  /// `throwOnError` — кидати `SourceException` на 4xx/5xx (з розпізнаванням Cloudflare).
+  /// Performs a request: adds cookies and headers, follows redirects, retries on failure.
+  /// `throwOnError`: throw `SourceException` on 4xx/5xx (recognizing Cloudflare).
   Future<SourceResponse> send(SourceRequest request, {bool throwOnError = true}) async {
     SourceException? last;
     final attempts = request.method == 'GET' || request.method == 'HEAD' ? 2 : 1;

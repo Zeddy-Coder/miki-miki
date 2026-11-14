@@ -7,8 +7,8 @@ import '../app_animation_kit.dart';
 import '../app_ui_kit.dart';
 import 'hikka_common.dart';
 
-/// Прокручуваний список широких карток (колекції, статті) з підвантаженням: слухає [pager] і докантажує
-/// сторінки при наближенні до кінця. На широких вікнах картки лягають у два стовпці.
+/// A scrollable list of wide cards (collections, articles) with incremental loading: listens to [pager] and loads
+/// more pages when nearing the end. On wide windows the cards lay out in two columns.
 class HikkaPagedList<T> extends StatefulWidget {
   final HikkaPager<T> pager;
   final double scale;
@@ -17,13 +17,13 @@ class HikkaPagedList<T> extends StatefulWidget {
   final IconData emptyIcon;
   final ScrollController? controller;
 
-  /// Додатковий відступ знизу (згорнутий плеєр)
+  /// Extra bottom padding (collapsed player)
   final double bottomInset;
 
-  /// Блок над списком, що прокручується разом з ним
+  /// A block above the list that scrolls together with it
   final Widget? header;
 
-  /// Найбільша ширина однієї картки; ширші вікна ділять рядок на стовпці
+  /// Maximum width of one card; wider windows split the row into columns
   final double maxCardWidth;
 
   const HikkaPagedList({
@@ -113,7 +113,7 @@ class _HikkaPagedListState<T> extends State<HikkaPagedList<T>> {
     if (pager.error != null && pager.items.isEmpty) {
       body = HikkaErrorView(scale: scale, error: pager.error!, onRetry: pager.retry);
     } else if (pager.isInitialLoading || pager.isFresh) {
-      // Заглушка замість кола: вкладка одразу виглядає «як сторінка»
+      // A placeholder instead of a spinner: the tab looks "like a page" at once
       body = HikkaListSkeleton(scale: scale, maxCardWidth: widget.maxCardWidth);
     } else if (pager.isEmpty) {
       body = SizedBox(height: 260, child: AppEmptyState(scale: scale, icon: widget.emptyIcon, text: widget.emptyText));
@@ -126,14 +126,14 @@ class _HikkaPagedListState<T> extends State<HikkaPagedList<T>> {
         controller: _controller,
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
-          SliverToBoxAdapter(child: SizedBox(height: AppHeaderInset.of(context))), // місце під шапкою-накладкою
+          SliverToBoxAdapter(child: SizedBox(height: AppHeaderInset.of(context))), // room under the overlay header
           if (widget.header != null) SliverToBoxAdapter(child: widget.header),
           if (pager.items.isEmpty)
             SliverToBoxAdapter(child: body)
           else
             SliverLayoutBuilder(
               builder: (context, constraints) {
-                // Один стовпець на телефоні й у вузькому вікні, два й більше — коли картки не розтягуються без потреби
+                // One column on a phone and in a narrow window, two or more when cards are not stretched unnecessarily
                 final width = (constraints.crossAxisExtent - pad * 2).clamp(0.0, HikkaLayout.maxContentWidth);
                 final maxW = widget.maxCardWidth * (AppPlatform.isMobile ? 1.0 : scale);
                 final columns = ((width + gap) / (maxW + gap)).floor().clamp(1, 3);

@@ -1,17 +1,17 @@
-/// Мінімальний розбір Markdown для описів Hikka: абзаци, посилання, жирний і курсив, цитати,
-/// списки, заголовки та блоки-спойлери (`:::spoiler … :::`). Без залежностей і без Flutter —
-/// покрито тестами. Усе, що розбір не розпізнав, лишається звичайним текстом.
+/// Minimal Markdown parsing for Hikka descriptions: paragraphs, links, bold and italic, quotes,
+/// lists, headings and spoiler blocks (`:::spoiler … :::`). No dependencies and no Flutter;
+/// covered by tests. Anything the parser did not recognize stays plain text.
 library;
 
-// ── Модель ───────────────────────────────────────────────────────────────────
+// ── Model ───────────────────────────────────────────────────────────────────
 
-/// Фрагмент рядка з однаковим оформленням. Розрив рядка — окремий фрагмент `\n`.
+/// A fragment of a line with uniform formatting. A line break is a separate `\n` fragment.
 class MdSpan {
   final String text;
   final bool bold;
   final bool italic;
 
-  /// Адреса посилання (null — звичайний текст)
+  /// Link address (null means plain text)
   final String? url;
   final String? title;
 
@@ -36,7 +36,7 @@ sealed class MdBlock {
   const MdBlock();
 }
 
-/// Абзац; [heading] 1…6 — заголовок, 0 — звичайний текст
+/// Paragraph; [heading] 1…6 is a heading, 0 is plain text
 class MdParagraph extends MdBlock {
   final List<MdSpan> spans;
   final int heading;
@@ -44,7 +44,7 @@ class MdParagraph extends MdBlock {
   const MdParagraph(this.spans, {this.heading = 0});
 }
 
-/// Пункт списку: [marker] — «•» або «1.»
+/// List item: [marker] is "•" or "1."
 class MdListItem extends MdBlock {
   final String marker;
   final List<MdSpan> spans;
@@ -58,7 +58,7 @@ class MdQuote extends MdBlock {
   const MdQuote(this.blocks);
 }
 
-/// Прихований за натисканням блок (`:::spoiler`)
+/// A block hidden behind a tap (`:::spoiler`)
 class MdSpoiler extends MdBlock {
   final String? title;
   final List<MdBlock> blocks;
@@ -66,11 +66,11 @@ class MdSpoiler extends MdBlock {
   const MdSpoiler(this.blocks, {this.title});
 }
 
-// ── Посилання ────────────────────────────────────────────────────────────────
+// ── Links ────────────────────────────────────────────────────────────────
 
-enum HikkaLinkKind { anime, character, collection, article, external }
+enum HikkaLinkKind { anime, character, collection, article, user, external }
 
-/// Куди веде посилання з опису: на сторінку каталогу всередині застосунку чи назовні
+/// Where a link from a description leads: a catalog page inside the app or outside
 class HikkaLinkTarget {
   final HikkaLinkKind kind;
   final String slug;
@@ -80,8 +80,8 @@ class HikkaLinkTarget {
 
   bool get isInternal => kind != HikkaLinkKind.external;
 
-  /// `hikka.io/anime/<slug>`, `hikka.io/characters/<slug>`, `hikka.io/collections/<id>`, `hikka.io/articles/<slug>`
-  /// (і відносні `/anime/<slug>`) відкриваються в застосунку; усе інше — зовнішнє
+  /// `hikka.io/anime/<slug>`, `hikka.io/characters/<slug>`, `hikka.io/collections/<id>`, `hikka.io/articles/<slug>`, `hikka.io/u/<name>`
+  /// (and relative `/anime/<slug>`) open in the app; everything else is external
   static HikkaLinkTarget classify(String url) {
     final clean = url.trim();
     final uri = Uri.tryParse(clean);
@@ -95,18 +95,19 @@ class HikkaLinkTarget {
         if (seg[0] == 'characters') return HikkaLinkTarget(HikkaLinkKind.character, seg[1], clean);
         if (seg[0] == 'collections') return HikkaLinkTarget(HikkaLinkKind.collection, seg[1], clean);
         if (seg[0] == 'articles') return HikkaLinkTarget(HikkaLinkKind.article, seg[1], clean);
+        if (seg[0] == 'u') return HikkaLinkTarget(HikkaLinkKind.user, seg[1], clean);
       }
     }
     return HikkaLinkTarget(HikkaLinkKind.external, '', clean);
   }
 }
 
-// ── Розбір ───────────────────────────────────────────────────────────────────
+// ── Parsing ───────────────────────────────────────────────────────────────────
 
 class HikkaMarkdown {
   const HikkaMarkdown._();
 
-  /// Блоки документа. Порожній або `null` текст дає порожній список.
+  /// Document blocks. Empty or `null` text gives an empty list.
   static List<MdBlock> parse(String? source) {
     if (source == null) return const [];
     final text = source.replaceAll('\r\n', '\n').replaceAll('\r', '\n').replaceAll('​', '').replaceAll('﻿', '');
@@ -114,7 +115,7 @@ class HikkaMarkdown {
     return _blocks(text.split('\n'));
   }
 
-  /// Звичайний текст без розмітки (спойлери пропускаються): для коротких витягів
+  /// Plain text without markup (spoilers are skipped): for short excerpts
   static String plain(String? source, {String separator = '\n', bool includeSpoilers = false}) {
     final out = <String>[];
     void walk(List<MdBlock> blocks) {
@@ -138,7 +139,7 @@ class HikkaMarkdown {
 
   static String _plainSpans(List<MdSpan> spans) => spans.map((s) => s.text).join();
 
-  // ── Блоки ──
+  // ── Blocks ──
 
   static final RegExp _heading = RegExp(r'^(#{1,6})\s+(.*?)\s*#*\s*$');
   static final RegExp _listItem = RegExp(r'^\s{0,3}([-*+]|\d{1,3}[.)])\s+(.*)$');
@@ -159,11 +160,11 @@ class HikkaMarkdown {
         continue;
       }
 
-      // Контейнер ":::spoiler [заголовок]" … ":::"
+      // Container ":::spoiler [title]" … ":::"
       if (t.startsWith(':::')) {
         final head = t.substring(3).trim();
         if (head.isEmpty) {
-          i++; // зайве закриття
+          i++; // extra closing
           continue;
         }
         var depth = 1;
@@ -186,13 +187,13 @@ class HikkaMarkdown {
           final title = head.length > 7 ? head.substring(7).trim() : '';
           if (children.isNotEmpty) out.add(MdSpoiler(children, title: title.isEmpty ? null : title));
         } else {
-          out.addAll(children); // невідомий контейнер показуємо як є
+          out.addAll(children); // an unknown container is shown as is
         }
         i = j + 1;
         continue;
       }
 
-      // Цитата
+      // Quote
       if (t.startsWith('>')) {
         final inner = <String>[];
         while (i < lines.length && lines[i].trimLeft().startsWith('>')) {
@@ -206,7 +207,7 @@ class HikkaMarkdown {
         continue;
       }
 
-      // Заголовок
+      // Heading
       final h = _heading.firstMatch(t);
       if (h != null) {
         final spans = _tidy(parseInline(h.group(2)!));
@@ -215,7 +216,7 @@ class HikkaMarkdown {
         continue;
       }
 
-      // Пункт списку
+      // List item
       final li = _listItem.firstMatch(line);
       if (li != null) {
         final marker = li.group(1)!;
@@ -225,7 +226,7 @@ class HikkaMarkdown {
         continue;
       }
 
-      // Абзац: рядки до порожнього або до початку іншого блоку
+      // Paragraph: lines up to an empty one or to the start of another block
       final para = <String>[];
       while (i < lines.length && lines[i].trim().isNotEmpty && (para.isEmpty || !_startsBlock(lines[i]))) {
         para.add(lines[i].trim());
@@ -237,7 +238,7 @@ class HikkaMarkdown {
     return out;
   }
 
-  /// Зливає сусідні фрагменти з однаковим оформленням, обрізає краї абзацу
+  /// Merges neighboring fragments with the same formatting, trims the paragraph's edges
   static List<MdSpan> _tidy(List<MdSpan> spans) {
     final merged = <MdSpan>[];
     for (final s in spans) {
@@ -249,7 +250,7 @@ class HikkaMarkdown {
         merged.add(s);
       }
     }
-    // Початок і кінець: прибираємо пропуски й розриви
+    // Start and end: strip spaces and breaks
     while (merged.isNotEmpty) {
       final first = merged.first;
       if (first.isBreak || first.text.trim().isEmpty) {
@@ -270,7 +271,7 @@ class HikkaMarkdown {
         break;
       }
     }
-    // Пропуски навколо розривів рядка
+    // Spaces around line breaks
     for (int i = 0; i < merged.length; i++) {
       final s = merged[i];
       if (s.isBreak) continue;
@@ -283,9 +284,9 @@ class HikkaMarkdown {
     return merged;
   }
 
-  // ── Рядкова розмітка ──
+  // ── Inline markup ──
 
-  /// Розбір одного абзацу (рядки розділені `\n`)
+  /// Parsing one paragraph (lines separated by `\n`)
   static List<MdSpan> parseInline(String s) {
     final out = <MdSpan>[];
     _inline(s, 0, s.length, false, false, null, null, out);
@@ -319,7 +320,7 @@ class HikkaMarkdown {
     'ndash': '–',
   };
 
-  /// Розпізнана HTML-сутність у позиції [i]: (символ, позиція після неї)
+  /// A recognized HTML entity at position [i]: (character, position after it)
   static (String, int)? _entityAt(String s, int i, int end) {
     final m = _entity.matchAsPrefix(s, i);
     if (m == null || m.end > end) return null;
@@ -347,7 +348,7 @@ class HikkaMarkdown {
     while (i < end) {
       final c = s.codeUnitAt(i);
 
-      // Екранування: \* \_ \[ …
+      // Escaping: \* \_ \[ …
       if (c == 0x5c /* \ */ && i + 1 < end) {
         final n = s.codeUnitAt(i + 1);
         if (_isAsciiPunct(n)) {
@@ -363,7 +364,7 @@ class HikkaMarkdown {
         }
       }
 
-      // Розрив рядка
+      // Line break
       if (c == 0x0a) {
         flush();
         out.add(MdSpan('\n', bold: bold, italic: italic, url: url, title: title));
@@ -371,7 +372,7 @@ class HikkaMarkdown {
         continue;
       }
 
-      // HTML-сутності: &#x20; &amp; …
+      // HTML entities: &#x20; &amp; …
       if (c == 0x26 /* & */) {
         final e = _entityAt(s, i, end);
         if (e != null) {
@@ -381,7 +382,7 @@ class HikkaMarkdown {
         }
       }
 
-      // [текст](адреса "підказка")
+      // [text](address "hint")
       if (c == 0x5b /* [ */ && url == null) {
         final link = _parseLink(s, i, end);
         if (link != null) {
@@ -409,7 +410,7 @@ class HikkaMarkdown {
         }
       }
 
-      // Голе посилання https://…
+      // Bare link https://…
       if ((c == 0x68 /* h */) && url == null && !_isWord(s, i - 1) && (s.startsWith('http://', i) || s.startsWith('https://', i))) {
         var j = i;
         while (j < end && !_isSpace(s, j) && s[j] != '<' && s[j] != '>' && s[j] != '"') {
@@ -418,7 +419,7 @@ class HikkaMarkdown {
         while (j > i && '.,;:!?'.contains(s[j - 1])) {
           j--;
         }
-        // закриваюча дужка без відкриваючої належить тексту навколо
+        // a closing bracket without an opening one belongs to the surrounding text
         while (j > i && (s[j - 1] == ')' || s[j - 1] == ']') && !_balanced(s.substring(i, j))) {
           j--;
         }
@@ -431,7 +432,7 @@ class HikkaMarkdown {
         }
       }
 
-      // Виділення: * _ ** __ *** ___
+      // Emphasis: * _ ** __ *** ___
       if (c == 0x2a /* * */ || c == 0x5f /* _ */) {
         final emphasis = _parseEmphasis(s, i, end, c);
         if (emphasis != null) {
@@ -440,7 +441,7 @@ class HikkaMarkdown {
           i = emphasis.closeAt + emphasis.count;
           continue;
         }
-        // не відкриває виділення — лишається текстом (разом з усім рядом однакових символів)
+        // does not open emphasis: stays text (together with the whole run of identical characters)
         var j = i;
         while (j < end && s.codeUnitAt(j) == c) {
           buf.writeCharCode(c);
@@ -473,7 +474,7 @@ class HikkaMarkdown {
     return round >= 0 && square >= 0;
   }
 
-  /// Виділення, що починається в [i]: скільки символів у відкриваючому ряді й де закриваючий ряд
+  /// Emphasis starting at [i]: how many characters in the opening run and where the closing run is
   static ({int count, int closeAt})? _parseEmphasis(String s, int i, int end, int mark) {
     var n = 0;
     while (i + n < end && s.codeUnitAt(i + n) == mark) {
@@ -482,7 +483,7 @@ class HikkaMarkdown {
     if (n > 3) return null;
     final after = i + n;
     if (after >= end || _isSpace(s, after)) return null;
-    // `_` посеред слова (snake_case) виділенням не є
+    // `_` in the middle of a word (snake_case) is not emphasis
     if (mark == 0x5f && _isWord(s, i - 1)) return null;
 
     var j = after;
@@ -495,7 +496,7 @@ class HikkaMarkdown {
       if (c == 0x5b /* [ */) {
         final link = _parseLink(s, j, end);
         if (link != null) {
-          j = link.next; // адреса посилання не може закривати виділення
+          j = link.next; // a link address cannot close emphasis
           continue;
         }
       }
@@ -515,9 +516,9 @@ class HikkaMarkdown {
     return null;
   }
 
-  /// Посилання `[текст](адреса "підказка")`, що починається в [i]
+  /// A link `[text](address "hint")` starting at [i]
   static ({int textStart, int textEnd, String url, String? title, int next})? _parseLink(String s, int i, int end) {
-    // Закриваюча `]` з урахуванням вкладених дужок і екранування
+    // Closing `]` accounting for nested brackets and escaping
     var depth = 0;
     var j = i;
     var close = -1;

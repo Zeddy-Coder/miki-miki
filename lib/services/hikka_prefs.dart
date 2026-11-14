@@ -3,10 +3,10 @@ import 'package:flutter/foundation.dart';
 import '../models/hikka_models.dart';
 import 'storage_service.dart';
 
-/// Налаштування каталогу Hikka: мова назв і показ контенту 18+ (за замовчуванням вимкнений).
-/// Зберігаються в `app_state.json` разом з рештою налаштувань.
+/// Hikka catalog settings: title language and showing 18+ content (off by default).
+/// Stored in `app_state.json` together with the rest of the settings.
 class HikkaPrefs extends ChangeNotifier {
-  /// Спільний екземпляр (у тестах підміняється)
+  /// Shared instance (replaced in tests)
   static HikkaPrefs instance = HikkaPrefs();
 
   HikkaTitleLang _titleLang;
@@ -20,10 +20,19 @@ class HikkaPrefs extends ChangeNotifier {
         _showSecondary = showSecondary ?? StorageService.getHikkaShowSecondary(),
         _secondaryLang = secondaryLang ?? HikkaTitleLang.fromName(StorageService.getHikkaSecondaryLang());
 
+  /// Re-reads everything from the store (after settings arrive from another device)
+  void reload() {
+    _titleLang = HikkaTitleLang.fromName(StorageService.getHikkaTitleLang());
+    _allowAdult = StorageService.getHikkaAllowAdult();
+    _showSecondary = StorageService.getHikkaShowSecondary();
+    _secondaryLang = HikkaTitleLang.fromName(StorageService.getHikkaSecondaryLang());
+    notifyListeners();
+  }
+
   HikkaTitleLang get titleLang => _titleLang;
   bool get allowAdult => _allowAdult;
 
-  /// Другорядна назва на сторінці тайтла: чи показувати і якою мовою
+  /// Secondary title on the title page: whether to show it and in which language
   bool get showSecondary => _showSecondary;
   HikkaTitleLang get secondaryLang => _secondaryLang;
 

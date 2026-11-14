@@ -3,12 +3,12 @@ import 'dart:ui' show Size;
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
 
-/// Де працює застосунок. Віконні можливості (міні-плеєр, «поверх усіх вікон», перетягування
-/// вікна) є лише на десктопі; на телефоні їх немає.
+/// Where the app runs. Window features (mini player, "always on top", window
+/// dragging) exist only on desktop; a phone has none.
 class AppPlatform {
   const AppPlatform._();
 
-  /// Лише для тестів: true — поводитись як телефон, false — як десктоп, null — за справжньою платформою
+  /// Tests only: true behaves as a phone, false as desktop, null follows the real platform
   @visibleForTesting
   static bool? debugMobile;
 
@@ -19,18 +19,18 @@ class AppPlatform {
   static bool get isMobile => debugMobile ?? _realMobile;
   static final bool isAndroid = Platform.isAndroid;
 
-  /// Апаратне декодування за замовчуванням: Direct3D 11 на Windows, MediaCodec на Android
+  /// Hardware decoding by default: Direct3D 11 on Windows, MediaCodec on Android
   static final String defaultHwdec = Platform.isAndroid ? 'mediacodec-copy' : 'd3d11va-copy';
 
-  /// Масштаб старих («десктопних») віджетів на телефоні: вони розраховані на мишу й великий
-  /// екран, тож на дотиковому екрані збільшуються. Нові мобільні віджети задають розміри в dp самі.
+  /// Scale of the old ("desktop") widgets on a phone: they were designed for a mouse and a big
+  /// screen, so they are enlarged on a touch screen. New mobile widgets set sizes in dp themselves.
   static const double mobileScale = 1.15;
 
-  /// Мінімальний розмір цілі дотику (рекомендація Material: 48 dp)
+  /// Minimum touch target size (Material recommendation: 48 dp)
   static const double touchTarget = 48;
 }
 
-/// Розкладка під поточний розмір екрана (портрет / альбомна, вузький / широкий).
+/// Layout for the current screen size (portrait / landscape, narrow / wide).
 class AppLayout {
   final Size size;
   const AppLayout(this.size);
@@ -38,9 +38,9 @@ class AppLayout {
   bool get isLandscape => size.width > size.height;
   bool get isPortrait => !isLandscape;
 
-  /// Вузький екран (телефон у портреті): бічна навігація замінюється нижньою
+  /// Narrow screen (phone in portrait): the side navigation is replaced by a bottom one
   bool get isCompactWidth => size.width < 640;
 
-  /// Низький екран (телефон в альбомній): вертикального місця мало
+  /// Short screen (phone in landscape): there is little vertical room
   bool get isShortHeight => size.height < 520;
 }

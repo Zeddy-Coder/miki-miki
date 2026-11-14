@@ -8,13 +8,13 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import '../constants/app_identity.dart';
 
-/// Прев'юшки відео: кеш на диску + фонова генерація кадру для тих файлів,
-/// у яких прев'юшки ще немає.
+/// Video thumbnails: a disk cache + background frame generation for files
+/// that have no thumbnail yet.
 ///
-/// Використання у віджетах: [watch] повертає [ValueNotifier] зі шляхом до
-/// картинки (null, поки її немає). Якщо в кеші порожньо, прев'юшка ставиться в
-/// чергу на генерацію й нотифікатор оновиться, коли вона буде готова.
-/// Кожен [watch] має парний [unwatch] (див. AppMediaThumbnail).
+/// Use in widgets: [watch] returns a [ValueNotifier] with the path to the
+/// image (null until it exists). If the cache is empty, the thumbnail is put
+/// in the generation queue and the notifier updates when it is ready.
+/// Every [watch] has a paired [unwatch] (see AppMediaThumbnail).
 class ThumbnailService {
   static const int thumbWidth = 480;
   static const int thumbHeight = 270;
@@ -29,7 +29,7 @@ class ThumbnailService {
   static bool _working = false;
   static DateTime _holdUntil = DateTime.fromMillisecondsSinceEpoch(0);
 
-  /// Відкладає запуск фонової генерації (щоб не тягнути важкий старт mpv під час анімацій інтерфейсу)
+  /// Defers the start of background generation (so as not to drag a heavy mpv start during UI animations)
   static void holdFor(Duration d) {
     final until = DateTime.now().add(d);
     if (until.isAfter(_holdUntil)) _holdUntil = until;
@@ -41,8 +41,8 @@ class ThumbnailService {
     _ensureDir();
   }
 
-  /// Синхронно створює теку кешу при першому зверненні (не залежить від main(),
-  /// тож працює і після hot reload).
+  /// Synchronously creates the cache folder on first access (does not depend on main(),
+  /// so it works after hot reload too).
   static String? _ensureDir() {
     if (_cacheDir != null) return _cacheDir;
     try {
@@ -62,9 +62,9 @@ class ThumbnailService {
     return _cacheDir;
   }
 
-  // ── Ключі та шляхи ─────────────────────────────────────────────────────────
+  // ── Keys and paths ─────────────────────────────────────────────────────────
 
-  /// Локальний шлях до файлу або null для мережевих потоків
+  /// Local file path or null for network streams
   static String? _localPath(String uri) {
     final lower = uri.toLowerCase();
     if (lower.startsWith('http://') || lower.startsWith('https://') || lower.startsWith('rtmp') || lower.startsWith('rtsp')) {
@@ -80,7 +80,7 @@ class ThumbnailService {
     return uri;
   }
 
-  /// Відбиток файлу: шлях + розмір, щоб прев'юшка оновилась, якщо файл замінили
+  /// File fingerprint: path + size, so the thumbnail updates if the file is replaced
   static String _fingerprint(String uri) {
     final path = _localPath(uri);
     if (path != null) {
@@ -92,7 +92,7 @@ class ThumbnailService {
     return uri;
   }
 
-  /// Стабільний між запусками 64-бітний хеш (String.hashCode для цього не годиться)
+  /// A 64-bit hash stable between launches (String.hashCode is not suitable for that)
   static String _key(String s) {
     int h1 = 0x811c9dc5;
     int h2 = 0x9747b28c;
@@ -110,7 +110,7 @@ class ThumbnailService {
     return '$dir$sep${_key(_fingerprint(uri))}.png';
   }
 
-  // ── Кеш ────────────────────────────────────────────────────────────────────
+  // ── Cache ────────────────────────────────────────────────────────────────
 
   static String? getCachedThumbnail(String uri) {
     final mem = _memoryCache[uri];
@@ -126,7 +126,7 @@ class ThumbnailService {
     return null;
   }
 
-  // ── Підписка з боку віджетів ───────────────────────────────────────────────
+  // ── Subscription from widgets ───────────────────────────────────────────────
 
   static ValueNotifier<String?> watch(String uri) {
     final notifier = _notifiers.putIfAbsent(uri, () => ValueNotifier<String?>(getCachedThumbnail(uri)));
@@ -149,14 +149,14 @@ class ThumbnailService {
     final left = (_refs[uri] ?? 1) - 1;
     if (left <= 0) {
       _refs.remove(uri);
-      // Ніхто більше не дивиться: якщо генерація ще не почалась, прибираємо з черги
+      // Nobody is looking any more: if generation has not started, remove it from the queue
       if (_current != uri) _queue.remove(uri);
     } else {
       _refs[uri] = left;
     }
   }
 
-  // ── Черга генерації (по одному файлу за раз) ───────────────────────────────
+  // ── Generation queue (one file at a time) ───────────────────────────────
 
   static Future<void> _pump() async {
     if (_working) return;
@@ -190,7 +190,7 @@ class ThumbnailService {
     }
   }
 
-  /// Відкриває файл у тимчасовому «безголовому» плеєрі, перемотує на ~12% і робить знімок.
+  /// Opens the file in a temporary "headless" player, seeks to ~12% and takes a snapshot.
   static Future<String?> _generate(String uri) async {
     final path = _localPath(uri);
     if (path == null || !File(path).existsSync()) {
@@ -232,7 +232,7 @@ class ThumbnailService {
       _log('duration: $duration');
       if (duration == Duration.zero) return null;
 
-      // Не одразу початок (чорний кадр/заставка), але й не пізніше 5 хвилин
+      // Not right at the start (a black frame / splash), but no later than 5 minutes
       final ms = (duration.inMilliseconds * 0.12).round().clamp(0, 5 * 60 * 1000).toInt();
       await player.seek(Duration(milliseconds: ms));
       try {
@@ -243,7 +243,7 @@ class ThumbnailService {
       }
       await Future.delayed(const Duration(milliseconds: 500));
 
-      // До 3 спроб: перший кадр після seek може ще не бути готовий
+      // Up to 3 attempts: the first frame after a seek may not be ready yet
       for (int attempt = 1; attempt <= 3; attempt++) {
         Uint8List? bytes;
         try {
@@ -264,7 +264,7 @@ class ThumbnailService {
     }
   }
 
-  /// Зменшує кадр до [thumbWidth] і зберігає у кеш як PNG
+  /// Scales the frame down to [thumbWidth] and saves it to the cache as a PNG
   static Future<String?> _saveResized(String uri, Uint8List bytes) async {
     final outPath = _fileFor(uri);
     if (outPath == null) return null;
@@ -283,7 +283,7 @@ class ThumbnailService {
     }
   }
 
-  /// Зберігає знімок поточного кадру (з плеєра, що зараз грає) без повторного декодування файлу.
+  /// Saves a snapshot of the current frame (from the player that is playing now) without decoding the file again.
   static Future<void> saveLiveThumbnail(String uri, Uint8List bytes) async {
     if (bytes.isEmpty) return;
     final out = await _saveResized(uri, bytes);

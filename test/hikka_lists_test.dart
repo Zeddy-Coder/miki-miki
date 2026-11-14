@@ -35,7 +35,7 @@ void main() {
         'anime': animeJson,
       };
 
-  /// Сервер «зберігає» те, що йому надіслали
+  /// The server "stores" what was sent to it
   void serveWatch({Map<String, dynamic>? existing}) {
     server.routes['GET /watch/$slug'] = (r) => existing == null ? FakeAccountApi.fail(404, 'watch:not_found') : FakeAccountApi.ok(existing);
     server.routes['PUT /watch/$slug'] = (r) {
@@ -100,19 +100,19 @@ void main() {
       expect(disk['user'], 'tester');
       final requests = server.of('POST', '/watch/tester/list').length;
 
-      final second = make(); // «новий запуск»
+      final second = make(); // "fresh launch"
       await second.loadIndex();
       expect(second.statusOf(slug), HikkaWatchStatus.completed, reason: 'з диска');
       expect(server.of('POST', '/watch/tester/list'), hasLength(requests), reason: 'свіжі дані — без запитів');
 
-      // Дані застарілі: позначки є одразу, а мережа оновлює їх
+      // The data is stale: badges appear at once, and the network refreshes them
       disk = {...disk, 'at': DateTime.now().subtract(HikkaMyList.indexMaxAge + const Duration(minutes: 1)).millisecondsSinceEpoch};
       final third = make();
       await third.loadIndex();
       expect(third.statusOf(slug), HikkaWatchStatus.completed);
       expect(server.of('POST', '/watch/tester/list').length, greaterThan(requests));
 
-      // Збережене іншого користувача не підхоплюється
+      // Another user's saved data is not picked up
       disk = {...disk, 'user': 'someone'};
       final other = make();
       server.routes['POST /watch/tester/list'] = (r) => FakeAccountApi.ok(page([]));

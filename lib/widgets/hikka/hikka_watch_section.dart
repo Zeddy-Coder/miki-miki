@@ -24,10 +24,10 @@ import 'hikka_page_kit.dart';
 import 'hikka_watch_dialogs.dart';
 import 'sources_dialog.dart';
 
-/// «Дивитись» на сторінці аніме (стоїть одразу під шапкою). Головна дія — «Дивитись / Продовжити · серія N» — відкриває
-/// плеєр з обраним варіантом; усі знайдені озвучки й субтитри видно рядом чипів, і вибір (перед стартом чи в плеєрі)
-/// запамʼятовується. Перед переглядом показується лише застереження про ліцензію; про розбіжність нумерації серій із
-/// Hikka попереджає плашка поруч із кнопкою. Список серій згорнуто, поки людина його не відкриє.
+/// "Дивитись" on the anime page (right under the header). The main action, "Дивитись / Продовжити · серія N", opens
+/// the player with the chosen variant; all found dubs and subtitles are visible as a row of chips, and the choice (before start or in the player)
+/// is remembered. Before watching only the license warning is shown; a badge next to the button warns about episode numbering
+/// mismatch with Hikka. The episode list is collapsed until the person opens it.
 class HikkaWatchSection extends StatefulWidget {
   final HikkaAnime anime;
   final HikkaRoute route;
@@ -43,11 +43,11 @@ class HikkaWatchSection extends StatefulWidget {
 class _HikkaWatchSectionState extends State<HikkaWatchSection> {
   static const String _memoLoad = 'watch';
 
-  /// Скільки серій показуємо, поки список не розгорнуто
+  /// How many episodes we show until the list is expanded
   static const int _cap = 48;
 
   late WatchLoad _load;
-  bool _ack = false; // підтвердження перегляду ліцензованого тайтлу — лише на цей показ сторінки
+  bool _ack = false; // confirmation of watching a licensed title: only for this showing of the page
   bool _allEpisodes = false;
   String? _notice;
 
@@ -62,12 +62,12 @@ class _HikkaWatchSectionState extends State<HikkaWatchSection> {
     _load = memo is WatchLoad ? memo : _begin();
     _load.addListener(_changed);
     _store.addListener(_changed);
-    // Скільки серій відмічено на Hikka: «Дивитись» пропонує наступну після них
+    // How many episodes are marked on Hikka: "Дивитись" offers the next one after them
     HikkaMyList.instance.addListener(_changed);
     unawaited(HikkaMyList.instance.entry(widget.anime.slug, refresh: true).then((_) {}, onError: (_) {}));
   }
 
-  /// Скільки серій уже переглянуто (більше з історії застосунку й Hikka)
+  /// How many episodes are already watched (more from the app's history and Hikka)
   int get _seen => math.max(_hikkaEpisodes, _store.watched(_load.title.animeKey).length);
 
   int get _hikkaEpisodes => HikkaMyList.instance.cached(widget.anime.slug)?.episodes ?? 0;
@@ -90,7 +90,7 @@ class _HikkaWatchSectionState extends State<HikkaWatchSection> {
     if (mounted) setState(() {});
   }
 
-  /// Шукає наново (змінили джерела, щось не відповіло)
+  /// Searches anew (the sources changed, something did not respond)
   void _restart() {
     _load.removeListener(_changed);
     setState(() {
@@ -100,11 +100,11 @@ class _HikkaWatchSectionState extends State<HikkaWatchSection> {
     });
   }
 
-  // ── Допоміжне ───────────────────────────────────────────────────────────────
+  // ── Helpers ───────────────────────────────────────────────────────────────
 
   String _sourceName(String id) => _service.registry.byId(id)?.name ?? id;
 
-  /// Звідки й з якою озвучкою почати: «Продовжити» або перша серія; `null` — поки нічого не знайдено
+  /// From where and with which dub to start: "Продовжити" or the first episode; `null` while nothing is found
   ({WatchTitle title, WatchGroup group, ContinuePoint point})? _target() {
     final t = _load.title;
     final g = _load.defaultGroup(_store, seen: _seen);
@@ -115,7 +115,7 @@ class _HikkaWatchSectionState extends State<HikkaWatchSection> {
 
   Future<void> _play(WatchTitle t, WatchGroup g, String epKey) async {
     final a = widget.anime;
-    // Обрана вручну озвучка не має наступної серії: питаємо, куди перейти
+    // The manually chosen dub has no next episode: we ask where to go
     final plan = _load.missingNext(_store, seen: _seen);
     if (plan != null) {
       final picked = await WatchDialogs.missingNext(context, scale: _scale, plan: plan, next: _seen + 1);
@@ -130,7 +130,7 @@ class _HikkaWatchSectionState extends State<HikkaWatchSection> {
     if (!started && mounted) setState(() => _notice = 'Плеєр ще не готовий. Спробуйте за мить.');
   }
 
-  /// Ліцензований тайтл: після підтвердження одразу відкриваємо плеєр — людина вже ясно висловила намір
+  /// A licensed title: after confirmation we open the player at once, since the person has clearly expressed intent
   Future<void> _confirmLicensed(WatchTitle t) async {
     final go = await WatchDialogs.confirmLicensed(context, scale: _scale, license: t.license);
     if (!go || !mounted) return;
@@ -141,7 +141,7 @@ class _HikkaWatchSectionState extends State<HikkaWatchSection> {
 
   Future<void> _showTeams(WatchGroup g) => WatchDialogs.teams(context, scale: _scale, teams: g.teams, source: _service.registry.mikai);
 
-  /// Налаштування джерел; якщо змінилося, що саме опитується, шукаємо наново
+  /// Source settings; if what is polled changed, we search anew
   Future<void> _openSources() async {
     final registry = _service.registry;
     final before = SourcesDialog.searchSignature(registry);
@@ -149,7 +149,7 @@ class _HikkaWatchSectionState extends State<HikkaWatchSection> {
     if (mounted && SourcesDialog.searchSignature(registry) != before) _restart();
   }
 
-  // ── Побудова ────────────────────────────────────────────────────────────────
+  // ── Building ────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -178,7 +178,7 @@ class _HikkaWatchSectionState extends State<HikkaWatchSection> {
     );
   }
 
-  /// Головна кнопка + «⋮» праворуч (серії, команда, джерела, якість і плеєр, сайт). Видна з першої миті
+  /// The main button + "⋮" on the right (episodes, team, sources, quality and player, site). Visible from the first moment
   Widget _mainButton(WatchTitle t, List<WatchGroup> groups) {
     final scale = _scale;
     final Widget play;
@@ -226,7 +226,7 @@ class _HikkaWatchSectionState extends State<HikkaWatchSection> {
     );
   }
 
-  /// Натиснули «Дивитись», коли дивитись ще нема чого: джерела вимкнено — модалка, інакше пояснення під кнопкою
+  /// "Дивитись" was pressed when there is nothing to watch yet: sources are off: a modal, otherwise an explanation under the button
   Future<void> _noTarget() async {
     if (_service.registry.enabled.isEmpty) {
       final open = await WatchDialogs.noSources(context, scale: _scale);
@@ -238,14 +238,14 @@ class _HikkaWatchSectionState extends State<HikkaWatchSection> {
         : 'Не знайшли, де це дивитись українською. Спробуйте «Оновити» або змініть джерела.');
   }
 
-  // Ліцензований тайтл ----------------------------------------------------------
+  // Licensed title ----------------------------------------------------------
 
   Widget _licenseCard(WatchTitle t) {
     final scale = _scale;
     final license = t.license;
     final links = license?.links ?? const <({String title, String url})>[];
     final holder = license?.holder;
-    // «Все одно дивитись» має сенс, лише якщо є що показувати (або ще шукаємо)
+    // "Все одно дивитись" makes sense only if there is something to show (or we are still searching)
     final canWatch = t.groups.isNotEmpty || _load.busy;
     return AppCard(
       scale: scale,
@@ -333,7 +333,7 @@ class _HikkaWatchSectionState extends State<HikkaWatchSection> {
     );
   }
 
-  // Порожньо / завантаження -----------------------------------------------------
+  // Empty / loading -----------------------------------------------------
 
   Widget _noGroups(WatchTitle t) {
     final scale = _scale;
@@ -402,7 +402,7 @@ class _HikkaWatchSectionState extends State<HikkaWatchSection> {
     );
   }
 
-  /// Що ще відомо про джерела: сторінка без серій (з поясненням розбіжності), помилки, джерела, що ще шукають
+  /// What else is known about sources: a page without episodes (with an explanation of the mismatch), errors, sources still searching
   List<Widget> _offerNotes(WatchTitle t, {bool always = false}) {
     final out = <Widget>[];
     for (final o in t.offers) {
@@ -423,7 +423,7 @@ class _HikkaWatchSectionState extends State<HikkaWatchSection> {
     return out;
   }
 
-  // Основний вміст --------------------------------------------------------------
+  // Main content --------------------------------------------------------------
 
   Widget _content(WatchTitle t, List<WatchGroup> groups) {
     final g = _load.defaultGroup(_store, seen: _seen) ?? groups.first;
@@ -439,7 +439,7 @@ class _HikkaWatchSectionState extends State<HikkaWatchSection> {
         if (t.licensed) _licensedBanner(t),
         _actions(t, g, keys, watched, point),
         _variants(t, groups, g),
-        // «Не всі серії» / «озвучено не всі» і так видно в рядку озвучки (жовта іконка й «12 з 170»): плашку лишаємо для нумерації та OVA
+        // "Не всі серії" / "озвучено не всі" is already visible in the dub row (a yellow icon and "12 з 170"): we keep the badge for numbering and OVAs
         if (check.hasNote && check.level != EpisodeCheckLevel.incomplete && check.level != EpisodeCheckLevel.lag) ...[
           SizedBox(height: 10 * scale),
           EpisodeNote(scale: scale, check: check),
@@ -448,7 +448,7 @@ class _HikkaWatchSectionState extends State<HikkaWatchSection> {
     );
   }
 
-  /// Усі знайдені озвучки й субтитри — випадний список просто на сторінці (без окремого вікна)
+  /// All found dubs and subtitles: a drop-down list right on the page (no separate window)
   Widget _variants(WatchTitle t, List<WatchGroup> groups, WatchGroup current) {
     final byId = {for (final v in groups) v.id: v};
     return AppDropdown<String>(
@@ -465,7 +465,7 @@ class _HikkaWatchSectionState extends State<HikkaWatchSection> {
     );
   }
 
-  /// Пункт списку: аватарка команди, назва, а під нею іконка виду (озвучення / субтитри), «N з M сер.» і дата оновлення
+  /// A list item: the team avatar, the name, and under it the kind icon (dub / subtitles), "N з M сер." and the update date
   AppDropdownOption<String> _option(WatchGroup v) {
     final check = _load.checkOf(v);
     final warn = episodeCheckWarns(check);
@@ -486,7 +486,7 @@ class _HikkaWatchSectionState extends State<HikkaWatchSection> {
     );
   }
 
-  /// Другорядне під головною кнопкою: «З першої серії» і лічильник переглянутого
+  /// Secondary under the main button: "З першої серії" and the watched counter
   Widget _actions(WatchTitle t, WatchGroup g, List<String> keys, Set<String> watched, ContinuePoint p) {
     final scale = _scale;
     final seen = keys.where(watched.contains).length;
@@ -507,7 +507,7 @@ class _HikkaWatchSectionState extends State<HikkaWatchSection> {
     );
   }
 
-  /// Сітка серій (живе в модалці «Серії»); [onStart] закриває її перед запуском, [refresh] перемальовує після «Показати всі»
+  /// The episode grid (lives in the "Серії" modal); [onStart] closes it before starting, [refresh] repaints after "Показати всі"
   Widget _episodes(WatchTitle t, WatchGroup g, List<String> keys, Set<String> watched, ContinuePoint p, {VoidCallback? onStart, VoidCallback? refresh}) {
     final scale = _scale;
     final total = g.episodes.length;
@@ -602,10 +602,10 @@ class _HikkaWatchSectionState extends State<HikkaWatchSection> {
     );
   }
 
-  // Меню «⋮» ---------------------------------------------------------------------
+  // The "⋮" menu ---------------------------------------------------------------
 
-  /// Сторінка тайтла на сайті джерела. У Mikai адреса має вигляд `/anime/<id>-<назва>`: беремо готове посилання
-  /// з даних Hikka (там воно точне), а без нього — `/anime/<id>`
+  /// The title page on the source site. In Mikai the address looks like `/anime/<id>-<name>`: we take the ready link
+  /// from the Hikka data (it is exact there), and without it `/anime/<id>`
   String _siteUrl(WatchOffer offer) {
     if (offer.source.id == 'mikai') {
       final id = offer.anime.url;
@@ -616,7 +616,7 @@ class _HikkaWatchSectionState extends State<HikkaWatchSection> {
     return offer.webUrl;
   }
 
-  /// Усе другорядне: серії, команда, джерела (з якістю й плеєром за замовчуванням), оновлення, сайт
+  /// Everything secondary: episodes, team, sources (with quality and default player), refresh, site
   Future<void> _openMenu(WatchTitle t, List<WatchGroup> groups) async {
     final scale = _scale;
     final g = groups.isEmpty ? null : (_load.defaultGroup(_store, seen: _seen) ?? groups.first);
@@ -683,7 +683,7 @@ class _HikkaWatchSectionState extends State<HikkaWatchSection> {
   }
 }
 
-/// Рядок меню «Ще»: іконка, назва, дрібна підказка праворуч; не менше 48 dp заввишки
+/// A "Ще" menu row: an icon, a title, a small hint on the right; at least 48 dp tall
 class _MenuRow extends StatelessWidget {
   final double scale;
   final IconData icon;

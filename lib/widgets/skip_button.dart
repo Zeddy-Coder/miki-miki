@@ -17,7 +17,7 @@ class SkipButton extends StatefulWidget {
   final List<VideoChapter> chapters;
   final Duration? dismissedChapterStartTime;
 
-  /// Телефон: кнопка вища (44 dp), стоїть над нижньою панеллю керування й не заходить за системні відступи
+  /// Phone: the button is taller (44 dp), stands above the bottom control bar and does not go past the system insets
   final bool touch;
 
   const SkipButton({
@@ -38,11 +38,11 @@ class _SkipButtonState extends State<SkipButton> {
   late List<VideoChapter> _chapters;
   late List<bool> _flags;
 
-  /// Розділ, для якого зараз пропонуємо «Пропустити» (-1 — жодного). Рахується на кожну подію
-  /// позиції, але віджет перебудовується лише коли результат змінюється (раз на розділ).
+  /// The chapter for which "Skip" is offered now (-1 means none). Computed on every position
+  /// event, but the widget rebuilds only when the result changes (once per chapter).
   late ClockValue<int> _skipIndex;
 
-  /// Розділ, який уже пропустили автоматично (щоб не пропускати повторно, якщо перемотали назад)
+  /// A chapter already skipped automatically (so it is not skipped again if rewound)
   int _autoSkipped = -1;
 
   @override
@@ -61,7 +61,7 @@ class _SkipButtonState extends State<SkipButton> {
     return v;
   }
 
-  /// Автопропуск (налаштування, типово вимкнено): на початку розділу-опенінгу чи ендінгу одразу перемотує до його кінця
+  /// Auto-skip (a setting, off by default): at the start of an opening or ending chapter it seeks straight to its end
   void _maybeAutoSkip() {
     final index = _skipIndex.value;
     if (index < 0) {
@@ -110,10 +110,10 @@ class _SkipButtonState extends State<SkipButton> {
     return AppAnimatedPositioned(
       duration: AppAnim.medium,
       curve: AppAnim.easeOut,
-      // Телефон: над повзунком і рядом кнопок (≈ 110 dp + системний відступ), а без панелі — біля нижнього краю
+      // Phone: above the slider and the button row (≈ 110 dp + the system inset), and without the panel near the bottom edge
       bottom: touch ? (widget.showControls ? 132.0 : 28.0) + safe.bottom : (widget.showControls ? 95.0 : 35.0) * scale,
       right: touch ? 20.0 + safe.right : 35.0 * scale,
-      // AppClockBuilder читає значення в момент побудови (зміна списку розділів одразу враховується)
+      // AppClockBuilder reads the value at build time (a change of the chapter list is taken into account at once)
       child: AppClockBuilder<int>(
         listenable: _skipIndex,
         builder: (context, index) {

@@ -1,6 +1,6 @@
-// Живі перевірки джерел (потрібна мережа). Запуск: LIVE=1 flutter test test/sources_live_test.dart
-// (PowerShell: $env:LIVE=1; flutter test test/sources_live_test.dart). За звичайного `flutter test` усе пропускається.
-// Транспорт — той самий, що в застосунку (`dart:io`); у пісочниці без `dart:io`-доступу ставимо ще й LIVE_CURL=1.
+// Live source checks (network required). Run: LIVE=1 flutter test test/sources_live_test.dart
+// (PowerShell: $env:LIVE=1; flutter test test/sources_live_test.dart). With a plain `flutter test` everything is skipped.
+// The transport is the same as in the app (`dart:io`); in a sandbox without `dart:io` access we also set LIVE_CURL=1.
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -64,7 +64,7 @@ void main() {
       // ignore: avoid_print
       print('$provider → ${vids.map((v) => v.title).toList()}  ${vids.last.url.substring(0, 80)}…');
       expect(vids.length, greaterThanOrEqualTo(2));
-      // перший варіант справді відкривається
+      // the first variant really opens
       final r = await s.http.get(vids[1].url, headers: vids[1].headers);
       expect(r.text, contains('#EXTM3U'));
     }
@@ -79,7 +79,7 @@ void main() {
     expect(await s.byHikka('такого-slug-нема-123'), isNull);
   }, skip: skip, timeout: const Timeout(Duration(minutes: 4)));
 
-  // Єдине джерело, яке не вдалося перевірити наживо під час розробки (сайт за Cloudflare, з пісочниці був недоступний).
+  // The only source that could not be checked live during development (the site is behind Cloudflare, unreachable from the sandbox).
   test('UAKino: популярне → картка → серії → відео → пошук', () async {
     final s = UaKinoSource(http: newHttp());
     try {

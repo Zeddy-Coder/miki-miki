@@ -13,25 +13,25 @@ import '../../utils/platform_info.dart';
 import '../app_animation_kit.dart';
 import '../app_ui_kit.dart';
 
-/// Спільні розміри сторінок каталогу
+/// Shared catalog page sizes
 class HikkaLayout {
   const HikkaLayout._();
 
-  /// Вузький екран телефона (портрет)
+  /// Narrow phone screen (portrait)
   static bool compact(BuildContext context) =>
       AppPlatform.isMobile && AppLayout(MediaQuery.sizeOf(context)).isCompactWidth;
 
-  /// Бічний відступ вмісту
+  /// Side padding of the content
   static double sidePad(BuildContext context, double scale) => compact(context) ? 16.0 : 24 * scale;
 
-  /// Найбільша ширина вмісту (на надшироких вікнах решта лишається порожньою)
+  /// Maximum content width (on very wide windows the rest stays empty)
   static const double maxContentWidth = 1240;
 
-  /// Висота рядка заголовка сторінки
+  /// Height of the page title row
   static double barHeight(double scale) => AppPlatform.isMobile ? 56.0 : 52 * scale;
 }
 
-/// Стиль тексту сторінок каталогу (Arial, кольори теми). Розмір уже помножений на масштаб.
+/// Catalog page text style (Arial, theme colors). The size is already multiplied by the scale.
 TextStyle hikkaStyle(
   double size, {
   Color? color,
@@ -40,15 +40,15 @@ TextStyle hikkaStyle(
 }) =>
     TextStyle(fontFamily: 'Arial', color: color ?? uiTheme.textPrimary, fontSize: size, fontWeight: weight, height: height);
 
-// ── Зображення ───────────────────────────────────────────────────────────────
+// ── Images ───────────────────────────────────────────────────────────────
 
-/// Постер / портрет з диска чи мережі: знизу заглушка, зображення плавно проявляється,
-/// запит іде на зменшену копію під ширину елемента.
+/// A poster / portrait from disk or network: a placeholder underneath, the image fades in smoothly,
+/// the request goes for a downscaled copy matching the element's width.
 class HikkaPoster extends StatelessWidget {
   final String? url;
   final double scale;
 
-  /// Ширина / висота
+  /// Width / height
   final double aspect;
   final double radius;
   final IconData icon;
@@ -57,7 +57,7 @@ class HikkaPoster extends StatelessWidget {
   final Alignment alignment;
   final bool border;
 
-  /// MAL-id тайтлу: якщо задано, постер береться з AniList (якісніший, без тексту), а Hikka лишається запасним
+  /// The title's MAL id: if set, the poster comes from AniList (better quality, no text), and Hikka stays as the fallback
   final int malId;
 
   const HikkaPoster({
@@ -81,7 +81,7 @@ class HikkaPoster extends StatelessWidget {
       listenable: AniListPosters.instance,
       builder: (context, _) {
         final found = AniListPosters.instance.lookup(malId);
-        // Поки AniList відповідає — заглушка, щоб не вантажити малий постер Hikka даремно
+        // While AniList is responding, a placeholder, so as not to load Hikka's small poster needlessly
         if (found == null) return _build(context, null);
         return _build(context, found.isEmpty ? url : found);
       },
@@ -138,10 +138,10 @@ class HikkaPoster extends StatelessWidget {
   }
 }
 
-// ── Завантаження даних ───────────────────────────────────────────────────────
+// ── Data loading ───────────────────────────────────────────────────────────
 
-/// Показує заглушку, поки вантажаться дані, потім вміст; при збої — повідомлення з кнопкою «Повторити».
-/// [initial] — уже відомі дані (сторінка вже відкривалась): показуються одразу, без запиту.
+/// Shows a placeholder while data loads, then the content; on failure, a message with a "Повторити" button.
+/// [initial] is data already known (the page was opened before): shown at once, without a request.
 class HikkaAsync<T> extends StatefulWidget {
   final Future<T> Function() load;
   final Widget Function(BuildContext context, T data) builder;
@@ -149,14 +149,14 @@ class HikkaAsync<T> extends StatefulWidget {
   final T? initial;
   final ValueChanged<T>? onLoaded;
 
-  /// Інше значення — завантажити заново
+  /// Another value means reload
   final Object? reloadKey;
   final double scale;
 
-  /// Стислий вигляд помилки (полиці, малі блоки)
+  /// A compact error view (shelves, small blocks)
   final bool compactError;
 
-  /// Рамка навколо заглушки завантаження та помилки (наприклад, заголовок секції)
+  /// A frame around the loading placeholder and the error (e.g. a section header)
   final Widget Function(BuildContext context, Widget child)? stateFrame;
 
   const HikkaAsync({
@@ -200,7 +200,7 @@ class _HikkaAsyncState<T> extends State<HikkaAsync<T>> {
 
   void _start() {
     final gen = ++_generation;
-    if (_error != null) setState(() => _error = null); // «Повторити»: назад до індикатора
+    if (_error != null) setState(() => _error = null); // "Повторити": back to the indicator
     widget.load().then<void>((value) {
       if (!mounted || gen != _generation) return;
       widget.onLoaded?.call(value);
@@ -227,7 +227,7 @@ class _HikkaAsyncState<T> extends State<HikkaAsync<T>> {
   }
 }
 
-/// Індикатор завантаження за замовчуванням
+/// Default loading indicator
 class HikkaLoading extends StatelessWidget {
   final double scale;
   final double height;
@@ -250,7 +250,7 @@ class HikkaLoading extends StatelessWidget {
   }
 }
 
-/// Помилка завантаження: текст зрозумілою мовою й кнопка повтору
+/// Loading error: text in plain language and a retry button
 class HikkaErrorView extends StatelessWidget {
   final double scale;
   final Object error;
@@ -293,9 +293,9 @@ class HikkaErrorView extends StatelessWidget {
   }
 }
 
-// ── Дрібні елементи ──────────────────────────────────────────────────────────
+// ── Small elements ──────────────────────────────────────────────────────────
 
-/// Мітка: жанр, тип, статус; натискна — фільтр
+/// A label: genre, type, status; tappable means a filter
 class HikkaChip extends StatelessWidget {
   final String label;
   final double scale;
@@ -303,10 +303,10 @@ class HikkaChip extends StatelessWidget {
   final bool selected;
   final VoidCallback? onTap;
 
-  /// Акцентне оформлення без вибору (статус «виходить»)
+  /// Accent styling without selection (the "airing" status)
   final bool highlight;
 
-  /// Свій колір замість акценту (статуси списків): значок завжди кольоровий, вибраний чип підсвічується ним
+  /// Its own color instead of the accent (list statuses): the dot is always colored, the selected chip is highlighted by it
   final Color? color;
 
   const HikkaChip({
@@ -382,7 +382,7 @@ class HikkaChip extends StatelessWidget {
   }
 }
 
-/// Оцінка в зірочці (плашка поверх постера або в рядку)
+/// A score in a star (a badge over the poster or in a row)
 class HikkaScoreBadge extends StatelessWidget {
   final double score;
   final double scale;
@@ -409,7 +409,7 @@ class HikkaScoreBadge extends StatelessWidget {
   }
 }
 
-/// Маленька плашка поверх постера (тип, 18+, номер серії)
+/// A small badge over the poster (type, 18+, episode number)
 class HikkaPill extends StatelessWidget {
   final String text;
   final double scale;
@@ -437,13 +437,13 @@ class HikkaPill extends StatelessWidget {
   }
 }
 
-/// Посилання-кнопка «Усі →» біля заголовка секції
+/// A link button "Усі →" by a section heading
 class HikkaLinkButton extends StatelessWidget {
   final String label;
   final double scale;
   final VoidCallback onTap;
 
-  /// Значок перед підписом: тоді це «тиха» дія (як «Скинути» в налаштуваннях), без стрілки й акценту
+  /// An icon before the label: then it is a "quiet" action (like "Скинути" in settings), without an arrow and accent
   final IconData? icon;
 
   const HikkaLinkButton({super.key, required this.label, required this.scale, required this.onTap, this.icon});
@@ -484,7 +484,7 @@ class HikkaLinkButton extends StatelessWidget {
   }
 }
 
-/// Кругла кнопка-іконка (назад, налаштування) з зоною дотику не менше 48 dp на телефоні
+/// A round icon button (back, settings) with a touch zone of at least 48 dp on a phone
 class HikkaIconButton extends StatelessWidget {
   final IconData icon;
   final String tooltip;
@@ -530,7 +530,7 @@ class HikkaIconButton extends StatelessWidget {
   }
 }
 
-/// Рядок заголовка відкритої сторінки: «Назад», назва, дії праворуч
+/// Title row of an open page: "Back", the title, actions on the right
 class HikkaBackBar extends StatelessWidget {
   final double scale;
   final String title;
@@ -585,17 +585,17 @@ class HikkaBackBar extends StatelessWidget {
   }
 }
 
-// ── Сітка ────────────────────────────────────────────────────────────────────
+// ── Grid ────────────────────────────────────────────────────────────────────
 
-/// Сітка карток: кількість стовпців підбирається під ширину, висота картки = постер + текст
+/// Card grid: the column count is chosen to fit the width, card height = poster + text
 class HikkaGridDelegate extends SliverGridDelegate {
   final double maxTileWidth;
   final double spacing;
 
-  /// Ширина / висота постера
+  /// Poster width / height
   final double posterAspect;
 
-  /// Висота текстового блока під постером
+  /// Height of the text block under the poster
   final double textHeight;
 
   const HikkaGridDelegate({
@@ -629,7 +629,7 @@ class HikkaGridDelegate extends SliverGridDelegate {
       old.textHeight != textHeight;
 }
 
-/// Висота двох рядків назви й рядка підпису під постером з урахуванням системного масштабу шрифту
+/// Height of two title lines and a label line under the poster, accounting for the system font scale
 double hikkaCardTextHeight(BuildContext context, double scale, {int titleLines = 2, bool subtitle = true}) {
   final ts = MediaQuery.textScalerOf(context);
   final title = ts.scale(12.5 * scale) * 1.25 * titleLines;
@@ -637,7 +637,7 @@ double hikkaCardTextHeight(BuildContext context, double scale, {int titleLines =
   return 7 * scale + title + sub + 4 * scale;
 }
 
-/// Картка-заглушка в сітці, поки дані вантажаться: постер і рядки тексту під ним
+/// A placeholder card in the grid while data loads: a poster and text lines under it
 class HikkaCardSkeleton extends StatelessWidget {
   final double scale;
   final int titleLines;
@@ -669,13 +669,13 @@ class HikkaCardSkeleton extends StatelessWidget {
   }
 }
 
-/// Смужка-заглушка (рядок тексту)
+/// A placeholder strip (a text line)
 Widget hikkaSkeletonBar(double? width, double height, {double? factor}) {
   final box = Container(height: height, width: width, decoration: BoxDecoration(color: uiTheme.bgElevated, borderRadius: uiTheme.borderRadius(4)));
   return factor == null ? box : FractionallySizedBox(widthFactor: factor, alignment: Alignment.centerLeft, child: box);
 }
 
-/// Заглушка списку карток-блоків (колекції, статті): стільки стовпців, скільки й у справжньому списку
+/// A placeholder for a list of block cards (collections, articles): as many columns as the real list has
 class HikkaListSkeleton extends StatelessWidget {
   final double scale;
   final double maxCardWidth;
@@ -743,7 +743,7 @@ class HikkaListSkeleton extends StatelessWidget {
   }
 }
 
-/// Прокручувана сітка з підвантаженням: слухає [pager], докантажує сторінки при наближенні до кінця
+/// A scrollable grid with incremental loading: listens to [pager], loads more pages when nearing the end
 class HikkaPagedGrid<T> extends StatefulWidget {
   final HikkaPager<T> pager;
   final double scale;
@@ -752,14 +752,17 @@ class HikkaPagedGrid<T> extends StatefulWidget {
   final IconData emptyIcon;
   final ScrollController? controller;
 
-  /// Додатковий відступ знизу (згорнутий плеєр)
+  /// Extra bottom padding (collapsed player)
   final double bottomInset;
   final double maxTileWidth;
   final double posterAspect;
   final int titleLines;
 
-  /// Блок над сіткою, що прокручується разом з нею
+  /// A block above the grid that scrolls together with it
   final Widget? header;
+
+  /// Grid sections ("Головні", "Другорядні"): a heading appears when the section changes; the server sets the order
+  final String? Function(T item)? sectionOf;
 
   const HikkaPagedGrid({
     super.key,
@@ -774,6 +777,7 @@ class HikkaPagedGrid<T> extends StatefulWidget {
     this.posterAspect = 0.7,
     this.titleLines = 2,
     this.header,
+    this.sectionOf,
   });
 
   @override
@@ -815,7 +819,7 @@ class _HikkaPagedGridState<T> extends State<HikkaPagedGrid<T>> {
   void _onPager() {
     if (!mounted) return;
     setState(() {});
-    // Список не заповнив екран — докантажуємо ще сторінку
+    // The list did not fill the screen: we load one more page
     WidgetsBinding.instance.addPostFrameCallback((_) => _fillViewport());
   }
 
@@ -830,6 +834,46 @@ class _HikkaPagedGridState<T> extends State<HikkaPagedGrid<T>> {
     if (c.hasClients && c.position.maxScrollExtent <= 0 && widget.pager.hasMore && !widget.pager.loading && widget.pager.error == null) {
       widget.pager.loadMore();
     }
+  }
+
+  /// A grid of items; with [HikkaPagedGrid.sectionOf], several grids with section headings
+  List<Widget> _itemSlivers(double pad, double spacing, double textHeight) {
+    final scale = widget.scale;
+    final items = widget.pager.items;
+    SliverGrid grid(int from, int to) => SliverGrid(
+          gridDelegate: HikkaGridDelegate(
+            maxTileWidth: widget.maxTileWidth * (AppPlatform.isMobile ? 1.0 : scale),
+            spacing: spacing,
+            posterAspect: widget.posterAspect,
+            textHeight: textHeight,
+          ),
+          delegate: SliverChildBuilderDelegate(
+            (context, i) => widget.itemBuilder(context, items[from + i]),
+            childCount: to - from,
+          ),
+        );
+    final of = widget.sectionOf;
+    if (of == null) return [SliverPadding(padding: EdgeInsets.symmetric(horizontal: pad), sliver: grid(0, items.length))];
+    final out = <Widget>[];
+    int start = 0;
+    while (start < items.length) {
+      final name = of(items[start]);
+      int end = start + 1;
+      while (end < items.length && of(items[end]) == name) {
+        end++;
+      }
+      if (name != null) {
+        out.add(SliverToBoxAdapter(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(pad, start == 0 ? 4 * scale : 18 * scale, pad, 10 * scale),
+            child: AppSectionHeader(scale: scale, title: name),
+          ),
+        ));
+      }
+      out.add(SliverPadding(padding: EdgeInsets.symmetric(horizontal: pad), sliver: grid(start, end)));
+      start = end;
+    }
+    return out;
   }
 
   @override
@@ -849,7 +893,7 @@ class _HikkaPagedGridState<T> extends State<HikkaPagedGrid<T>> {
       footer = const SizedBox(height: 8);
     }
 
-    // Поки перша сторінка вантажиться, замість кола показуємо сітку-заглушку: вкладка одразу виглядає «як сторінка»
+    // While the first page loads, we show a placeholder grid instead of a spinner: the tab looks "like a page" at once
     final skeleton = pager.items.isEmpty && pager.error == null && (pager.isInitialLoading || pager.isFresh);
     Widget body;
     if (pager.error != null && pager.items.isEmpty) {
@@ -869,7 +913,7 @@ class _HikkaPagedGridState<T> extends State<HikkaPagedGrid<T>> {
         controller: _controller,
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
-          SliverToBoxAdapter(child: SizedBox(height: AppHeaderInset.of(context))), // місце під шапкою-накладкою
+          SliverToBoxAdapter(child: SizedBox(height: AppHeaderInset.of(context))), // room under the overlay header
           if (widget.header != null) SliverToBoxAdapter(child: widget.header),
           if (skeleton)
             SliverPadding(
@@ -890,21 +934,7 @@ class _HikkaPagedGridState<T> extends State<HikkaPagedGrid<T>> {
           else if (pager.items.isEmpty)
             SliverToBoxAdapter(child: body)
           else
-            SliverPadding(
-              padding: EdgeInsets.symmetric(horizontal: pad),
-              sliver: SliverGrid(
-                gridDelegate: HikkaGridDelegate(
-                  maxTileWidth: widget.maxTileWidth * (AppPlatform.isMobile ? 1.0 : scale),
-                  spacing: spacing,
-                  posterAspect: widget.posterAspect,
-                  textHeight: textHeight,
-                ),
-                delegate: SliverChildBuilderDelegate(
-                  (context, i) => widget.itemBuilder(context, pager.items[i]),
-                  childCount: pager.items.length,
-                ),
-              ),
-            ),
+            ..._itemSlivers(pad, spacing, textHeight),
           SliverToBoxAdapter(child: footer),
           SliverToBoxAdapter(child: SizedBox(height: 24 * scale + widget.bottomInset)),
         ],
@@ -913,7 +943,7 @@ class _HikkaPagedGridState<T> extends State<HikkaPagedGrid<T>> {
   }
 }
 
-/// Рядок налаштування з перемикачем (вигляд як у налаштуваннях застосунку)
+/// A settings row with a switch (the look as in the app settings)
 class HikkaToggleRow extends StatelessWidget {
   final double scale;
   final String title;
@@ -979,54 +1009,92 @@ class HikkaToggleRow extends StatelessWidget {
   }
 }
 
-/// Таблиця «назва — значення» (інформація про аніме). У вузькій колонці (альбомний телефон) значення
-/// не лишається в обрубку праворуч від назви, а йде під нею: слова не рвуться посеред.
+/// The "Інформація" card: compact rows "icon, label — value", grouped by dividers.
+/// A row with an icon, a label on the left and a value on the right; empty values are skipped.
 class HikkaInfoTable extends StatelessWidget {
   final double scale;
-  final List<(String label, String value)> rows;
+  final List<List<(String label, String value)>> groups;
 
-  const HikkaInfoTable({super.key, required this.scale, required this.rows});
+  /// Icons by row label
+  final Map<String, IconData> icons;
+
+  /// Labels whose values are drawn as a "pill" (status)
+  final Set<String> pills;
+
+  /// Logos by row label (studios): shown to the right of the value
+  final Map<String, List<(String url, VoidCallback? onTap)>> logos;
+
+  const HikkaInfoTable({super.key, required this.scale, required this.groups, this.icons = const {}, this.pills = const {}, this.logos = const {}});
 
   @override
   Widget build(BuildContext context) {
-    final visible = [for (final r in rows) if (r.$2.trim().isNotEmpty) r];
-    if (visible.isEmpty) return const SizedBox.shrink();
-    final labelStyle = TextStyle(fontFamily: 'Arial', color: uiTheme.textDarkMuted, fontSize: 12 * scale, height: 1.35);
-    final valueStyle = TextStyle(fontFamily: 'Arial', color: uiTheme.textPrimary, fontSize: 12.5 * scale, height: 1.35);
-    return LayoutBuilder(
-      builder: (context, box) {
-        final stacked = box.maxWidth < 236 * scale;
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    final parts = [
+      for (final g in groups) [for (final r in g) if (r.$2.trim().isNotEmpty) r],
+    ].where((g) => g.isNotEmpty).toList();
+    if (parts.isEmpty) return const SizedBox.shrink();
+    final labelStyle = TextStyle(fontFamily: 'Arial', color: uiTheme.textDarkMuted, fontSize: 13 * scale, height: 1.3);
+    final valueStyle = TextStyle(fontFamily: 'Arial', color: uiTheme.textPrimary, fontSize: 13.5 * scale, fontWeight: FontWeight.w500, height: 1.3);
+
+    Widget row((String, String) r) {
+      final icon = icons[r.$1];
+      final value = pills.contains(r.$1)
+          ? Container(
+              padding: EdgeInsets.symmetric(horizontal: 9 * scale, vertical: 3 * scale),
+              decoration: BoxDecoration(color: uiTheme.accentWash, borderRadius: uiTheme.borderRadius(20 * scale)),
+              child: Text(r.$2, style: valueStyle.copyWith(color: uiTheme.accentColor, fontSize: 12.5 * scale)),
+            )
+          : Text(r.$2, style: valueStyle, textAlign: TextAlign.right);
+      final images = logos[r.$1] ?? const <(String, VoidCallback?)>[];
+      return Padding(
+        padding: EdgeInsets.symmetric(vertical: images.isEmpty ? 7 * scale : 6 * scale),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            for (final r in visible)
-              Padding(
-                padding: EdgeInsets.symmetric(vertical: 5 * scale),
-                child: stacked
-                    ? Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(r.$1, style: labelStyle),
-                          SizedBox(height: 1 * scale),
-                          Text(r.$2, style: valueStyle),
-                        ],
-                      )
-                    : Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          SizedBox(width: 108 * scale, child: Text(r.$1, style: labelStyle)),
-                          Expanded(child: Text(r.$2, style: valueStyle)),
-                        ],
-                      ),
+            if (icon != null) ...[Icon(icon, size: 18 * scale, color: uiTheme.textDarkMuted, weight: 300), SizedBox(width: 10 * scale)],
+            Text(r.$1, style: labelStyle),
+            SizedBox(width: 12 * scale),
+            Expanded(child: Align(alignment: Alignment.centerRight, child: value)),
+            for (final logo in images) ...[
+              SizedBox(width: 8 * scale),
+              // Studio logos sit on a light tile, as on hikka.io: they vanish on a dark background. Tapping opens that studio's catalog
+              Semantics(
+                button: logo.$2 != null,
+                label: 'Усі аніме студії',
+                child: GestureDetector(
+                  key: const ValueKey('info-logo'),
+                  onTap: logo.$2,
+                  child: Container(
+                    width: 36 * scale,
+                    height: 36 * scale,
+                    padding: EdgeInsets.all(2 * scale),
+                    decoration: BoxDecoration(color: Colors.white, borderRadius: uiTheme.borderRadius(10 * scale)),
+                    child: HikkaPoster(url: logo.$1, scale: scale, aspect: 1, radius: 7, fit: BoxFit.contain, alignment: Alignment.center, border: false),
+                  ),
+                ),
               ),
+            ],
           ],
-        );
-      },
+        ),
+      );
+    }
+
+    return AppCard(
+      scale: scale,
+      radius: 14,
+      padding: EdgeInsets.symmetric(horizontal: 14 * scale, vertical: 4 * scale),
+      child: Column(
+        children: [
+          for (int i = 0; i < parts.length; i++) ...[
+            if (i > 0) Divider(height: 1, thickness: 1, color: uiTheme.borderSubtle),
+            for (final r in parts[i]) row(r),
+          ],
+        ],
+      ),
     );
   }
 }
 
-/// Рядок пошуку з кнопкою праворуч (фільтри); на телефоні поле не нижче 48 dp
+/// A search row with a button on the right (filters); on a phone the field is at least 48 dp
 class HikkaSearchBar extends StatelessWidget {
   final double scale;
   final TextEditingController controller;

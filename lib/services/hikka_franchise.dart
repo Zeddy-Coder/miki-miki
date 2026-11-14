@@ -1,11 +1,11 @@
-/// Модель франшизи аніме: хронологія, головна лінія (ланцюг сиквелів) і прямі зв'язки.
-/// Логіка перенесена з відкритого фронтенду hikka.io (franchise-model.ts), лише для аніме:
-/// манґа й ранобе з відповіді відкидаються. Без залежності від Flutter — покрито тестами.
+/// Anime franchise model: chronology, main line (the sequel chain) and direct relations.
+/// The logic is ported from the open hikka.io frontend (franchise-model.ts), anime only:
+/// manga and light novels in the response are dropped. No Flutter dependency; covered by tests.
 library;
 
 import '../models/hikka_models.dart';
 
-/// Група зв'язку (як на hikka.io)
+/// Relation group (as on hikka.io)
 enum FranchiseGroup {
   sequel('Основна історія'),
   side('Побічні історії'),
@@ -79,7 +79,7 @@ const int _secondsPerYear = 31557600;
 const int _unknownWhen = 1 << 52;
 
 class FranchiseRelationInfo {
-  /// Чим цей тайтл є щодо [targetId]: «Сиквел», «Побічна історія»…
+  /// What this title is relative to [targetId]: "Сиквел", "Побічна історія"…
   final String label;
   final String targetId;
 
@@ -90,13 +90,13 @@ class FranchiseNode {
   final String id;
   final HikkaAnime anime;
 
-  /// Момент виходу (unix, секунди); невідомий — дуже велике число
+  /// Release moment (unix, seconds); unknown is a very large number
   final int when;
 
   bool onMainLine = false;
   FranchiseGroup group = FranchiseGroup.alternative;
 
-  /// Номер у головній лінії (з 0) або null
+  /// Index in the main line (from 0) or null
   int? chainIndex;
   FranchiseRelationInfo? relation;
 
@@ -124,17 +124,17 @@ class FranchiseEdge {
 class FranchiseModel {
   final FranchiseNode current;
 
-  /// Усі тайтли франшизи за часом виходу
+  /// All franchise titles by release time
   final List<FranchiseNode> nodes;
   final Map<String, FranchiseNode> byId;
 
-  /// Головна лінія (ланцюг сиквелів) у порядку перегляду
+  /// The main line (sequel chain) in watch order
   final List<FranchiseNode> chain;
 
-  /// Прямі зв'язки поточного тайтлу
+  /// Direct relations of the current title
   final List<FranchiseDirect> direct;
 
-  /// Прямі зв'язки кожного тайтлу
+  /// Direct relations of each title
   final Map<String, List<FranchiseDirect>> relations;
   final List<FranchiseEdge> edges;
 
@@ -148,7 +148,7 @@ class FranchiseModel {
     required this.edges,
   });
 
-  /// «Основна історія, 2 з 3» або назва зв'язку для тайтлів поза головною лінією
+  /// "Основна історія, 2 з 3" or the relation name for titles outside the main line
   String relationText(FranchiseNode node) {
     if (node.chainIndex != null) {
       return chain.length > 1 ? 'Основна історія, ${node.chainIndex! + 1} з ${chain.length}' : 'Основна історія';
@@ -156,7 +156,7 @@ class FranchiseModel {
     return node.relation?.label ?? 'Аніме';
   }
 
-  /// Тайтли, згруповані за роком виходу (за зростанням); без дати — окремою групою в кінці
+  /// Titles grouped by release year (ascending); without a date, a separate group at the end
   List<(String label, List<FranchiseNode> nodes)> groupByYear() {
     final groups = <String, List<FranchiseNode>>{};
     for (final n in nodes) {
@@ -169,11 +169,11 @@ class FranchiseModel {
   static FranchiseModel? build(HikkaFranchiseData data, String slug) => _build(data, slug);
 }
 
-// ── Побудова ─────────────────────────────────────────────────────────────────
+// ── Building ─────────────────────────────────────────────────────────────────
 
 int _whenOf(HikkaAnime a) => a.startDate ?? (a.year != null ? (a.year! - 1970) * _secondsPerYear : _unknownWhen);
 
-/// Стабільне сортування (стандартне `List.sort` у Dart цього не гарантує)
+/// Stable sort (the standard Dart `List.sort` does not guarantee that)
 void _stableSort<T>(List<T> list, int Function(T a, T b) compare) {
   final indexed = [for (int i = 0; i < list.length; i++) (i, list[i])];
   indexed.sort((x, y) {
@@ -187,8 +187,8 @@ void _stableSort<T>(List<T> list, int Function(T a, T b) compare) {
 
 int _byWhen(FranchiseNode a, FranchiseNode b) => a.when.compareTo(b.when);
 
-/// Що [me] є щодо [other]. Напрям у даних: `slug` — «батьківський», `related_slug` — його сиквел,
-/// побічна історія, рекап чи спіноф; тому для `slug` показуємо зворотний підпис.
+/// What [me] is relative to [other]. Direction in the data: `slug` is the "parent", `related_slug` is its sequel,
+/// side story, recap or spin-off; so for `slug` we show the inverse label.
 String _relationLabel(HikkaRelation relation, FranchiseNode me, FranchiseNode other) {
   final type = relation.type;
   if (type == 'adaptation') {
@@ -242,8 +242,8 @@ List<FranchiseNode> _orderChain(Set<String> component, List<FranchiseEdge> seque
   return [...order, ...rest];
 }
 
-/// Головна історія — ланцюг сиквелів поточного тайтлу. Якщо в нього сиквелів немає (фільм, OVA),
-/// береться найдовший ланцюг франшизи, щоб «хребтом» не була одна побічна історія.
+/// The main story is the current title's sequel chain. If it has no sequels (a movie, OVA),
+/// the longest franchise chain is taken so that the "spine" is not a single side story.
 Set<String> _mainStory(FranchiseNode current, List<FranchiseNode> nodes, List<FranchiseEdge> sequels) {
   final own = _sequelComponent(current.id, sequels);
   if (own.length > 1) return own;
@@ -274,7 +274,7 @@ FranchiseModel? _build(HikkaFranchiseData data, String slug) {
   final current = byId[slug];
   if (current == null) return null;
 
-  // Лише зв'язки між аніме, які є у відповіді
+  // Only relations between anime that are in the response
   final relations = [
     for (final r in data.relations)
       if (r.contentType == 'anime' && r.relatedContentType == 'anime' && byId.containsKey(r.slug) && byId.containsKey(r.relatedSlug)) r,
@@ -304,7 +304,7 @@ FranchiseModel? _build(HikkaFranchiseData data, String slug) {
       ..chainIndex = i;
   }
 
-  // Відстань від головної лінії (кількість зв'язків)
+  // Distance from the main line (number of relations)
   final distance = {for (final n in chain) n.id: 0};
   final queue = [for (final n in chain) n.id];
   for (int head = 0; head < queue.length; head++) {
@@ -335,7 +335,7 @@ FranchiseModel? _build(HikkaFranchiseData data, String slug) {
     node.relation = FranchiseRelationInfo(_relationLabel(relation, node, other), other.id);
 
     if (relation.type == 'sequel') {
-      // Сиквел побічної історії належить до тієї самої групи
+      // A sequel of a side story belongs to the same group
       if (!other.onMainLine) node.group = other.group;
     } else if (relation.type != 'adaptation') {
       node.group = _typeGroups[relation.type] ?? FranchiseGroup.alternative;

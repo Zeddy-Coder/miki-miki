@@ -1,5 +1,5 @@
-// Автовибір доріжок субтитрів і звуку за пріоритетом мов із налаштувань. mpv сам вмикає лише доріжку «за замовчуванням»,
-// тож без цього логіку мови з налаштувань ніхто не застосовував, а субтитрів у файлах без такої позначки не було видно.
+// Auto-selecting subtitle and audio tracks by the language priority from settings. mpv itself turns on only the "default" track,
+// so without this nobody applied the settings' language logic, and subtitles were not visible in files without such a mark.
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:miki_miki/services/lang_match.dart';
@@ -10,7 +10,7 @@ SubtitleTrack sub(String id, {String? lang, String? title, bool def = false, boo
 
 AudioTrack aud(String id, {String? lang, String? title, bool def = false}) => AudioTrack(id, title, lang, isDefault: def);
 
-/// Як у media_kit: спершу службові «авто» й «вимкнено», далі доріжки файлу
+/// As in media_kit: first the service "auto" and "off", then the file's tracks
 List<SubtitleTrack> subs(List<SubtitleTrack> real) => [SubtitleTrack.auto(), SubtitleTrack.no(), ...real];
 List<AudioTrack> auds(List<AudioTrack> real) => [AudioTrack.auto(), AudioTrack.no(), ...real];
 
@@ -134,7 +134,7 @@ void main() {
       expect(TrackDefaults.pickSubtitle(both, prio)?.id, '2');
 
       final onlySigns = subs([sub('1', lang: 'ukr', title: 'Надписи'), sub('2', lang: 'eng', title: 'Full')]);
-      expect(TrackDefaults.pickSubtitle(onlySigns, prio)?.id, '1'); // українські написи, а не повні англійські: мова важливіша
+      expect(TrackDefaults.pickSubtitle(onlySigns, prio)?.id, '1'); // Ukrainian signs rather than full English: language matters more
     });
 
     test('текстові перед зображеннями (PGS), «за замовчуванням» перед рештою, далі — порядок у файлі', () {

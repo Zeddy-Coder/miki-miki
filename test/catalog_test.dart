@@ -179,7 +179,7 @@ void main() {
       await settle(tester, () => glslCommands() >= 3);
       expect(c.commands.where((a) => a.contains('glsl-shaders')).last, ['change-list', 'glsl-shaders', 'clr', '']);
 
-      // Звичайна «2» (без Ctrl) — контраст, а не режим Anime4K
+      // A plain "2" (without Ctrl) is contrast, not an Anime4K mode
       await tester.sendKeyEvent(LogicalKeyboardKey.digit2);
       await tester.pump();
       expect(c.commands.any((a) => a.length > 1 && a[0] == 'add' && a[1] == 'contrast'), isTrue);
@@ -199,7 +199,7 @@ void main() {
 
     testWidgets('утримання клавіші повторює лише безперервні дії', (tester) async {
       final c = await pumpHandler(tester);
-      // ↑ (гучність) повторюється, M (mute) — ні
+      // ↑ (volume) repeats, M (mute) does not
       await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowUp);
       await tester.sendKeyRepeatEvent(LogicalKeyboardKey.arrowUp);
       await tester.sendKeyRepeatEvent(LogicalKeyboardKey.arrowUp);
@@ -250,7 +250,7 @@ void main() {
 
     testWidgets('українська розкладка: клавіша визначається фізично', (tester) async {
       final c = await pumpHandler(tester);
-      // Українська розкладка: на фізичній клавіші M стоїть «ь», тож логічна клавіша інша, а фізична — M
+      // Ukrainian layout: the physical M key has "ь", so the logical key differs, while the physical one is M
       await tester.sendKeyEvent(LogicalKeyboardKey.keyN, physicalKey: PhysicalKeyboardKey.keyM);
       expect(c.muteToggles, 1);
     });

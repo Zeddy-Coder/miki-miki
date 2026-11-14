@@ -1,13 +1,13 @@
-/// Орієнтація екрана телефона у плеєрі.
+/// Phone screen orientation in the player.
 ///
-/// Налаштування «Орієнтація плеєра» задає, у якій орієнтації відкривається відео. Коли плеєр зникає з екрана
-/// (вихід на головну або згортання в міні-плеєр), повертається та орієнтація, що була до його відкриття.
-/// Логіка відокремлена від віджетів і `SystemChrome` (він передається ззовні), тож перевіряється тестами.
+/// The "Орієнтація плеєра" setting defines the orientation a video opens in. When the player leaves the screen
+/// (exit to home or collapse into the mini player), the orientation from before it opened is restored.
+/// The logic is separated from widgets and `SystemChrome` (passed in from outside), so it is tested.
 library;
 
 import 'package:flutter/services.dart';
 
-/// Яку орієнтацію вмикати при відкритті плеєра
+/// Which orientation to enable when the player opens
 enum PlayerOrientation {
   system('system', 'Як у системі'),
   landscape('landscape', 'Альбомна'),
@@ -20,7 +20,7 @@ enum PlayerOrientation {
   static PlayerOrientation parse(String? id) =>
       PlayerOrientation.values.firstWhere((o) => o.id == id, orElse: () => PlayerOrientation.landscape);
 
-  /// Дозволені орієнтації (`null` — нічого не змінювати)
+  /// Allowed orientations (`null` means change nothing)
   List<DeviceOrientation>? get orientations => switch (this) {
         PlayerOrientation.system => null,
         PlayerOrientation.landscape => const [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight],
@@ -31,13 +31,13 @@ enum PlayerOrientation {
 class OrientationPolicy {
   OrientationPolicy({required this.apply, required this.preference, this.log});
 
-  /// Передає список дозволених орієнтацій системі (порожній — автоповорот за датчиком)
+  /// Passes the list of allowed orientations to the system (empty means auto-rotate by sensor)
   final Future<void> Function(List<DeviceOrientation> orientations) apply;
 
-  /// Поточне налаштування користувача
+  /// The user's current setting
   final PlayerOrientation Function() preference;
 
-  /// Запис у журнал (необовʼязково)
+  /// Log entry (optional)
   final void Function(String message)? log;
 
   List<DeviceOrientation> _current = const [];
@@ -46,15 +46,15 @@ class OrientationPolicy {
   List<DeviceOrientation>? _saved;
   bool _savedLocked = false;
 
-  /// Поворот зафіксовано (налаштуванням або кнопкою); інакше орієнтацію визначає датчик
+  /// Rotation is locked (by the setting or the button); otherwise the sensor decides the orientation
   bool get locked => _locked;
 
-  /// Плеєр зараз на екрані
+  /// The player is currently on screen
   bool get inPlayer => _inPlayer;
 
   List<DeviceOrientation> get current => _current;
 
-  /// Плеєр зʼявився на екрані: запамʼятовуємо поточну орієнтацію і вмикаємо ту, що задана в налаштуваннях
+  /// The player appeared on screen: remember the current orientation and enable the one set in settings
   void enterPlayer() {
     if (_inPlayer) return;
     _inPlayer = true;
@@ -65,7 +65,7 @@ class OrientationPolicy {
     if (want != null) _set(want, locked: true);
   }
 
-  /// Плеєр зник з екрана (вихід або згортання): повертаємо орієнтацію, що була до нього
+  /// The player left the screen (exit or collapse): restore the orientation from before it
   void leavePlayer() {
     if (!_inPlayer) return;
     _inPlayer = false;
@@ -78,7 +78,7 @@ class OrientationPolicy {
     }
   }
 
-  /// Налаштування змінили, поки плеєр відкритий
+  /// The setting changed while the player is open
   void preferenceChanged() {
     if (!_inPlayer) return;
     final want = preference().orientations;
@@ -89,7 +89,7 @@ class OrientationPolicy {
     }
   }
 
-  /// Кнопка повороту: портрет ↔ альбомна (і фіксація вибору)
+  /// Rotate button: portrait ↔ landscape (and locking the choice)
   void toggle({required bool landscapeNow}) {
     _set(
       landscapeNow
@@ -99,7 +99,7 @@ class OrientationPolicy {
     );
   }
 
-  /// Повертає автоповорот за датчиком
+  /// Restores auto-rotate by sensor
   void unlock() {
     if (!_locked) return;
     _set(const [], locked: false);

@@ -14,7 +14,7 @@ void main() {
 
   HikkaApi make() => HikkaApi(sender: server.call, retryDelay: Duration.zero, now: () => clock)..disk = HikkaDiskCache(dir: dir);
 
-  Future<void> settle() => Future<void>.delayed(const Duration(milliseconds: 80)); // фоновий запис/оновлення
+  Future<void> settle() => Future<void>.delayed(const Duration(milliseconds: 80)); // background write / refresh
 
   setUp(() {
     dir = Directory.systemTemp.createTempSync('hikka_disk');
@@ -39,7 +39,7 @@ void main() {
     final writes = [for (var i = 0; i < 5; i++) cache.write('k', {'n': i}, DateTime(2026))];
     await Future.wait(writes);
     expect((await cache.read('k'))?.json, isA<Map>());
-    // Систему «почистила» теку під час роботи
+    // The system "cleaned" the folder while running
     dir.deleteSync(recursive: true);
     await cache.write('k2', {'a': 1}, DateTime(2026));
     expect((await cache.read('k2'))?.json, {'a': 1});
@@ -52,7 +52,7 @@ void main() {
     expect(first.networkCalls, 1);
     await settle();
 
-    final second = make(); // «новий запуск»: памʼять порожня
+    final second = make(); // "fresh launch": memory is empty
     final p2 = await second.searchAnime(const HikkaSearchFilters(), size: 30);
     expect(second.networkCalls, 0, reason: 'свіже з диска');
     expect(p2.items.length, p1.items.length);
@@ -63,7 +63,7 @@ void main() {
     await first.searchAnime(const HikkaSearchFilters(), size: 30);
     await settle();
 
-    clock = clock.add(const Duration(hours: 2)); // за межами TTL, але в межах «віддати одразу»
+    clock = clock.add(const Duration(hours: 2)); // outside the TTL but within "serve at once"
     final second = make();
     final p = await second.searchAnime(const HikkaSearchFilters(), size: 30);
     expect(p.items, isNotEmpty);
@@ -90,7 +90,7 @@ void main() {
     await first.searchAnime(const HikkaSearchFilters(), size: 30);
     await settle();
 
-    clock = clock.add(const Duration(days: 5)); // старше за «віддати одразу»
+    clock = clock.add(const Duration(days: 5)); // older than "serve at once"
     server.offline = true;
     final second = make();
     final p = await second.searchAnime(const HikkaSearchFilters(), size: 30);

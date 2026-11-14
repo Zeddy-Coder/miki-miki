@@ -1,9 +1,9 @@
-/// Єдиний журнал застосунку.
+/// The app's single log.
 ///
-/// Усі підсистеми пишуть сюди (`AppLog.i / w / e / d`). Кільцевий буфер у памʼяті є завжди (інформація,
-/// попередження, помилки); у «детальному» режимі додатково фіксується налагоджувальний рівень, а все
-/// дописується у файл сесії `<тека даних>/logs/miki_miki_<дата>_<час>.log` (ротація за розміром і кількістю).
-/// Секрети (токени, ключі, паролі, cookie) маскуються ще до запису. Журнал ніколи не кидає винятків.
+/// All subsystems write here (`AppLog.i / w / e / d`). An in-memory ring buffer always exists (info,
+/// warnings, errors); in verbose mode the debug level is recorded too, and everything is
+/// appended to the session file `<data dir>/logs/miki_miki_<date>_<time>.log` (rotation by size and count).
+/// Secrets (tokens, keys, passwords, cookies) are masked before writing. The log never throws.
 library;
 
 import 'dart:async';
@@ -15,7 +15,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import '../constants/app_identity.dart';
 
-/// Рівень запису
+/// Record level
 enum LogLevel {
   debug('D'),
   info('I'),
@@ -34,10 +34,10 @@ class LogEntry {
 
   const LogEntry(this.time, this.level, this.tag, this.message);
 
-  /// Рядок для файлу й звіту: `2026-11-03 14:30:12.345 I [тег] текст`
+  /// Line for the file and report: `2026-11-03 14:30:12.345 I [tag] text`
   String format() => '${AppLog.stamp(time, withDate: true)} ${level.letter} [$tag] $message';
 
-  /// Короткий час для екрана
+  /// Short time for the screen
   String get clock => AppLog.stamp(time);
 
   @override
@@ -45,7 +45,7 @@ class LogEntry {
 }
 
 class AppLog extends ChangeNotifier {
-  /// Спільний екземпляр (у тестах підміняється)
+  /// Shared instance (replaced in tests)
   static AppLog instance = AppLog();
 
   AppLog({
@@ -56,16 +56,16 @@ class AppLog extends ChangeNotifier {
     DateTime Function()? now,
   }) : _now = now ?? DateTime.now;
 
-  /// Розмір одного файлу (далі починається наступна частина сесії)
+  /// Size of one file (the next part of the session starts after it)
   final int maxFileBytes;
 
-  /// Скільки файлів журналу лишається на диску (найстаріші видаляються)
+  /// How many log files stay on disk (the oldest are deleted)
   final int maxFiles;
 
-  /// Загальний розмір усіх файлів журналу
+  /// Total size of all log files
   final int maxTotalBytes;
 
-  /// Як часто буфер скидається у файл (помилки — одразу)
+  /// How often the buffer is flushed to the file (errors immediately)
   final Duration flushDelay;
 
   final DateTime Function() _now;
@@ -75,13 +75,13 @@ class AppLog extends ChangeNotifier {
   static const int _ringDetailed = 8000;
   static const String filePrefix = '${AppIdentity.packageName}_';
 
-  /// Префікс файлів під попередньою назвою застосунку: такі журнали теж читаються й прибираються за ротацією
+  /// Prefix of files under the app's previous name: such logs are also read and cleaned by rotation
   static const String legacyFilePrefix = 'my_player_';
 
   static bool _isLogName(String name) =>
       (name.startsWith(filePrefix) || name.startsWith(legacyFilePrefix)) && name.endsWith('.log');
 
-  /// Ключ порядку: дата й час сесії та номер частини (назви з різними префіксами сортуються за часом, а не за буквами)
+  /// Order key: session date and time plus part number (names with different prefixes sort by time, not by letters)
   static String _orderKey(String path) {
     final name = path.split(RegExp(r'[\\/]')).last;
     final m = RegExp(r'(\d{8}_\d{6})(?:_p(\d+))?').firstMatch(name);
@@ -89,19 +89,19 @@ class AppLog extends ChangeNotifier {
     return '${m.group(1)}-${(m.group(2) ?? '1').padLeft(3, '0')}';
   }
 
-  // ── Зручні виклики ──────────────────────────────────────────────────────────
+  // ── Convenience calls ──────────────────────────────────────────────────────────
 
   static void d(String tag, String message) => instance.log(LogLevel.debug, tag, message);
   static void i(String tag, String message) => instance.log(LogLevel.info, tag, message);
   static void w(String tag, String message) => instance.log(LogLevel.warn, tag, message);
 
-  /// Помилка; за наявності винятку додається він і початок стека
+  /// Error; if an exception is present, it and the start of the stack are appended
   static void e(String tag, String message, [Object? error, StackTrace? stack]) {
     final extra = error == null ? '' : ': $error';
     instance.log(LogLevel.error, tag, '$message$extra${_stackTail(stack)}');
   }
 
-  /// Чи ввімкнено детальний режим (щоб не будувати дорогі рядки даремно)
+  /// Whether verbose mode is on (to avoid building expensive strings needlessly)
   static bool get on => instance._detailed;
 
   static String _stackTail(StackTrace? stack, [int lines = 6]) {
@@ -111,7 +111,7 @@ class AppLog extends ChangeNotifier {
     return text;
   }
 
-  // ── Стан ────────────────────────────────────────────────────────────────────
+  // ── State ────────────────────────────────────────────────────────────────────
 
   final Queue<LogEntry> _ring = Queue<LogEntry>();
   bool _detailed = false;
@@ -127,7 +127,7 @@ class AppLog extends ChangeNotifier {
   Timer? _notifyTimer;
   Future<void> _writeChain = Future<void>.value();
 
-  /// Скільки записів додано за сесію і скільки з них уже потрапило у файл
+  /// How many records were added during the session and how many of them have reached the file
   int _added = 0;
   int _written = 0;
 
@@ -137,26 +137,26 @@ class AppLog extends ChangeNotifier {
   int _repeats = 0;
   bool _disposed = false;
 
-  /// Рядки «про середовище» для шапки звіту (пристрій, ОС, екран…)
+  /// "About the environment" lines for the report header (device, OS, screen…)
   final List<String> environment = [];
 
   bool get detailed => _detailed;
 
-  /// Файл, у який зараз пишеться журнал (або `null`)
+  /// The file the log is currently written to (or `null`)
   File? get currentFile => _sinkOn ? _file : null;
 
-  /// Теку журналів (або `null`, якщо журнал працює лише в памʼяті)
+  /// The log folder (or `null` if the log works in memory only)
   Directory? get directory => _dir;
 
-  /// Помилка запису у файл (якщо була)
+  /// File write error (if any)
   String? get sinkError => _sinkError;
 
   List<LogEntry> get entries => List<LogEntry>.unmodifiable(_ring);
   int get length => _ring.length;
 
-  // ── Ініціалізація ───────────────────────────────────────────────────────────
+  // ── Initialization ───────────────────────────────────────────────────────────
 
-  /// Задає теку журналів і режим. Виклик до `runApp`.
+  /// Sets the log folder and mode. Call before `runApp`.
   Future<void> init({required Directory directory, required bool detailed}) async {
     _dir = directory;
     _detailed = detailed;
@@ -164,7 +164,7 @@ class AppLog extends ChangeNotifier {
     if (detailed) await _startSink();
   }
 
-  /// Вмикає / вимикає детальний режим (запис у файл і налагоджувальний рівень)
+  /// Turns verbose mode on / off (file writing and debug level)
   Future<void> setDetailed(bool value) async {
     if (_detailed == value) return;
     if (value) {
@@ -182,7 +182,7 @@ class AppLog extends ChangeNotifier {
     _scheduleNotify();
   }
 
-  // ── Запис ───────────────────────────────────────────────────────────────────
+  // ── Writing ───────────────────────────────────────────────────────────────────
 
   void log(LogLevel level, String tag, String message) {
     if (level == LogLevel.debug && !_detailed) return;
@@ -202,7 +202,7 @@ class AppLog extends ChangeNotifier {
       _lastTag = tag;
       _emit(LogEntry(_now(), level, tag, text));
     } catch (_) {
-      // журнал не має ламати застосунок
+      // the log must not break the app
     }
   }
 
@@ -242,7 +242,7 @@ class AppLog extends ChangeNotifier {
     });
   }
 
-  // ── Файл ────────────────────────────────────────────────────────────────────
+  // ── File ────────────────────────────────────────────────────────────────────
 
   String _nameFor(int part) => '$filePrefix$_sessionStamp${part > 1 ? '_p$part' : ''}.log';
 
@@ -260,7 +260,7 @@ class AppLog extends ChangeNotifier {
       _part = 1;
       var file = File('${dir.path}/${_nameFor(_part)}');
       var size = await file.exists() ? await file.length() : 0;
-      // Сесія вже мала кілька частин (журнал вимикали й вмикали) — продовжуємо останню
+      // The session already had several parts (the log was turned off and on): continue the last one
       while (true) {
         final next = File('${dir.path}/${_nameFor(_part + 1)}');
         if (!await next.exists()) break;
@@ -275,7 +275,7 @@ class AppLog extends ChangeNotifier {
       final buf = StringBuffer();
       if (size == 0) buf.writeln('# ${AppIdentity.name} — журнал, сесія $_sessionStamp');
       if (_fileBytes > 0) buf.writeln('# — запис відновлено —');
-      // Те, що накопичилось у памʼяті, поки запису у файл не було
+      // What accumulated in memory while there was no file writing
       final firstInRing = _added - _ring.length;
       final skip = (_written - firstInRing).clamp(0, _ring.length);
       for (final e in _ring.skip(skip)) {
@@ -309,7 +309,7 @@ class AppLog extends ChangeNotifier {
     });
   }
 
-  /// Записує накопичене у файл. Повертає, коли запис завершено.
+  /// Writes the accumulated data to the file. Returns when the write is done.
   Future<void> flushNow() {
     _closeRepeats();
     _flushTimer?.cancel();
@@ -325,7 +325,7 @@ class AppLog extends ChangeNotifier {
         await file.writeAsBytes(bytes, mode: FileMode.append, flush: true);
         _fileBytes += bytes.length;
       } catch (e) {
-        // Диск повний чи немає прав: далі працюємо лише в памʼяті
+        // Disk full or no permissions: we keep working in memory only
         _sinkError = '$e';
         _sinkOn = false;
         _file = null;
@@ -349,7 +349,7 @@ class AppLog extends ChangeNotifier {
     return _sessionStamp.isNotEmpty && name.startsWith('$filePrefix$_sessionStamp');
   }
 
-  /// Усі файли журналу, від найстарішого
+  /// All log files, from the oldest
   Future<List<File>> files() async {
     final dir = _dir;
     if (dir == null || !await dir.exists()) return const [];
@@ -376,7 +376,7 @@ class AppLog extends ChangeNotifier {
       var count = all.length;
       for (final f in all) {
         if (count <= maxFiles && total <= maxTotalBytes) break;
-        if (_isCurrent(f)) continue; // поточну сесію не чіпаємо
+        if (_isCurrent(f)) continue; // the current session is left untouched
         try {
           await f.delete();
           total -= sizes[f] ?? 0;
@@ -386,7 +386,7 @@ class AppLog extends ChangeNotifier {
     } catch (_) {}
   }
 
-  /// Загальний розмір файлів журналу
+  /// Total size of the log files
   Future<int> totalBytes() async {
     var sum = 0;
     for (final f in await files()) {
@@ -397,7 +397,7 @@ class AppLog extends ChangeNotifier {
     return sum;
   }
 
-  /// Видаляє файли журналу й очищає буфер
+  /// Deletes the log files and clears the buffer
   Future<void> clear() async {
     _ring.clear();
     _pending.clear();
@@ -413,12 +413,12 @@ class AppLog extends ChangeNotifier {
     _scheduleNotify();
   }
 
-  // ── Читання й звіт ──────────────────────────────────────────────────────────
+  // ── Reading and report ──────────────────────────────────────────────────────
 
   static Future<String> _readTail(List<File> files, int maxBytes) async {
     final parts = <Uint8List>[];
     var total = 0;
-    // Читаємо з кінця, поки не набереться потрібний обсяг
+    // Read from the end until the needed amount is collected
     for (final f in files.reversed) {
       try {
         final b = await f.readAsBytes();
@@ -443,12 +443,12 @@ class AppLog extends ChangeNotifier {
     return cut ? '… (початок обрізано, показано останні ${(maxBytes / 1024).round()} КБ)\n$text' : text;
   }
 
-  /// Текст журналу поточної сесії (з файлу, а за його відсутності — з памʼяті)
+  /// Text of the current session's log (from the file, or from memory if there is none)
   Future<String> sessionText({int maxBytes = 5 * 1024 * 1024}) async {
     await flushNow();
     final current = (await files()).where(_isCurrent).toList();
     final fromFile = current.isEmpty ? '' : await _readTail(current, maxBytes);
-    // Записи, які не потрапили у файл (запис був вимкнений)
+    // Records that did not reach the file (writing was off)
     final unwritten = _added - _written;
     if (unwritten <= 0 && fromFile.isNotEmpty) return fromFile;
     final firstInRing = _added - _ring.length;
@@ -457,18 +457,18 @@ class AppLog extends ChangeNotifier {
     return fromFile.isEmpty ? rest : '$fromFile\n$rest';
   }
 
-  /// Хвіст журналу попереднього запуску (допомагає, якщо застосунок аварійно закрився)
+  /// Tail of the previous launch's log (helps if the app crashed)
   Future<String> previousSessionText({int maxBytes = 1536 * 1024}) async {
     final prev = (await files()).where((f) => !_isCurrent(f)).toList();
     if (prev.isEmpty) return '';
-    // Береться останній файл-початок попередньої сесії разом з її частинами
+    // Takes the last starting file of the previous session together with its parts
     final name = prev.last.uri.pathSegments.last;
     final stamp = RegExp('^(?:$filePrefix|$legacyFilePrefix)(\\d{8}_\\d{6})').firstMatch(name)?.group(1);
     final parts = stamp == null ? [prev.last] : prev.where((f) => f.uri.pathSegments.last.contains(stamp)).toList();
     return _readTail(parts, maxBytes);
   }
 
-  /// Повний звіт: шапка, додаткові розділи (від викликача), журнал сесії, хвіст попереднього запуску
+  /// Full report: header, extra sections (from the caller), session log, tail of the previous launch
   Future<String> buildReport({List<(String, String)> extra = const []}) async {
     final b = StringBuffer()
       ..writeln('══ ${AppIdentity.name.toUpperCase()} — ЖУРНАЛ ══')
@@ -499,7 +499,7 @@ class AppLog extends ChangeNotifier {
     return b.toString();
   }
 
-  /// Зупиняє таймери (для тестів і завершення роботи)
+  /// Stops the timers (for tests and shutdown)
   Future<void> shutdown() async {
     await flushNow();
     _flushTimer?.cancel();
@@ -517,7 +517,7 @@ class AppLog extends ChangeNotifier {
     super.dispose();
   }
 
-  // ── Допоміжне ───────────────────────────────────────────────────────────────
+  // ── Helpers ───────────────────────────────────────────────────────────────
 
   static final RegExp _secret = RegExp(
     r'''\b((?:access_token|refresh_token|token|api[_-]?key|apikey|key|authorization|auth|password|passwd|pwd|secret|set-cookie|cookie|sessionid|signature)\s*[=:]\s*)(?:Bearer\s+)?[^\s&;,"']+''',
@@ -525,10 +525,10 @@ class AppLog extends ChangeNotifier {
   );
   static final RegExp _bearer = RegExp(r'Bearer\s+[A-Za-z0-9._~+/=-]+', caseSensitive: false);
 
-  /// Маскує токени, ключі, паролі й cookie
+  /// Masks tokens, keys, passwords and cookies
   static String sanitize(String s) => s.replaceAllMapped(_secret, (m) => '${m[1]}***').replaceAll(_bearer, 'Bearer ***');
 
-  /// `14:30:12.345` або `2026-11-03 14:30:12.345`
+  /// `14:30:12.345` or `2026-11-03 14:30:12.345`
   static String stamp(DateTime t, {bool withDate = false}) {
     String two(int v) => v.toString().padLeft(2, '0');
     final ms = t.millisecond.toString().padLeft(3, '0');
@@ -536,7 +536,7 @@ class AppLog extends ChangeNotifier {
     return withDate ? '${t.year}-${two(t.month)}-${two(t.day)} $time' : time;
   }
 
-  /// Розмір у людському вигляді
+  /// Human-readable size
   static String bytesLabel(int bytes) {
     if (bytes < 1024) return '$bytes Б';
     if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(0)} КБ';

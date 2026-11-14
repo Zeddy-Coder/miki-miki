@@ -43,7 +43,7 @@ class CenterHub extends StatelessWidget {
             onTap: () => player.playOrPause(),
             child: StreamBuilder<bool>(
               stream: player.stream.playing,
-              initialData: player.state.playing, // Фікс: точний поточний стан без затримки
+              initialData: player.state.playing, // Fix: the exact current state without delay
               builder: (context, snapshot) {
                 final playing = snapshot.data ?? player.state.playing;
                 return Icon(

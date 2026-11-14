@@ -13,8 +13,8 @@ import 'hikka_community_cards.dart';
 import 'hikka_page_kit.dart';
 import 'hikka_shelf.dart';
 
-/// Розділ «Усе» в Огляді: календар, каталог, колекції, статті та персонажі на одній сторінці.
-/// Кожен блок — добірка з кнопкою «Усі», що відкриває відповідний розділ повністю.
+/// The "Усе" section in "Огляд": calendar, catalog, collections, articles and characters on one page.
+/// Each block is a selection with an "Усі" button that opens the matching section in full.
 class HikkaOverviewPage extends StatefulWidget {
   final double scale;
   final double bottomInset;
@@ -22,7 +22,7 @@ class HikkaOverviewPage extends StatefulWidget {
 
   const HikkaOverviewPage({super.key, required this.scale, this.bottomInset = 0, this.refreshToken = 0});
 
-  /// Скільки колекцій і статей показувати в добірці
+  /// How many collections and articles to show in a selection
   static const int previewCount = 3;
 
   @override
@@ -38,7 +38,7 @@ class _HikkaOverviewPageState extends State<HikkaOverviewPage> {
     super.dispose();
   }
 
-  /// Вертикальна добірка карток (колекції, статті) із заголовком і кнопкою «Усі»
+  /// A vertical selection of cards (collections, articles) with a heading and an "Усі" button
   Widget _list<T>({
     required String title,
     required String subtitle,

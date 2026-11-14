@@ -5,11 +5,11 @@ import 'package:flutter/material.dart';
 import '../services/ui_theme_service.dart';
 import 'app_animation_kit.dart';
 
-/// Рамка для меню на телефоні: у портреті — нижня панель (до ~68 % висоти екрана),
-/// в альбомній — бічна панель справа. Під нею затемнення: тап по ньому закриває панель.
+/// A frame for menus on a phone: in portrait a bottom sheet (up to ~68 % of the screen height),
+/// in landscape a side panel on the right. Under it a scrim: a tap on it closes the panel.
 ///
-/// Рамка малює лише поверхню (фон, рамку, тінь, «ручку»). Вміст ([child]) — це шапка й список,
-/// які самі подбають про прокручування. Поки панель закривається, вміст ще лишається на екрані.
+/// The frame draws only the surface (background, border, shadow, "handle"). The content ([child]) is the header and the list,
+/// which handle scrolling themselves. While the panel is closing, the content stays on screen.
 class MobileSheetFrame extends StatelessWidget {
   final bool open;
   final VoidCallback onDismiss;
@@ -22,10 +22,10 @@ class MobileSheetFrame extends StatelessWidget {
     required this.child,
   });
 
-  /// Частка висоти екрана, яку може зайняти нижня панель у портреті
+  /// The share of screen height the bottom sheet may take in portrait
   static const double portraitHeightFactor = 0.68;
 
-  /// Ширина бічної панелі в альбомній (dp): не вужча за 340 і не ширша за 440
+  /// Width of the side panel in landscape (dp): no narrower than 340 and no wider than 440
   static double sideWidth(double screenWidth) => math.min(440.0, math.max(340.0, screenWidth * 0.40));
 
   @override
@@ -131,7 +131,7 @@ class MobileSheetFrame extends StatelessWidget {
   }
 }
 
-/// «Ручка» нижньої панелі: потягнути вниз — закрити
+/// The bottom sheet's "handle": drag down to close
 class _GrabHandle extends StatelessWidget {
   final VoidCallback onDismiss;
   const _GrabHandle({required this.onDismiss});

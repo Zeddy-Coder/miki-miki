@@ -14,9 +14,9 @@ import 'package:miki_miki/widgets/app_dock_widgets.dart';
 import 'support/fakes.dart';
 import 'support/perf_harness.dart';
 
-/// Потік позиції для фонового плеєра. Кожне звернення дає окремий потік з `onCancel`: у широкомовного
-/// потоку `cancel()` повертає готовий Future із кореневої зони, і `await` на ньому не рухається
-/// у віртуальному часі тесту (у справжньому застосунку це не має значення).
+/// Position stream for the background player. Each access gives a separate stream with `onCancel`: for a broadcast
+/// stream `cancel()` returns a ready Future from the root zone, and `await` on it does not advance
+/// in the test's virtual time (it does not matter in the real app).
 class _PreviewStream extends Fake implements PlayerStream {
   final List<StreamController<Duration>> _sinks = [];
 
@@ -34,14 +34,14 @@ class _PreviewStream extends Fake implements PlayerStream {
   }
 }
 
-/// Фоновий плеєр прев'ю без libmpv: рахує звільнення, віддає «кадр» після перемотки.
+/// A preview background player without libmpv: counts releases, returns a "frame" after a seek.
 class _PreviewPlayer extends Fake implements Player {
   final _PreviewStream s = _PreviewStream();
   Duration pos = Duration.zero;
   int disposed = 0;
   final List<Duration> seeks = [];
 
-  /// Якщо задано — кадр віддається лише коли тест завершить цей Completer (довгий кадр)
+  /// If set, the frame is returned only when the test completes this Completer (a long frame)
   Completer<Uint8List?>? gate;
 
   @override
@@ -70,14 +70,14 @@ class _PreviewPlayer extends Fake implements Player {
   Future<void> dispose() async => disposed++;
 }
 
-/// Наведення мишею: спочатку кадр із `onEnter`, потім сама анімація розкриття
+/// Mouse hover: first the frame from `onEnter`, then the reveal animation itself
 Future<void> settleHover(WidgetTester tester) async {
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 16));
   await tester.pump(const Duration(milliseconds: 600));
 }
 
-/// Прокручує віртуальний час, щоб довгі очікування сервісу (сік, пауза перед знімком) завершились
+/// Advances virtual time so the service's long waits (seek, the pause before a snapshot) finish
 Future<void> settle(WidgetTester tester, {int ms = 1500}) async {
   for (var t = 0; t < ms; t += 50) {
     await tester.pump(const Duration(milliseconds: 50));
@@ -171,30 +171,30 @@ void main() {
       await mouse.addPointer(location: const Offset(5, 5));
       addTearDown(mouse.removePointer);
 
-      // Наведення розкриває повзунок
+      // Hover reveals the slider
       final collapsed = tester.getRect(find.byType(AppVolumeControl));
       await mouse.moveTo(Offset(collapsed.left + 19, collapsed.center.dy));
       await settleHover(tester);
       final open = tester.getRect(find.byType(AppVolumeControl));
       expect(open.width, greaterThan(collapsed.width + 60), reason: 'повзунок розкрився при наведенні');
 
-      // Клік по іконці вимикає звук
+      // A click on the icon mutes the sound
       await mouse.down(Offset(open.left + 19, open.center.dy));
       await mouse.up();
       await tester.pump(const Duration(milliseconds: 100));
       expect(mutes, 1);
       expect(changes, isEmpty, reason: 'клік по іконці не змінює гучність');
 
-      // Доріжка починається за 1 (рамка) + 36 (кнопка) + 6 (відступ) пікселів, довжина 70
+      // The track starts after 1 (border) + 36 (button) + 6 (padding) pixels, length 70
       final trackLeft = open.left + 1 + 36 + 6;
       final y = open.center.dy;
-      await mouse.down(Offset(trackLeft + 35, y)); // середина доріжки
+      await mouse.down(Offset(trackLeft + 35, y)); // middle of the track
       await mouse.up();
       await tester.pump(const Duration(milliseconds: 100));
       expect(changes, isNotEmpty);
       expect(changes.last, closeTo(50, 1));
 
-      await mouse.down(Offset(trackLeft + 70, y)); // кінець доріжки
+      await mouse.down(Offset(trackLeft + 70, y)); // end of the track
       await mouse.up();
       await tester.pump(const Duration(milliseconds: 100));
       expect(changes.last, closeTo(100, 1));
@@ -222,7 +222,7 @@ void main() {
       expect(SeekPreviewService.supports(video.path), isTrue);
       video.deleteSync();
       expect(SeekPreviewService.supports(video.path), isTrue, reason: 'без повторного звернення до диска');
-      SeekPreviewService.dispose(); // скидання кешу (новий файл/екран)
+      SeekPreviewService.dispose(); // cache reset (a new file / screen)
       expect(SeekPreviewService.supports(video.path), isFalse);
     });
 
@@ -256,7 +256,7 @@ void main() {
       expect(made[0].disposed, 1, reason: 'після простою плеєр звільнено');
       expect(SeekPreviewService.hasExact(const Duration(minutes: 5)), isTrue, reason: 'кадри з кешу доступні й без плеєра');
 
-      // Нове звернення створює плеєр заново
+      // A new access creates the player anew
       SeekPreviewService.request(const Duration(minutes: 12));
       await settle(tester);
       expect(made.length, 2);
@@ -277,7 +277,7 @@ void main() {
       SeekPreviewService.request(const Duration(minutes: 5));
       await settle(tester);
 
-      // Нові ділянки кожні ~20 с — плеєр «в роботі», хоч загалом минуло більше 30 с
+      // New segments every ~20 s: the player is "in use", though more than 30 s passed overall
       for (var i = 0; i < 4; i++) {
         await tester.pump(const Duration(seconds: 20) - const Duration(milliseconds: 1500));
         SeekPreviewService.request(Duration(minutes: 8 + i));
@@ -286,7 +286,7 @@ void main() {
       expect(made.length, 1, reason: 'той самий плеєр увесь час');
       expect(made[0].disposed, 0);
 
-      // Повторні звернення до вже готових кадрів плеєр не «будять»
+      // Repeated access to already ready frames does not "wake" the player
       await tester.pump(const Duration(seconds: 15));
       SeekPreviewService.request(const Duration(minutes: 5));
       await tester.pump(const Duration(seconds: 16));

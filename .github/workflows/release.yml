@@ -43,6 +43,16 @@ jobs:
           echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/miki-release.jks"
           echo "KEYSTORE_FILE=$RUNNER_TEMP/miki-release.jks" >> "$GITHUB_ENV"
 
+      - name: Налаштування Firebase (push)
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ -n "$GOOGLE_SERVICES_JSON" ]; then
+            echo "$GOOGLE_SERVICES_JSON" | base64 -d > android/app/google-services.json
+          else
+            echo "Немає секрету GOOGLE_SERVICES_JSON: збірка без push"
+          fi
+
       - run: flutter pub get
 
       - name: Збірка APK
@@ -71,3 +81,42 @@ jobs:
         with:
           files: ${{ env.APK_NAME }}
           body_path: ${{ runner.temp }}/notes.md
+
+  windows:
+    # Installer for Windows: MikiMiki-Setup-<version>.exe (Inno Setup), attached to the same release
+    needs: android
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.47.9'
+          cache: true
+
+      - name: Inno Setup
+        shell: pwsh
+        run: |
+          if (-not (Get-Command ISCC.exe -ErrorAction SilentlyContinue) -and -not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) {
+            choco install innosetup -y --no-progress
+          }
+
+      - run: flutter pub get
+
+      - name: Installer
+        shell: pwsh
+        run: ./tools/build_installer.ps1
+
+      - name: Upload to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/MikiMiki-Setup-*.exe
+
+      - name: Artifact (manual runs)
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: MikiMiki-Setup
+          path: build/MikiMiki-Setup-*.exe

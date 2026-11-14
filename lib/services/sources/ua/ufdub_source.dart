@@ -1,6 +1,6 @@
-/// UFDub (ufdub.com) — українська озвучка аніме та донхуа студією Ukraine Fast Dub.
-/// Порт розширення Aniyomi «UFDub» (yuzono/anime-repo), звірений з живим сайтом: у нього змінилися
-/// назва в списку (`a.short-t`), перехід на сторінку плеєра V2 і кінцеві посилання (api.ufdub.com).
+/// UFDub (ufdub.com): Ukrainian anime and donghua dubbing by the Ukraine Fast Dub studio.
+/// A port of the Aniyomi extension "UFDub" (yuzono/anime-repo), checked against the live site: its
+/// list title (`a.short-t`), the move to the V2 player page and the final links (api.ufdub.com) have changed.
 library;
 
 import 'package:html/dom.dart';
@@ -29,13 +29,13 @@ class UfDubSource extends HttpAnimeSource {
   static const String _section = '/anime';
   static const String _items = 'div.short';
 
-  /// «Наступна» — кнопка `pnext` з посиланням (на останній сторінці в ній лише `span`)
+  /// "Next" is the `pnext` button with a link (on the last page it has only a `span`)
   static const String _next = 'div.pagi-nav .pnext a';
 
-  /// Скільки аніме на сторінці видачі — потрібно для зсуву сторінок пошуку (`result_from`)
+  /// How many anime are on a results page: needed for the search page offset (`result_from`)
   static const int _pageSize = 16;
 
-  // ── Списки ──────────────────────────────────────────────────────────────────────
+  // ── Lists ──────────────────────────────────────────────────────────────────────
 
   @override
   Future<SAnimePage> popular(int page) async {
@@ -98,7 +98,7 @@ class UfDubSource extends HttpAnimeSource {
     );
   }
 
-  /// У видачі пошуку назва йде як «Українська / Original» — відрізаємо оригінал, він уже окремо
+  /// In search results the title is "Українська / Original": we cut off the original, it is already separate
   static String _withoutOriginal(String title, String original) {
     if (original.isNotEmpty && title.endsWith(' / $original')) return title.substring(0, title.length - original.length - 3).trim();
     return title;
@@ -106,7 +106,7 @@ class UfDubSource extends HttpAnimeSource {
 
   static bool _isGenre(String g) => g.isNotEmpty && g != 'Аніме' && g != 'Завершені проєкти';
 
-  // ── Сторінка аніме ──────────────────────────────────────────────────────────────
+  // ── Anime page ──────────────────────────────────────────────────────────────
 
   @override
   Future<SAnime> details(SAnime anime) async {
@@ -151,10 +151,10 @@ class UfDubSource extends HttpAnimeSource {
     );
   }
 
-  // ── Серії ───────────────────────────────────────────────────────────────────────
+  // ── Episodes ───────────────────────────────────────────────────────────────────────
 
-  /// Адреса плеєра на сторінці аніме: поле «Посилання на плеєр» (`<input value=…>`, як у розширенні), а як його нема —
-  /// `<iframe src=…>` чи `var input_player="…"` (плеєр V2). Серії в обох однакові.
+  /// Player address on the anime page: the "Посилання на плеєр" field (`<input value=…>`, as in the extension), and if there is none,
+  /// `<iframe src=…>` or `var input_player="…"` (the V2 player). Episodes are the same in both.
   String playerUrl(Document doc) {
     var u = attrOf(doc, 'input[value*=https://video.ufdub.com]', 'value');
     if (u.isEmpty) u = attrOf(doc, 'iframe#input_video_player', 'src');
@@ -171,7 +171,7 @@ class UfDubSource extends HttpAnimeSource {
   );
   static final RegExp _videosUrl = RegExp(r"""https:\/\/ufdub\.com\/video\/VIDEOS\.php\?[^'"]*""");
 
-  /// Серії зі сторінки плеєра V2 — масив `a=[['Назва','mp4','посилання'], …]`
+  /// Episodes from the V2 player page: an array `a=[['Title','mp4','link'], …]`
   List<SEpisode> parsePlayer(String scripts) {
     final out = <SEpisode>[];
     for (final m in _entry.allMatches(scripts)) {
@@ -179,7 +179,7 @@ class UfDubSource extends HttpAnimeSource {
       final type = m.group(2)!;
       final url = _unescapeJs(m.group(3)!);
       if (!url.contains('VIDEOS.php') && type != 'web') continue;
-      if (type == 'web' && VideoExtractors.forUrl(url) == null) continue; // чужі iframe без екстрактора не відтворити
+      if (type == 'web' && VideoExtractors.forUrl(url) == null) continue; // foreign iframes without an extractor cannot be played
       String? tab;
       if (url.contains('TAB=')) tab = SourceHttp.parseUrl(url).queryParameters['TAB'];
       final label = title.isNotEmpty ? title : (SourceHttp.parseUrl(url).queryParameters['Seriya'] ?? '');
@@ -193,7 +193,7 @@ class UfDubSource extends HttpAnimeSource {
       ));
     }
     if (out.isNotEmpty) return out;
-    // запасний шлях (як у розширенні): шукаємо лише посилання VIDEOS.php
+    // fallback (as in the extension): we look only for VIDEOS.php links
     for (final m in _videosUrl.allMatches(scripts)) {
       final url = m.group(0)!;
       final q = SourceHttp.parseUrl(url).queryParameters;
@@ -215,7 +215,7 @@ class UfDubSource extends HttpAnimeSource {
     return parsePlayer(scriptsOf(parseHtml(res.text)));
   }
 
-  // ── Відео ───────────────────────────────────────────────────────────────────────
+  // ── Video ───────────────────────────────────────────────────────────────────────
 
   @override
   Future<List<Video>> videos(SEpisode episode) async {
@@ -229,7 +229,7 @@ class UfDubSource extends HttpAnimeSource {
     if (r.contentType.toLowerCase().contains('text/html')) {
       throw SourceException(SourceErrorKind.badResponse, 'замість відео — сторінка: ${r.url}');
     }
-    final url = r.url.toString().replaceAll('dl=1', 'raw=1'); // Dropbox: пряме посилання замість «завантаження»
+    final url = r.url.toString().replaceAll('dl=1', 'raw=1'); // Dropbox: a direct link instead of "download"
     final audio = episode.data;
     return [
       Video(

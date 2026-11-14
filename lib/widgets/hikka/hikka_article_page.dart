@@ -11,7 +11,7 @@ import 'hikka_community_cards.dart';
 import 'hikka_page_kit.dart';
 import 'hikka_slate_view.dart';
 
-/// Сторінка статті: категорія, назва, автор і дата, лічильники та повний текст із розміткою Hikka.
+/// Article page: category, title, author and date, counters and the full text with Hikka markup.
 class HikkaArticlePage extends StatefulWidget {
   final HikkaRoute route;
   final double scale;
@@ -89,8 +89,19 @@ class _HikkaArticlePageState extends State<HikkaArticlePage> {
               children: [
                 HikkaPill(text: a.categoryLabel, scale: scale, background: uiTheme.accentWash, foreground: uiTheme.accentColor),
                 SizedBox(width: 8 * scale),
-                Expanded(
-                  child: Text(hikkaByline(a.author, a.createdAt), maxLines: 1, overflow: TextOverflow.ellipsis, style: hikkaStyle(12 * scale, color: uiTheme.textMuted)),
+                Flexible(
+                  child: InkWell(
+                    // The author's name leads to their profile
+                    onTap: a.author.username.isEmpty ? null : () => HikkaNav.instance.openUser(a.author.username),
+                    borderRadius: uiTheme.borderRadius(6 * scale),
+                    splashColor: Colors.transparent,
+                    highlightColor: uiTheme.touchHighlight,
+                    hoverColor: uiTheme.hoverOverlay,
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(vertical: 4 * scale, horizontal: 2 * scale),
+                      child: Text(hikkaByline(a.author, a.createdAt), maxLines: 1, overflow: TextOverflow.ellipsis, style: hikkaStyle(12 * scale, color: uiTheme.textMuted)),
+                    ),
+                  ),
                 ),
               ],
             ),

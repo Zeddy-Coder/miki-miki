@@ -1,5 +1,5 @@
-// Яку озвучку відкриває «Дивитись» без вибору на сторінці: вибір для тайтлу → улюблена команда з інших тайтлів →
-// перший варіант, де нумерація збігається з Hikka. Чиста логіка, без UI й мережі.
+// Which dub "Дивитись" opens without a choice on the page: the choice for the title → a favorite team from other titles →
+// the first variant whose numbering matches Hikka. Pure logic, no UI or network.
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -39,7 +39,7 @@ void main() {
       expect(vg('a', 'Inari', teams: [inari]).fullLabel, 'Озвучення: Inari');
       expect(vg('b', 'Inari (суб.)', sub: true, teams: [inari]).fullLabel, 'Субтитри: Inari');
       expect(vg('c', 'UFDub', source: 'ufdub').fullLabel, 'Озвучення: UFDub');
-      // «(суб.)» прибираємо лише наприкінці й лише в субтитрів
+      // "(суб.)" is removed only at the end and only for subtitles
       expect(vg('d', 'Команда (суб.) Х', sub: true).fullLabel, 'Субтитри: Команда (суб.) Х');
       expect(vg('e', 'Озвучка (суб.)').fullLabel, 'Озвучення: Озвучка (суб.)');
     });
@@ -92,9 +92,9 @@ void main() {
     });
 
     test('улюблена команда з інших тайтлів: найновіший вибір перший', () {
-      final favs = [choiceKeyOf(glassV), choiceKeyOf(fanvoxV)]; // Glass Moon обрано пізніше
+      final favs = [choiceKeyOf(glassV), choiceKeyOf(fanvoxV)]; // Glass Moon was chosen later
       expect(pickGroup([inariV, fanvoxV, glassV], favorites: favs, safe: safe).id, glassV.id);
-      // а якщо її тут немає — наступна за давністю
+      // and if it is not here, the next by recency
       expect(pickGroup([inariV, fanvoxV], favorites: favs, safe: safe).id, fanvoxV.id);
     });
 
@@ -104,7 +104,7 @@ void main() {
     });
 
     test('улюблений варіант із розбіжною нумерацією пропускається: йдемо до першого безпечного', () {
-      final mergedFav = vg('mikai|1|t_121:voice', 'Inari', count: 24, teams: [inari]); // у цьому тайтлі склеєна
+      final mergedFav = vg('mikai|1|t_121:voice', 'Inari', count: 24, teams: [inari]); // in this title it is merged
       expect(pickGroup([mergedFav, fanvoxV, glassV], favorites: [choiceKeyOf(mergedFav)], safe: safe).id, fanvoxV.id);
     });
 
@@ -172,7 +172,7 @@ void main() {
     });
 
     test('Hikka попереду за локальну історію: беремо наступну після Hikka', () {
-      // востаннє відкривали 2-гу й переглянули, але на Hikka вже 4
+      // last time the 2nd was opened and watched, but on Hikka it is already the 4th
       expect(continuePoint(keys, {'1', '2'}, '2', hikkaEpisodes: 4).index, 4);
     });
 

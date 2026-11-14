@@ -1,7 +1,7 @@
-/// Збереження журналу в окремий файл (а не в буфер обміну).
+/// Saving the log to a separate file (not to the clipboard).
 ///
-/// Збирає повний звіт ([AppLog.buildReport]) і віддає його системному вікну «Зберегти як»: на телефоні це вибір
-/// теки (наприклад, «Завантаження»), на Windows — стандартний діалог. Файл потім можна надіслати як є.
+/// Builds the full report ([AppLog.buildReport]) and hands it to the system "Save as" window: on a phone this is a folder
+/// picker (e.g. "Downloads"), on Windows the standard dialog. The file can then be sent as is.
 library;
 
 import 'dart:convert';
@@ -12,18 +12,18 @@ import 'package:file_picker/file_picker.dart';
 import 'app_log.dart';
 import '../constants/app_identity.dart';
 
-/// Результат збереження
+/// Save result
 class LogExportResult {
-  /// Файл записано
+  /// The file was written
   final bool saved;
 
-  /// Користувач закрив вікно, нічого не вибравши
+  /// The user closed the window without choosing anything
   final bool cancelled;
 
-  /// Шлях (або посилання), який повернула система
+  /// The path (or link) the system returned
   final String? path;
 
-  /// Назва файлу, під якою пропонувалось зберегти
+  /// The file name offered for saving
   final String fileName;
 
   final String? error;
@@ -31,13 +31,13 @@ class LogExportResult {
   const LogExportResult({required this.saved, required this.fileName, this.cancelled = false, this.path, this.error});
 }
 
-/// Показує системне вікно збереження: повертає шлях або `null`, якщо скасовано (у тестах підміняється)
+/// Shows the system save window: returns a path or `null` if cancelled (replaced in tests)
 typedef LogSaver = Future<String?> Function(String fileName, Uint8List bytes);
 
 class LogExport {
   const LogExport._();
 
-  /// Назва файлу: `miki_miki_log_20261103_143012.txt`
+  /// File name: `miki_miki_log_20261103_143012.txt`
   static String fileName([DateTime? now]) {
     final t = now ?? DateTime.now();
     String two(int v) => v.toString().padLeft(2, '0');
@@ -54,7 +54,7 @@ class LogExport {
     );
   }
 
-  /// Збирає звіт і пропонує зберегти файл. `extra` — додаткові розділи (живі показники, логи libmpv…).
+  /// Builds the report and offers to save the file. `extra` holds extra sections (live metrics, libmpv logs…).
   static Future<LogExportResult> save({
     List<(String, String)> extra = const [],
     AppLog? log,

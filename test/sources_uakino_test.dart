@@ -9,7 +9,7 @@ import 'package:miki_miki/services/sources/ua/uakino_source.dart';
 
 import 'support/fake_site.dart';
 
-// Фікстури зроблені за селекторами розширення Aniyomi «UAKino» (сам сайт з пісочниці закритий Cloudflare).
+// Fixtures are made by the selectors of the Aniyomi extension "UAKino" (the site itself is closed by Cloudflare from the sandbox).
 void main() {
   group('списки', () {
     final s = UaKinoSource();

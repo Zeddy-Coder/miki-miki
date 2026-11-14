@@ -11,16 +11,16 @@ import 'app_animation_kit.dart';
 import 'app_media_thumbnail.dart';
 import 'app_ui_kit.dart';
 
-/// Локальна медіатека: відкрити файл чи посилання, історія файлів, остання черга й плейлисти. Раніше була
-/// головним екраном; тепер Miki Miki працює від каталогу Hikka, тож медіатека прихована й вмикається в
-/// «Налаштування → Розробник» (відкривається з «Профілю»).
+/// Local media library: open a file or link, file history, the last queue and playlists. It used to be
+/// the main screen; now Miki Miki works from the Hikka catalog, so the library is hidden and enabled in
+/// "Налаштування → Розробник" (opens from "Профіль").
 class LocalLibrary extends StatefulWidget {
   final double scale;
   final ValueChanged<String> onOpenFile;
   final ValueChanged<List<String>> onOpenMultipleFiles;
   final void Function(List<Map<String, String>> items, int startIndex) onOpenQueue;
 
-  /// Додатковий відступ знизу у списках (телефон: щоб згорнутий плеєр не закривав кінець списку)
+  /// Extra bottom padding in lists (phone: so the collapsed player does not cover the end of the list)
   final double reserveBottom;
 
   const LocalLibrary({
@@ -42,7 +42,7 @@ class _LocalLibraryState extends State<LocalLibrary> {
   final ScrollController _historyScroll = AppSmoothScrollController();
   final ScrollController _playlistsScroll = AppSmoothScrollController();
   final ScrollController _playlistDetailScroll = AppSmoothScrollController();
-  int _tab = 0; // 0 — огляд, 1 — історія, 2 — плейлисти
+  int _tab = 0; // 0 is overview, 1 is history, 2 is playlists
   String? _openPlaylistId;
 
   @override
@@ -201,10 +201,10 @@ class _LocalLibraryState extends State<LocalLibrary> {
     } catch (_) {}
   }
 
-  /// Вузький екран телефона (портрет)
+  /// Narrow phone screen (portrait)
   bool get _compact => AppPlatform.isMobile && AppLayout(MediaQuery.sizeOf(context)).isCompactWidth;
 
-  /// Бічний відступ вмісту: на вузькому екрані менший
+  /// Side padding of the content: smaller on a narrow screen
   double _sidePad(double scale) => _compact ? 16.0 : 24 * scale;
 
   @override
@@ -216,7 +216,7 @@ class _LocalLibraryState extends State<LocalLibrary> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Розділи медіатеки (раніше — пункти нижньої навігації й бічного меню)
+        // Library sections (formerly the items of the bottom navigation and side menu)
         Padding(
           padding: EdgeInsets.fromLTRB(_sidePad(scale), 4 * scale, _sidePad(scale), 2 * scale),
           child: AppSegmentedBar<int>(
@@ -257,7 +257,7 @@ class _LocalLibraryState extends State<LocalLibrary> {
     );
   }
 
-  // ── Шапка розділу ──────────────────────────────────────────────────────────
+  // ── Section header ──────────────────────────────────────────────────────────
 
   Widget _buildHeader(double scale, int recentCount) {
     if (_tab == 2) return _buildPlaylistsHeader(scale);
@@ -304,7 +304,7 @@ class _LocalLibraryState extends State<LocalLibrary> {
     );
   }
 
-  // ── Вкладка «Головна» ──────────────────────────────────────────────────────
+  // ── The "Головна" tab ──────────────────────────────────────────────────────
 
   Widget _buildOverviewTab(double scale, List<String> recentFiles) {
     final String? lastFile = recentFiles.isNotEmpty ? recentFiles.first : null;
@@ -348,7 +348,7 @@ class _LocalLibraryState extends State<LocalLibrary> {
                   SizedBox(height: 10 * scale),
                   for (int i = 0; i < preview.length; i++) _buildRecentRow(scale, i, preview[i]),
                 ],
-                // Гарячі клавіші потрібні лише з клавіатурою — на телефоні розділ не показуємо
+                // Hotkeys are needed only with a keyboard: we do not show the section on a phone
                 if (!AppPlatform.isMobile) ...[
                   SizedBox(height: 22 * scale),
                   AppSectionHeader(scale: scale, title: 'Гарячі клавіші', subtitle: 'Працюють під час відтворення'),
@@ -380,10 +380,10 @@ class _LocalLibraryState extends State<LocalLibrary> {
     );
   }
 
-  /// Додатковий відступ знизу, щоб згорнутий плеєр (плаваюча картка) не закривав кінець списку
+  /// Extra bottom padding so the collapsed player (a floating card) does not cover the end of the list
   double _belowContent() => widget.reserveBottom;
 
-  /// Три швидкі дії: у рядок на широкому екрані, у стовпчик на вузькому
+  /// Three quick actions: in a row on a wide screen, in a column on a narrow one
   Widget _buildActionCards(double scale) {
     final cards = <Widget>[
       _buildActionCard(
@@ -546,7 +546,7 @@ class _LocalLibraryState extends State<LocalLibrary> {
         ),
       ],
     );
-    // Телефон в альбомній: три картки в рядок завузькі для «значок + текст» поруч — значок ставимо зверху
+    // Phone in landscape: three cards in a row are too narrow for "icon + text" side by side, so we put the icon on top
     final bool stacked = AppPlatform.isMobile && !_compact;
     return AppCard(
       scale: scale,
@@ -686,7 +686,7 @@ class _LocalLibraryState extends State<LocalLibrary> {
   }
 
 
-  // ── Остання черга ──────────────────────────────────────────────────────────
+  // ── Last queue ──────────────────────────────────────────────────────────
 
   List<Widget> _buildLastQueueSection(double scale) {
     final q = StorageService.getLastQueue();
@@ -807,7 +807,7 @@ class _LocalLibraryState extends State<LocalLibrary> {
     );
   }
 
-  // ── Плейлисти ──────────────────────────────────────────────────────────────
+  // ── Playlists ──────────────────────────────────────────────────────────────
 
   List<Map<String, String>> _toItems(List<String> paths) =>
       paths.map((p) => {'uri': p, 'title': AppFormatters.cleanMediaTitle(p)}).toList();
@@ -1203,7 +1203,7 @@ class _LocalLibraryState extends State<LocalLibrary> {
     );
   }
 
-  // ── Вкладка «Історія» ──────────────────────────────────────────────────────
+  // ── The "Історія" tab ──────────────────────────────────────────────────────
 
   Widget _buildHistoryTab(double scale, List<String> recentFiles) {
     if (recentFiles.isEmpty) {

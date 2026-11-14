@@ -1,7 +1,7 @@
-/// Клієнт API Hikka (api.hikka.io): каталог (аніме, персонажі, календар) без входу, а з токеном акаунта —
-/// профіль, списки перегляду й улюблене (заголовок `auth`).
-/// Без сторонніх пакетів — `dart:io`. Відповіді кешуються в памʼяті (TTL), однакові паралельні запити
-/// зливаються в один, а при збої мережі віддається застарілий кеш, якщо він є.
+/// Hikka API client (api.hikka.io): the catalog (anime, characters, calendar) without sign-in, and with an account token:
+/// profile, watch lists and favorites (the `auth` header).
+/// No third-party packages, only `dart:io`. Responses are cached in memory (TTL), identical parallel requests
+/// are merged into one, and on a network failure a stale cache is returned if there is one.
 library;
 
 import 'dart:async';
@@ -10,6 +10,7 @@ import 'dart:io';
 
 import '../constants/app_identity.dart';
 import '../models/hikka_models.dart';
+import '../models/hikka_profile_models.dart';
 import '../models/hikka_user_models.dart';
 import 'app_log.dart';
 import 'hikka_disk_cache.dart';
@@ -20,15 +21,15 @@ class HikkaException implements Exception {
   final HikkaErrorKind kind;
   final int? status;
 
-  /// Код помилки API (`system:validation_error` тощо)
+  /// API error code (`system:validation_error` etc.)
   final String? code;
 
-  /// Технічний опис (для логів)
+  /// Technical description (for logs)
   final String detail;
 
   const HikkaException(this.kind, this.detail, {this.status, this.code});
 
-  /// Повідомлення для користувача
+  /// Message for the user
   String get message => switch (kind) {
         HikkaErrorKind.network => 'Немає зв’язку з Hikka. Перевірте інтернет.',
         HikkaErrorKind.timeout => 'Hikka довго не відповідає. Спробуйте ще раз.',
@@ -49,7 +50,7 @@ class HikkaRequest {
   final Uri url;
   final String? body;
 
-  /// Додаткові заголовки (токен акаунта `auth`)
+  /// Extra headers (the account token `auth`)
   final Map<String, String> headers;
 
   const HikkaRequest(this.method, this.url, [this.body, this.headers = const {}]);
@@ -65,12 +66,12 @@ class HikkaResponse {
 
 typedef HikkaSender = Future<HikkaResponse> Function(HikkaRequest request);
 
-/// Справжній транспорт на `dart:io`.
+/// The real transport on `dart:io`.
 ///
-/// Спільний `HttpClient` тримає пул з'єднань. Після будь-якого збою (обрив, TLS, тайм-аут) клієнт
-/// відкидається: у пулі могли лишитись «мертві» з'єднання (мережу змінили, телефон спав, сервер закрив
-/// сокет), і кожен наступний запит натрапляв би на них знову. Закриття «м'яке» — запити, що вже йдуть,
-/// доробляються на старому клієнті, нові відкриваються на новому.
+/// A shared `HttpClient` keeps a connection pool. After any failure (drop, TLS, timeout) the client
+/// is discarded: the pool may have kept "dead" connections (the network changed, the phone slept, the server closed
+/// the socket), and every next request would hit them again. The close is "soft": requests already in flight
+/// finish on the old client, new ones open on the new one.
 class _IoTransport {
   static HttpClient? _client;
   static DateTime? _lastProbe;
@@ -80,7 +81,7 @@ class _IoTransport {
     ..idleTimeout = const Duration(seconds: 15)
     ..userAgent = AppIdentity.userAgent('Hikka catalog');
 
-  /// Відкидає клієнта, якщо він ще поточний (паралельний збій не скидає вже новий клієнт)
+  /// Discards the client if it is still the current one (a parallel failure does not reset an already new client)
   static void _discard(HttpClient failed) {
     if (identical(_client, failed)) _client = null;
     try {
@@ -114,7 +115,7 @@ class _IoTransport {
     }
   }
 
-  /// Після збою перевіряємо DNS (рідше за раз на 10 с): це швидко відрізняє «немає інтернету» від «не резолвиться»
+  /// After a failure we check DNS (at most once per 10 s): this quickly tells "no internet" from "does not resolve"
   static Future<void> _probeDns(String host) async {
     final now = DateTime.now();
     if (_lastProbe != null && now.difference(_lastProbe!) < const Duration(seconds: 10)) return;
@@ -136,7 +137,7 @@ class _CacheEntry {
 }
 
 class HikkaApi {
-  /// Спільний екземпляр (у тестах підміняється)
+  /// Shared instance (replaced in tests)
   static HikkaApi instance = HikkaApi();
 
   static const String defaultBase = 'https://api.hikka.io';
@@ -145,28 +146,28 @@ class HikkaApi {
   final HikkaSender _send;
   final DateTime Function() _now;
 
-  /// Пауза перед повтором після збою (у тестах — нуль)
+  /// Pause before a retry after a failure (zero in tests)
   final Duration retryDelay;
 
   final Map<String, _CacheEntry> _cache = {};
   final Map<String, Future<Object?>> _inflight = {};
 
-  /// Кеш на диску (у тестах не підключений). Запис старіший за застарілість [diskServeStale] віддається одразу й
-  /// оновлюється у фоні; ще старіший — лише коли мережа недоступна.
+  /// Disk cache (not attached in tests). An entry older than the staleness [diskServeStale] is served immediately and
+  /// refreshed in the background; an even older one only when the network is unavailable.
   HikkaDiskCache? disk;
   static const Duration diskServeStale = Duration(hours: 6);
 
-  /// Запити, збережені до цього моменту, не віддаються «свіжими» (після ручного оновлення)
+  /// Requests saved before this moment are not served as "fresh" (after a manual refresh)
   DateTime _freshAfter = DateTime.fromMillisecondsSinceEpoch(0);
 
-  /// Скільки запитів реально пішло в мережу (для тестів і діагностики)
+  /// How many requests actually went to the network (for tests and diagnostics)
   int networkCalls = 0;
 
-  /// Токен акаунта для запитів із `auth: true`. Зазвичай його дає `HikkaAuth` через [sharedTokenProvider];
-  /// власний провайдер потрібен окремим екземплярам API (у тестах).
+  /// Account token for requests with `auth: true`. Usually `HikkaAuth` supplies it through [sharedTokenProvider];
+  /// a custom provider is needed for separate API instances (in tests).
   String? Function()? tokenProvider;
 
-  /// Сервер відхилив токен (прострочений чи відкликаний): акаунт виходить із сесії
+  /// The server rejected the token (expired or revoked): the account signs out
   void Function()? onUnauthorized;
 
   static String? Function() sharedTokenProvider = _noToken;
@@ -187,13 +188,13 @@ class HikkaApi {
     _freshAfter = _now();
   }
 
-  // ── Ядро ────────────────────────────────────────────────────────────────────
+  // ── Core ────────────────────────────────────────────────────────────────────
 
-  /// Скільки спроб робиться залежно від виду збою
+  /// How many attempts are made depending on the kind of failure
   static const int _maxNetworkAttempts = 3;
   static const int _maxServerAttempts = 2;
 
-  /// Короткий опис винятку транспорту для журналу й `HikkaException.detail`
+  /// Short description of a transport exception for the log and `HikkaException.detail`
   static String describeError(Object e) {
     final b = StringBuffer(e.runtimeType.toString());
     if (e is SocketException) {
@@ -257,8 +258,8 @@ class HikkaApi {
         if (attempt >= _maxServerAttempts) throw last;
         await Future<void>.delayed(_backoff(attempt));
       } on Exception catch (e) {
-        // Обрив, DNS, TLS, закрите з'єднання з пулу… Для користувача це «немає зв'язку», але спершу пробуємо ще:
-        // нове з'єднання (клієнт уже скинуто) найчастіше проходить одразу.
+        // Drop, DNS, TLS, a closed pooled connection… For the user it is "no connection", but we try again first:
+        // a new connection (the client is already reset) most often succeeds immediately.
         last = HikkaException(HikkaErrorKind.network, describeError(e));
         final more = attempt < _maxNetworkAttempts;
         AppLog.w('hikka', 'збій мережі за ${sw.elapsedMilliseconds} мс ($label), спроба $attempt/$_maxNetworkAttempts: ${last.detail}${more ? ' — повторюю' : ''}');
@@ -288,7 +289,7 @@ class HikkaApi {
       }
     } catch (_) {}
     final s = res.status;
-    // Hikka віддає 400 і для «токен відсутній / поганий», тож орієнтуємось на код помилки
+    // Hikka returns 400 also for "token missing / bad", so we go by the error code
     final badToken = s == 401 || (code != null && _tokenCodes.contains(code));
     final kind = badToken
         ? HikkaErrorKind.unauthorized
@@ -304,8 +305,8 @@ class HikkaApi {
     return HikkaException(kind, detail, status: s, code: code);
   }
 
-  /// Кешований запит: свіжий кеш → одразу; інакше мережа (з об'єднанням однакових запитів);
-  /// при збої мережі — застарілий кеш, якщо є.
+  /// Cached request: fresh cache → immediately; otherwise the network (merging identical requests);
+  /// on a network failure, a stale cache if there is one.
   Future<T> _cached<T>(
     String key,
     Duration ttl,
@@ -319,7 +320,7 @@ class HikkaApi {
       return parse(hit.json);
     }
 
-    // Диск: свіже — одразу; не надто старе — одразу, а оновлення у фоні; решта — запасний варіант при збої мережі
+    // Disk: fresh, immediately; not too old, immediately with a background refresh; the rest is a fallback on network failure
     DiskHit? saved;
     if (disk != null) {
       saved = await disk!.read(key);
@@ -355,14 +356,14 @@ class HikkaApi {
     }
   }
 
-  /// Запит у мережу з об'єднанням однакових; успішна відповідь іде в памʼять і на диск
+  /// Network request merging identical ones; a successful response goes to memory and to disk
   Future<Object?> _network(String key, Duration ttl, Future<Object?> Function() fetch) async {
     var pending = _inflight[key];
     if (pending == null) {
       pending = fetch();
       _inflight[key] = pending;
-      // Прибираємо запис, щойно запит завершився (успіхом чи помилкою)
-      // Тіло з фігурними дужками: `remove` повертає Future, а `whenComplete` перебрав би його помилку на себе
+      // Remove the entry as soon as the request finishes (success or error)
+      // A body with braces: `remove` returns a Future, and `whenComplete` would take its error on itself
       unawaited(pending.then<void>((_) {}, onError: (_) {}).whenComplete(() {
         _inflight.remove(key);
       }));
@@ -404,9 +405,9 @@ class HikkaApi {
     );
   }
 
-  // ── Аніме ───────────────────────────────────────────────────────────────────
+  // ── Anime ───────────────────────────────────────────────────────────────────
 
-  /// Каталог з фільтрами (`POST /anime`)
+  /// Catalog with filters (`POST /anime`)
   Future<HikkaPage<HikkaAnime>> searchAnime(
     HikkaSearchFilters filters, {
     int page = 1,
@@ -423,7 +424,7 @@ class HikkaApi {
     );
   }
 
-  /// Повна сторінка аніме
+  /// Full anime page
   Future<HikkaAnime> anime(String slug) => _cached(
         'anime/$slug',
         _medium,
@@ -445,6 +446,35 @@ class HikkaApi {
         (j) => HikkaPage.parse(j, HikkaStaff.fromJson),
       );
 
+  Future<HikkaPerson> person(String slug) => _cached(
+        'people/$slug',
+        _long,
+        () => _request('GET', '/people/${_seg(slug)}'),
+        (j) => HikkaPerson.fromJson(j is Map<String, dynamic> ? j : const {}),
+      );
+
+  /// Which anime a person worked on and in which roles
+  Future<HikkaPage<HikkaPersonAnime>> personAnime(String slug, {int page = 1, int size = 30, bool allowAdult = false}) async {
+    final p = await _cached(
+      'people/$slug/anime?$page&$size',
+      _long,
+      () => _request('GET', '/people/${_seg(slug)}/anime', query: _paging(page, size)),
+      (j) => HikkaPage.parse(j, HikkaPersonAnime.fromJson),
+    );
+    return _filtered(p, allowAdult, (e) => e.anime);
+  }
+
+  /// Whom the person voiced
+  Future<HikkaPage<HikkaPersonCharacter>> personCharacters(String slug, {int page = 1, int size = 30, bool allowAdult = false}) async {
+    final p = await _cached(
+      'people/$slug/characters?$page&$size',
+      _long,
+      () => _request('GET', '/people/${_seg(slug)}/characters', query: _paging(page, size)),
+      (j) => HikkaPage.parse(j, HikkaPersonCharacter.fromJson),
+    );
+    return _filtered(p, allowAdult, (e) => e.anime);
+  }
+
   Future<HikkaPage<HikkaAnime>> recommendations(String slug, {int page = 1, int size = 20, bool allowAdult = false}) async {
     final p = await _cached(
       'anime/$slug/recommendations?$page&$size',
@@ -455,7 +485,7 @@ class HikkaApi {
     return _filtered(p, allowAdult, (a) => a);
   }
 
-  /// Усі аніме франшизи й зв'язки між ними
+  /// All anime of the franchise and the links between them
   Future<HikkaFranchiseData> franchise(String slug) => _cached(
         'franchise/$slug',
         _long,
@@ -470,9 +500,9 @@ class HikkaApi {
         (j) => HikkaPage.parse(j, HikkaGenre.fromJson).items,
       );
 
-  // ── Календар ────────────────────────────────────────────────────────────────
+  // ── Calendar ────────────────────────────────────────────────────────────────
 
-  /// Найближчі серії в порядку виходу (`POST /schedule/anime`)
+  /// Upcoming episodes in release order (`POST /schedule/anime`)
   Future<HikkaPage<HikkaScheduleEntry>> schedule({int page = 1, int size = 100, bool allowAdult = false}) async {
     final body = <String, dynamic>{
       'status': ['announced', 'ongoing'],
@@ -487,7 +517,7 @@ class HikkaApi {
     return _filtered(p, allowAdult, (e) => e.anime);
   }
 
-  // ── Персонажі ───────────────────────────────────────────────────────────────
+  // ── Characters ───────────────────────────────────────────────────────────────
 
   Future<HikkaCharacter> character(String slug) => _cached(
         'characters/$slug',
@@ -496,7 +526,7 @@ class HikkaApi {
         (j) => HikkaCharacter.fromJson(j is Map<String, dynamic> ? j : const {}),
       );
 
-  /// Пошук персонажів; без запиту — найпопулярніші
+  /// Character search; without a query, the most popular
   Future<HikkaPage<HikkaCharacter>> searchCharacters(String query, {int page = 1, int size = 30}) {
     final q = query.trim();
     final body = <String, dynamic>{if (q.length >= 2) 'query': q};
@@ -527,20 +557,22 @@ class HikkaApi {
     );
     return _filtered(p, allowAdult, (e) => e.anime);
   }
-  // ── Колекції ────────────────────────────────────────────────────────────────
+  // ── Collections ────────────────────────────────────────────────────────────
 
-  /// Публічні колекції (`POST /collections`). [sort]: `popular` — за рейтингом сайту (типово), `new` — найновіші.
-  /// Колекції з позначкою 18+ ховаються, якщо [allowAdult] вимкнено.
+  /// Public collections (`POST /collections`). [sort]: `popular` by site rating (default), `new` newest.
+  /// Collections marked 18+ are hidden if [allowAdult] is off.
   Future<HikkaPage<HikkaCollection>> collections({
     String? contentType = 'anime',
     String sort = 'popular',
     int page = 1,
     int size = 20,
     bool allowAdult = false,
+    String? author,
   }) async {
     final body = <String, dynamic>{
       if (contentType != null) 'content_type': contentType,
       if (sort == 'new') 'sort': ['created:desc'],
+      if (author != null) 'author': author,
     };
     final p = await _cached(
       'collections?$page&$size&${jsonEncode(body)}',
@@ -552,7 +584,7 @@ class HikkaApi {
     return HikkaPage<HikkaCollection>(items: [for (final c in p.items) if (!c.nsfw) c], page: p.page, pages: p.pages, total: p.total);
   }
 
-  /// Колекція з усіма записами (`GET /collections/{reference}`)
+  /// A collection with all entries (`GET /collections/{reference}`)
   Future<HikkaCollection> collection(String reference) => _cached(
         'collections/$reference',
         _medium,
@@ -560,13 +592,14 @@ class HikkaApi {
         (j) => HikkaCollection.fromJson(j is Map<String, dynamic> ? j : const {}),
       );
 
-  // ── Статті ──────────────────────────────────────────────────────────────────
+  // ── Articles ──────────────────────────────────────────────────────────────────
 
-  /// Статті спільноти (`POST /articles`). [category]: `news`, `reviews`, `original` або `null` — усі.
-  /// [sort]: `new` (типово) чи `top` — за оцінками читачів.
-  Future<HikkaPage<HikkaArticle>> articles({String? category, String sort = 'new', int page = 1, int size = 20}) {
+  /// Community articles (`POST /articles`). [category]: `news`, `reviews`, `original` or `null` for all.
+  /// [sort]: `new` (default) or `top` by reader ratings.
+  Future<HikkaPage<HikkaArticle>> articles({String? category, String sort = 'new', int page = 1, int size = 20, String? author}) {
     final body = <String, dynamic>{
       if (category != null) 'categories': [category],
+      if (author != null) 'author': author,
       'sort': [sort == 'top' ? 'vote_score:desc' : 'created:desc'],
     };
     return _cached(
@@ -577,7 +610,7 @@ class HikkaApi {
     );
   }
 
-  /// Повний текст статті (`GET /articles/{slug}`)
+  /// Full article text (`GET /articles/{slug}`)
   Future<HikkaArticle> article(String slug) => _cached(
         'articles/$slug',
         _medium,
@@ -585,14 +618,14 @@ class HikkaApi {
         (j) => HikkaArticle.fromJson(j is Map<String, dynamic> ? j : const {}),
       );
 
-  // ── Акаунт і списки (потрібен вхід) ──────────────────────────────
+  // ── Account and lists (sign-in required) ──────────────────────────────
 
   static Map<String, dynamic> _asMap(Object? j) => j is Map<String, dynamic> ? j : const {};
 
-  /// «Запису немає»: Hikka віддає 404 з кодом `…:not_found`
+  /// "No entry": Hikka returns 404 with the code `…:not_found`
   static bool _isMissing(HikkaException e) => e.kind == HikkaErrorKind.notFound || (e.code?.endsWith(':not_found') ?? false);
 
-  /// Обмінює дозвіл користувача на токен (`POST /auth/token`)
+  /// Exchanges the user's consent for a token (`POST /auth/token`)
   Future<HikkaToken> exchangeToken(String requestReference, String clientSecret) async {
     final j = await _request('POST', '/auth/token', body: {'request_reference': requestReference, 'client_secret': clientSecret});
     final t = HikkaToken.fromJson(_asMap(j));
@@ -600,15 +633,15 @@ class HikkaApi {
     return t;
   }
 
-  /// Профіль власника токена (`GET /user/me`)
+  /// Profile of the token owner (`GET /user/me`)
   Future<HikkaMe> me() async => HikkaMe.fromJson(_asMap(await _request('GET', '/user/me', auth: true)));
 
-  /// Ідентифікатор поточного токена: потрібен, щоб відкликати його при виході (`GET /auth/token/info`)
+  /// Identifier of the current token: needed to revoke it on sign-out (`GET /auth/token/info`)
   Future<String?> tokenReference() async => _asMap(await _request('GET', '/auth/token/info', auth: true))['reference'] as String?;
 
   Future<void> revokeToken(String reference) => _request('DELETE', '/auth/token/${_seg(reference)}', auth: true);
 
-  /// Мій запис про тайтл; `null`, якщо його немає в жодному зі списків (`GET /watch/{slug}`)
+  /// My entry for a title; `null` if it is in none of the lists (`GET /watch/{slug}`)
   Future<HikkaWatchEntry?> myWatch(String slug) async {
     try {
       return HikkaWatchEntry.fromJson(_asMap(await _request('GET', '/watch/${_seg(slug)}', auth: true)));
@@ -618,11 +651,11 @@ class HikkaApi {
     }
   }
 
-  /// Додає тайтл у список або змінює запис (`PUT /watch/{slug}`)
+  /// Adds a title to a list or changes the entry (`PUT /watch/{slug}`)
   Future<HikkaWatchEntry> saveWatch(String slug, HikkaWatchEntry entry) async =>
       HikkaWatchEntry.fromJson(_asMap(await _request('PUT', '/watch/${_seg(slug)}', body: entry.toArgs(), auth: true)));
 
-  /// Прибирає тайтл зі списків (`DELETE /watch/{slug}`)
+  /// Removes a title from the lists (`DELETE /watch/{slug}`)
   Future<void> removeWatch(String slug) async {
     try {
       await _request('DELETE', '/watch/${_seg(slug)}', auth: true);
@@ -631,7 +664,7 @@ class HikkaApi {
     }
   }
 
-  /// Список користувача за статусом (`POST /watch/{username}/list`); списки публічні, вхід не потрібен
+  /// User list by status (`POST /watch/{username}/list`); lists are public, no sign-in needed
   Future<HikkaPage<HikkaWatchEntry>> watchList(
     String username, {
     HikkaWatchStatus? status,
@@ -648,11 +681,11 @@ class HikkaApi {
     return HikkaPage.parse(j, HikkaWatchEntry.fromJson);
   }
 
-  /// Скільки тайтлів у кожному статусі (`GET /watch/{username}/stats`)
+  /// How many titles are in each status (`GET /watch/{username}/stats`)
   Future<HikkaWatchStats> watchStats(String username) async =>
       HikkaWatchStats.fromJson(_asMap(await _request('GET', '/watch/${_seg(username)}/stats')));
 
-  /// Чи в улюбленому (`GET /favourite/anime/{slug}`)
+  /// Whether it is a favorite (`GET /favourite/anime/{slug}`)
   Future<bool> isFavourite(String slug) async {
     try {
       await _request('GET', '/favourite/anime/${_seg(slug)}', auth: true);
@@ -663,7 +696,7 @@ class HikkaApi {
     }
   }
 
-  /// Додає в улюблене або прибирає з нього
+  /// Adds to or removes from favorites
   Future<void> setFavourite(String slug, bool value) async {
     try {
       await _request(value ? 'PUT' : 'DELETE', '/favourite/anime/${_seg(slug)}', auth: true);
@@ -672,9 +705,57 @@ class HikkaApi {
     }
   }
 
-  /// Улюблені аніме користувача (`POST /favourite/anime/{username}/list`)
+  /// User's favorite anime (`POST /favourite/anime/{username}/list`)
   Future<HikkaPage<HikkaAnime>> favourites(String username, {int page = 1, int size = 30}) async {
     final j = await _request('POST', '/favourite/anime/${_seg(username)}/list', query: _paging(page, size));
     return HikkaPage.parse(j, HikkaAnime.fromJson);
+  }
+
+  // ── User profile (public, no sign-in needed) ───────────────────────
+
+  /// User (`GET /user/{username}`)
+  Future<HikkaUser> user(String username) => _cached(
+        'user/$username',
+        _short,
+        () => _request('GET', '/user/${_seg(username)}'),
+        (j) => HikkaUser.fromJson(_asMap(j)),
+      );
+
+  /// Favorites, comments, reviews, edits (`GET /user/{username}/stats`)
+  Future<HikkaUserStats> userStats(String username) => _cached(
+        'user/$username/stats',
+        _short,
+        () => _request('GET', '/user/${_seg(username)}/stats'),
+        (j) => HikkaUserStats.fromJson(_asMap(j)),
+      );
+
+  /// Followers and follows (`GET /follow/{username}/stats`)
+  Future<HikkaFollowStats> followStats(String username) => _cached(
+        'follow/$username/stats',
+        _short,
+        () => _request('GET', '/follow/${_seg(username)}/stats'),
+        (j) => HikkaFollowStats.fromJson(_asMap(j)),
+      );
+
+  /// Activity over the last year, day by day (`GET /user/{username}/activity`)
+  Future<List<HikkaActivityDay>> userActivity(String username) => _cached(
+        'user/$username/activity',
+        _short,
+        () => _request('GET', '/user/${_seg(username)}/activity'),
+        HikkaActivityDay.parseList,
+      );
+
+  /// Change history in lists (`GET /history/user/{username}`), anime entries only.
+  /// A page may come out shorter than [size]: manga and light novels are dropped.
+  Future<HikkaPage<HikkaHistoryEntry>> userHistory(String username, {int page = 1, int size = 20}) async {
+    final j = await _request('GET', '/history/user/${_seg(username)}', query: _paging(page, size));
+    final p = HikkaPage.parse(j, HikkaHistoryEntry.fromJson);
+    return HikkaPage(items: [for (final e in p.items) if (e.isAnime && e.anime != null) e], page: p.page, pages: p.pages, total: p.total);
+  }
+
+  /// Favorite characters (`POST /favourite/character/{username}/list`)
+  Future<HikkaPage<HikkaCharacter>> favouriteCharacters(String username, {int page = 1, int size = 30}) async {
+    final j = await _request('POST', '/favourite/character/${_seg(username)}/list', query: _paging(page, size));
+    return HikkaPage.parse(j, HikkaCharacter.fromJson);
   }
 }

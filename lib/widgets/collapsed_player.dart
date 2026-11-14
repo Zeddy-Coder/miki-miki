@@ -9,8 +9,8 @@ import '../utils/platform_info.dart';
 import 'app_animation_kit.dart';
 import 'app_dock_widgets.dart';
 
-/// Згорнутий плеєр: компактна картка в куті головної сторінки.
-/// Відтворення триває, по кліку плеєр розгортається назад.
+/// Collapsed player: a compact card in the corner of the home page.
+/// Playback continues; a click expands the player back.
 class CollapsedPlayer extends StatelessWidget {
   final double scale;
   final Player player;
@@ -19,7 +19,7 @@ class CollapsedPlayer extends StatelessWidget {
   final VoidCallback onExpand;
   final VoidCallback onClose;
 
-  /// Ширина картки (null — стандартна 380 × масштаб). Телефон у портреті: на всю ширину екрана
+  /// Card width (null means the standard 380 × scale). Phone in portrait: full screen width
   final double? width;
 
   const CollapsedPlayer({
@@ -68,7 +68,7 @@ class CollapsedPlayer extends StatelessWidget {
                 highlightColor: uiTheme.touchHighlight,
                 hoverColor: uiTheme.hoverOverlay,
                 child: Padding(
-                  // Відео впритул до країв картки (без рамки навколо), решта — з відступами
+                  // The video flush against the card edges (no frame around it), the rest with padding
                   padding: EdgeInsets.only(right: 8 * scale),
                   child: Row(
                     children: [
@@ -107,7 +107,7 @@ class CollapsedPlayer extends StatelessWidget {
                               ),
                             ),
                             SizedBox(height: 4 * scale),
-                            // Підпис оновлюється раз на секунду (а не на кожну подію позиції)
+                            // The label updates once per second (not on every position event)
                             ListenableBuilder(
                               listenable: Listenable.merge([clock.seconds, clock.duration]),
                               builder: (context, _) => Text(
@@ -151,7 +151,7 @@ class CollapsedPlayer extends StatelessWidget {
                   ),
                 ),
               ),
-              // Прогрес (у проміле: ~1 оновлення на секунду, а не 24–60)
+              // Progress (in per mille: ~1 update per second, not 24–60)
               AppProgressLine(
                 player: player,
                 height: 3 * scale,
@@ -172,7 +172,7 @@ class CollapsedPlayer extends StatelessWidget {
       splashColor: Colors.transparent,
       highlightColor: uiTheme.touchHighlight,
       hoverColor: uiTheme.hoverOverlay,
-      // Кнопки не менші за 48 dp на телефоні
+      // Buttons no smaller than 48 dp on a phone
       child: SizedBox(
         width: AppPlatform.isMobile ? AppPlatform.touchTarget : 34 * scale,
         height: AppPlatform.isMobile ? AppPlatform.touchTarget : 34 * scale,

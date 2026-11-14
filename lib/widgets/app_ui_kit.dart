@@ -66,7 +66,7 @@ class DotSliderThumbShape extends SliderComponentShape {
   }
 }
 
-/// Ручка діапазону в стилі [DotSliderThumbShape]
+/// A range handle in the style of [DotSliderThumbShape]
 class DotRangeSliderThumbShape extends RangeSliderThumbShape {
   final double enabledThumbRadius;
   final double innerDotRadius;
@@ -120,7 +120,7 @@ class AppSegmentedBar<T> extends StatelessWidget {
   Widget build(BuildContext context) {
     final bool touch = AppPlatform.isMobile;
     return Container(
-      // Телефон: сегменти не нижчі за 48 dp (зона дотику)
+      // Phone: segments no lower than 48 dp (touch zone)
       height: touch ? AppPlatform.touchTarget : 38 * scale,
       padding: EdgeInsets.all(3.0 * scale),
       decoration: BoxDecoration(
@@ -158,7 +158,7 @@ class AppSegmentedBar<T> extends StatelessWidget {
                         ]
                       : null,
                 ),
-                // Довгий підпис на вузькому сегменті стискається в один рядок, а не ламається на два
+                // A long label on a narrow segment shrinks into one line instead of breaking into two
                 child: Padding(
                   padding: EdgeInsets.symmetric(horizontal: 4 * scale),
                   child: FittedBox(
@@ -188,13 +188,13 @@ class AppDropdownOption<T> {
   final T value;
   final String label;
 
-  /// Розширений вигляд пункту: мініатюра зліва, назва замість [label] і дрібний рядок під нею з іконкою
+  /// An extended item view: a thumbnail on the left, a title in place of [label] and a small line under it with an icon
   final Widget? leading;
   final String? title;
   final String? subtitle;
   final IconData? subtitleIcon;
 
-  /// Колір дрібного рядка (жовтий — попередження)
+  /// Color of the small line (yellow is a warning)
   final Color? subtitleColor;
 
   const AppDropdownOption({required this.value, required this.label, this.leading, this.title, this.subtitle, this.subtitleIcon, this.subtitleColor});
@@ -202,7 +202,7 @@ class AppDropdownOption<T> {
   bool get rich => subtitle != null || leading != null;
 }
 
-/// Вміст пункту [AppDropdownOption]: звичайний рядок або «мініатюра + назва + дрібний рядок з іконкою»
+/// Contents of an [AppDropdownOption] item: a plain line or "thumbnail + title + small line with an icon"
 class _OptionBody extends StatelessWidget {
   final AppDropdownOption option;
   final double scale;
@@ -251,7 +251,7 @@ class _OptionBody extends StatelessWidget {
   }
 }
 
-/// Стандартний компактний селектор без поля пошуку
+/// Standard compact selector without a search field
 class AppDropdown<T> extends StatefulWidget {
   final double scale;
   final String? label;
@@ -431,7 +431,7 @@ class _AppDropdownState<T> extends State<AppDropdown<T>> {
   }
 }
 
-/// Спеціальний дропдаун із пошуковим рядком для довгих переліків
+/// A special dropdown with a search line for long lists
 class AppSearchDropdown<T> extends StatefulWidget {
   final double scale;
   final String? label;
@@ -441,14 +441,14 @@ class AppSearchDropdown<T> extends StatefulWidget {
   final List<AppDropdownOption<T>> options;
   final ValueChanged<T> onChanged;
 
-  /// Напис у закритому полі, коли значення немає серед пунктів (список лише «додає» значення)
+  /// The label in the closed field when the value is not among the items (the list only "adds" a value)
   final String? placeholder;
 
-  /// Якщо задано, за пошуку без збігів пропонується додати введений текст як власне значення
+  /// If set, a search with no matches offers to add the entered text as a custom value
   final ValueChanged<String>? onAddCustom;
 
-  /// Режим «бюлетеня»: пункти з прапорцями, вибір не закриває список (він закривається торканням поза блоком).
-  /// Тут — множина значень, які зараз позначені; [onChanged] перемикає значення
+  /// "Ballot" mode: items with checkboxes, choosing does not close the list (it closes by tapping outside the block).
+  /// Here, the set of values currently marked; [onChanged] toggles a value
   final Set<T>? multiSelected;
 
   const AppSearchDropdown({
@@ -492,7 +492,7 @@ class _AppSearchDropdownState<T> extends State<AppSearchDropdown<T>> with Widget
     WidgetsBinding.instance.addObserver(this);
   }
 
-  /// Клавіатура з'явилась або зникла: поле пошуку піднімається до верху видимої області, щоб список лишався видимим
+  /// The keyboard appeared or disappeared: the search field rises to the top of the visible area so the list stays visible
   @override
   void didChangeMetrics() {
     if (!mounted) return;
@@ -501,7 +501,7 @@ class _AppSearchDropdownState<T> extends State<AppSearchDropdown<T>> with Widget
     if (_isExpanded) _revealList(delay: const Duration(milliseconds: 120));
   }
 
-  /// Прокручує сторінку так, щоб поле пошуку було вгорі видимої області, а список — під ним
+  /// Scrolls the page so the search field is at the top of the visible area and the list under it
   void _revealList({Duration? delay}) {
     Future.delayed(delay ?? AppAnim.normal + const Duration(milliseconds: 60), () {
       if (!mounted || !_isExpanded) return;
@@ -672,7 +672,7 @@ class _AppSearchDropdownState<T> extends State<AppSearchDropdown<T>> with Widget
           duration: AppAnim.normal,
           curve: AppAnim.easeOut,
           child: Padding(
-            // Знизу — запас лише з відкритою клавіатурою: сторінка може підняти поле пошуку нагору
+            // A bottom reserve only with the keyboard open: the page can raise the search field to the top
             padding: EdgeInsets.only(top: 6 * scale, bottom: _keyboardOpen ? 140 * scale : 0),
             child: Container(
               constraints: BoxConstraints(maxHeight: 230 * scale),
@@ -844,7 +844,7 @@ class _AppSearchDropdownState<T> extends State<AppSearchDropdown<T>> with Widget
   }
 }
 
-/// Черга пріоритетів мов із перетягуванням та кнопками видалення
+/// A language priority queue with drag-and-drop and delete buttons
 class AppLanguagePriorityList extends StatefulWidget {
   final double scale;
   final List<String> languages;
@@ -1186,7 +1186,7 @@ class _AppLanguagePriorityListState extends State<AppLanguagePriorityList> {
   }
 }
 
-/// Ручка перетягування для рядків у ReorderableListView (єдиний вигляд з пріоритетом мов)
+/// Drag handle for rows in a ReorderableListView (the same look as the language priority)
 class AppDragHandle extends StatelessWidget {
   final double scale;
   final int index;
@@ -1200,7 +1200,7 @@ class AppDragHandle extends StatelessWidget {
       child: MouseRegion(
         cursor: SystemMouseCursors.grab,
         child: Padding(
-          // На телефоні ручку легше влучити пальцем: ширша й вища зона захоплення
+          // On a phone the handle is easier to hit with a finger: a wider and taller grab zone
           padding: AppPlatform.isMobile
               ? EdgeInsets.symmetric(horizontal: 8 * scale, vertical: 14 * scale)
               : EdgeInsets.symmetric(horizontal: 4 * scale, vertical: 4 * scale),
@@ -1215,12 +1215,12 @@ class AppDragHandle extends StatelessWidget {
   }
 }
 
-/// Маленька іконка-дія в рядку списку (вгору / вниз / прибрати). [onTap] == null — неактивна.
+/// A small action icon in a list row (up / down / remove). [onTap] == null means inactive.
 class AppRowIconButton extends StatelessWidget {
   final double scale;
   final IconData icon;
   final VoidCallback? onTap;
-  final bool muted; // «прибрати» — тьмянішою, як у налаштуваннях
+  final bool muted; // "remove" is dimmer, as in settings
   final double size;
 
   const AppRowIconButton({
@@ -1232,7 +1232,7 @@ class AppRowIconButton extends StatelessWidget {
     this.size = 18,
   });
 
-  /// Розмір цілі дотику на телефоні (dp)
+  /// Touch target size on a phone (dp)
   static const double touchSize = 44;
 
   @override
@@ -1260,10 +1260,10 @@ class AppSelectableTile extends StatelessWidget {
   final bool isSelected;
   final VoidCallback onTap;
 
-  /// Другий рядок (опис) — плитка стає вищою
+  /// A second line (description): the tile gets taller
   final String? subtitle;
 
-  /// Віджет справа (наприклад, [AppKeyCombo] із гарячою клавішею)
+  /// A widget on the right (e.g. [AppKeyCombo] with a hotkey)
   final Widget? trailing;
 
   const AppSelectableTile({
@@ -1277,8 +1277,8 @@ class AppSelectableTile extends StatelessWidget {
     this.trailing,
   });
 
-  /// Вигляд вибраного — той самий, що в навігації налаштувань і габу (AppNavItem):
-  /// підвищена плитка, акцентова «пілюля» зліва, акцентова іконка, жирний текст.
+  /// The selected look is the same as in the settings navigation and the hub (AppNavItem):
+  /// a raised tile, an accent "pill" on the left, an accent icon, bold text.
   @override
   Widget build(BuildContext context) {
     final radiusObj = uiTheme.borderRadius(10 * scale);
@@ -1359,15 +1359,15 @@ class AppSelectableTile extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Елементи керування поверх відео
+// Controls over the video
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Кнопка поверх відео. Завжди темна «скляна» й не залежить від світлої/темної
-/// теми застосунку: вона лежить на чорному градієнті над відео, а білі іконки
-/// на світлій плитці нечитабельні.
+/// A button over the video. Always dark "glass", independent of the app's light / dark
+/// theme: it sits on a black gradient over the video, and white icons
+/// on a light tile are unreadable.
 ///
-/// Активний стан ([isActive]) означає лише одне: меню/панель цієї кнопки відкрита.
-/// Стан функції (наприклад, «субтитри увімкнено») показується [showBadge].
+/// The active state ([isActive]) means just one thing: this button's menu / panel is open.
+/// A feature's state (e.g. "subtitles on") is shown by [showBadge].
 class AppOverlayButton extends StatefulWidget {
   final double scale;
   final double? width;
@@ -1380,7 +1380,7 @@ class AppOverlayButton extends StatefulWidget {
   final VoidCallback? onTap;
   final VoidCallback? onSecondaryTap;
 
-  /// Довге утримання (на телефоні замінює правий клік)
+  /// Long press (on a phone it replaces right click)
   final VoidCallback? onLongPress;
   final Widget child;
 
@@ -1400,7 +1400,7 @@ class AppOverlayButton extends StatefulWidget {
     this.onLongPress,
   });
 
-  /// Колір іконок і тексту всередині кнопки
+  /// Color of the icons and text inside the button
   static Color foreground(bool isActive) => isActive ? uiTheme.accentOnDark : Colors.white;
 
   @override
@@ -1426,7 +1426,7 @@ class _AppOverlayButtonState extends State<AppOverlayButton> {
         ? Color.alphaBlend(uiTheme.accentOnDark.withValues(alpha: 0.30), glass)
         : glass;
     if (_hover && interactive) bg = Color.alphaBlend(Colors.white.withValues(alpha: 0.10), bg);
-    // Відгук на дотик: без нього на телефоні не зрозуміло, що кнопку натиснуто
+    // Touch feedback: without it on a phone it is unclear that the button was pressed
     if (_pressed && interactive) bg = Color.alphaBlend(Colors.white.withValues(alpha: 0.20), bg);
 
     final border = widget.isActive ? uiTheme.accentOnDark.withValues(alpha: 0.65) : Colors.white.withValues(alpha: 0.16);
@@ -1489,10 +1489,10 @@ class _AppOverlayButtonState extends State<AppOverlayButton> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Панелі (меню налаштувань, черга відтворення, розділи, інформація)
+// Panels (settings menu, playback queue, chapters, information)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Поверхня панелі: фон, рамка, радіус і тінь єдині для всіх випадних панелей.
+/// Panel surface: the background, border, radius and shadow are the same for all pop-out panels.
 class AppPanelSurface extends StatelessWidget {
   final double scale;
   final double radius;
@@ -1534,7 +1534,7 @@ class AppPanelSurface extends StatelessWidget {
   }
 }
 
-/// Заголовок панелі: назва (або «Назад») і кнопка закриття.
+/// Panel header: the title (or "Назад") and the close button.
 class AppPanelHeader extends StatelessWidget {
   final double scale;
   final String title;
@@ -1553,7 +1553,7 @@ class AppPanelHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final bool touch = AppPlatform.isMobile;
     return Container(
-      // На телефоні шапка вища, а кнопки не менші за 48 dp
+      // On a phone the header is taller and the buttons no smaller than 48 dp
       height: touch ? 56 : 48 * scale,
       padding: EdgeInsets.only(left: 18 * scale, right: touch ? 6 : 18 * scale),
       child: Row(
@@ -1615,13 +1615,13 @@ class AppPanelHeader extends StatelessWidget {
   }
 }
 
-/// Рядок списку з виділенням поточного елемента (той самий вигляд, що в [AppSelectableTile]).
+/// A list row with the current item highlighted (the same look as [AppSelectableTile]).
 class AppSelectableSurface extends StatelessWidget {
   final double scale;
   final bool isSelected;
   final VoidCallback? onTap;
 
-  /// Довге утримання (на комп'ютері — права кнопка миші)
+  /// Long press (on a computer, the right mouse button)
   final VoidCallback? onLongPress;
   final double radius;
   final double? height;
@@ -1677,7 +1677,7 @@ class AppSelectableSurface extends StatelessWidget {
   }
 }
 
-/// Вторинна кнопка. За замовчуванням на всю ширину ([expand]); компактна — для шапок і панелей дій.
+/// Secondary button. Full width by default ([expand]); compact for headers and action bars.
 class AppSecondaryButton extends StatelessWidget {
   final double scale;
   final String label;
@@ -1706,7 +1706,7 @@ class AppSecondaryButton extends StatelessWidget {
 
     final double h = (expand ? 42 : 38) * scale;
     return SizedBox(
-      // Мінімум 48 dp заввишки на телефоні
+      // At least 48 dp tall on a phone
       height: AppPlatform.isMobile ? (h < AppPlatform.touchTarget ? AppPlatform.touchTarget : h) : h,
       child: AppAnimatedContainer(
         duration: AppAnim.normal,
@@ -1755,7 +1755,7 @@ class AppSecondaryButton extends StatelessWidget {
   }
 }
 
-/// Порожній стан списку.
+/// Empty list state.
 class AppEmptyState extends StatelessWidget {
   final double scale;
   final IconData icon;
@@ -1787,10 +1787,10 @@ class AppEmptyState extends StatelessWidget {
 
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Лейаут «сайдбар + контент» (налаштування, головна, статистика)
+// "Sidebar + content" layout (settings, home, statistics)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Рядок меню в стилі вікна плеєра: іконка у квадратику, назва, необов'язкове значення-«пігулка» й шеврон.
+/// A menu row in the player window style: an icon in a square, a title, an optional value "pill" and a chevron.
 class AppMenuRow extends StatelessWidget {
   final double scale;
   final IconData icon;
@@ -1869,7 +1869,7 @@ class AppMenuRow extends StatelessWidget {
   }
 }
 
-/// Модальна оболонка: фон, рамка, радіус і тінь як у вікна налаштувань.
+/// Modal shell: the background, border, radius and shadow as in the settings window.
 class AppModalShell extends StatelessWidget {
   final double scale;
   final double width;
@@ -1895,7 +1895,7 @@ class AppModalShell extends StatelessWidget {
         width: width,
         height: height,
         decoration: BoxDecoration(
-          // Поверхня панелі плеєра: усі вікна виглядають однаково
+          // Player panel surface: all windows look the same
           color: uiTheme.colors.drawerBg,
           borderRadius: r,
           border: Border.all(color: uiTheme.colors.drawerBorder, width: 1.0),
@@ -1913,7 +1913,7 @@ class AppModalShell extends StatelessWidget {
   }
 }
 
-/// Лівий сайдбар: шапка, навігація, підвал.
+/// Left sidebar: header, navigation, footer.
 class AppSidebar extends StatelessWidget {
   final double scale;
   final Widget header;
@@ -2060,7 +2060,7 @@ class AppNavItem extends StatelessWidget {
   }
 }
 
-/// Шапка правої панелі: заголовок, підзаголовок і дії праворуч.
+/// Right panel header: a title, a subtitle and actions on the right.
 class AppPaneHeader extends StatelessWidget {
   final double scale;
   final String title;
@@ -2109,7 +2109,7 @@ class AppPaneHeader extends StatelessWidget {
       ),
     );
 
-    // Вузький екран телефона: дії не вміщаються праворуч від назви — стають рядком під нею
+    // Narrow phone screen: the actions do not fit to the right of the title, so they become a row under it
     final bool compact = AppPlatform.isMobile && AppLayout(MediaQuery.sizeOf(context)).isCompactWidth;
     if (compact) {
       return Padding(
@@ -2142,7 +2142,7 @@ class AppPaneHeader extends StatelessWidget {
   }
 }
 
-/// Заголовок секції всередині контенту (назва + опис + дія праворуч).
+/// Section heading inside content (title + description + an action on the right).
 class AppSectionHeader extends StatelessWidget {
   final double scale;
   final String title;
@@ -2191,17 +2191,17 @@ class AppSectionHeader extends StatelessWidget {
   }
 }
 
-/// Основна кнопка дії (як «Готово» у налаштуваннях).
+/// Primary action button (like "Готово" in settings).
 class AppAccentButton extends StatelessWidget {
   final double scale;
   final String label;
   final IconData? icon;
   final VoidCallback onTap;
 
-  /// Розтягнути на всю ширину батька (вузькі екрани телефона)
+  /// Stretch to the parent's full width (narrow phone screens)
   final bool expand;
 
-  /// Головна дія сторінки: суцільна яскрава заливка акцентом, білий текст, трохи більша кнопка
+  /// The page's main action: a solid bright accent fill, white text, a slightly larger button
   final bool solid;
 
   const AppAccentButton({
@@ -2232,7 +2232,7 @@ class AppAccentButton extends StatelessWidget {
         hoverColor: uiTheme.hoverOverlay,
         onTap: onTap,
         child: ConstrainedBox(
-          // Мінімум 48 dp заввишки на телефоні
+          // At least 48 dp tall on a phone
           constraints: BoxConstraints(minHeight: AppPlatform.isMobile ? AppPlatform.touchTarget : 0),
           child: Padding(
             padding: EdgeInsets.symmetric(horizontal: 20 * scale, vertical: (solid ? 14 : 11) * scale),
@@ -2266,7 +2266,7 @@ class AppAccentButton extends StatelessWidget {
   }
 }
 
-/// Картка-контейнер контенту (опційно клікабельна).
+/// A content container card (optionally clickable).
 class AppCard extends StatelessWidget {
   final double scale;
   final Widget child;
@@ -2312,7 +2312,7 @@ class AppCard extends StatelessWidget {
   }
 }
 
-/// Плитка показника (підпис + значення) з режимом попередження.
+/// A metric tile (label + value) with a warning mode.
 class AppStatTile extends StatelessWidget {
   final double scale;
   final IconData icon;
@@ -2387,8 +2387,8 @@ class AppStatTile extends StatelessWidget {
   }
 }
 
-/// «Кнопка клавіатури» для підказок гарячих клавіш. Тонка нижня грань дає відчуття фізичної клавіші;
-/// [accent] підсвічує клавішу акцентним кольором (комбінація, що залежить від обраної схеми).
+/// A "keyboard key" for hotkey hints. A thin bottom edge gives the feel of a physical key;
+/// [accent] highlights the key with the accent color (a combination that depends on the chosen scheme).
 class AppKeyCap extends StatelessWidget {
   final double scale;
   final String text;
@@ -2399,8 +2399,8 @@ class AppKeyCap extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final edge = accent ? uiTheme.accentBorder : uiTheme.colors.borderSubtle;
-    // Container з alignment розтягується на всю висоту, яку дає батько (рядок плитки в меню) —
-    // клавіша ставала б «стовпом». Тому текст центрується через Center з widthFactor/heightFactor.
+    // A Container with alignment stretches to the full height the parent gives (a tile row in the menu),
+    // and the key would become a "pillar". So the text is centered through Center with widthFactor/heightFactor.
     return Container(
       constraints: BoxConstraints(minWidth: 22 * scale),
       padding: EdgeInsets.symmetric(horizontal: 7 * scale, vertical: 3 * scale),
@@ -2429,7 +2429,7 @@ class AppKeyCap extends StatelessWidget {
   }
 }
 
-/// Комбінація клавіш: ряд кнопок клавіатури («Ctrl» «1»).
+/// A key combination: a row of keyboard keys ("Ctrl" "1").
 class AppKeyCombo extends StatelessWidget {
   final double scale;
   final List<String> keys;
@@ -2451,9 +2451,9 @@ class AppKeyCombo extends StatelessWidget {
   }
 }
 
-/// Поле пошуку: лупа, текст і кнопка очищення; рамка підсвічується акцентом у фокусі.
-/// Висота збігається з [AppSegmentedBar], тож вони стоять в одному ряду. З іншою [icon] і [hint] — звичайне
-/// однорядкове текстове поле (наприклад, ключ API).
+/// Search field: a magnifier, text and a clear button; the border lights up with the accent on focus.
+/// The height matches [AppSegmentedBar], so they stand in one row. With a different [icon] and [hint] it is an ordinary
+/// single-line text field (e.g. an API key).
 class AppSearchField extends StatefulWidget {
   final double scale;
   final TextEditingController controller;
@@ -2574,7 +2574,7 @@ class _AppSearchFieldState extends State<AppSearchField> {
   }
 }
 
-/// М'які затінення зверху й знизу над прокручуваним вмістом (розчиняють текст під шапку та кнопки).
+/// Soft fades at the top and bottom over scrollable content (they dissolve the text under the header and buttons).
 class AppScrollEdgeFade extends StatelessWidget {
   final double scale;
   final Widget child;
@@ -2614,8 +2614,8 @@ class AppScrollEdgeFade extends StatelessWidget {
   }
 }
 
-/// Обгортка колишнього скролбара: смуги прокрутки в застосунку більше немає (прибрано за ненадобою), віджет лишився,
-/// щоб не чіпати всі місця використання. Контролер має бути підключений до дочірнього скролу.
+/// A wrapper of the former scrollbar: the app no longer has scroll bars (removed as unneeded), the widget remains
+/// so as not to touch all usages. The controller must be attached to the child scroll.
 class AppScrollbar extends StatelessWidget {
   final double scale;
   final ScrollController controller;
@@ -2627,9 +2627,13 @@ class AppScrollbar extends StatelessWidget {
   Widget build(BuildContext context) => ScrollConfiguration(behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false), child: child);
 }
 
-/// Прокрутка як в сучасному Android: ефект «розтягування» на краю замість старого світіння (Android 5)
+/// Scrolling as in modern Android: a "stretch" effect at the edge instead of the old glow (Android 5)
 class AppScrollBehavior extends MaterialScrollBehavior {
   const AppScrollBehavior();
+
+  /// A mouse drags lists too (desktop): horizontal shelves can be dragged, not only scrolled with arrows / Shift+wheel
+  @override
+  Set<PointerDeviceKind> get dragDevices => {...super.dragDevices, PointerDeviceKind.mouse};
 
   @override
   Widget buildOverscrollIndicator(BuildContext context, Widget child, ScrollableDetails details) {
@@ -2637,19 +2641,19 @@ class AppScrollBehavior extends MaterialScrollBehavior {
   }
 }
 
-/// Область з оновленням потягом вниз. Верхній край тут показує лише індикатор оновлення (інакше вміст і розтягується,
-/// і тягне індикатор одночасно); нижній край й бічні — «желейне» розтягування як в Android 12.
-/// Місце вгорі прокрутних вмістів, яке займає шапка-накладка (див. `HikkaCollapsingHeader`). Шапка лежить поверх
-/// вмісту й не змінює ні розмір, ні позицію прокрутки, тож списки самі лишають під нею відступ [inset].
+/// A pull-down refresh area. The top edge here shows only the refresh indicator (otherwise the content stretches
+/// and drags the indicator at once); the bottom and side edges get the "jelly" stretch as in Android 12.
+/// The room at the top of scrollable content taken by the overlay header (see `HikkaCollapsingHeader`). The header lies over
+/// the content and changes neither the size nor the scroll position, so lists leave the [inset] padding under it themselves.
 class AppHeaderInset extends InheritedWidget {
   final double inset;
 
-  /// Видимість шапки цього рівня (0…1): вкладені шапки сидять під зовнішньою лише поки вона видима
+  /// Visibility of this level's header (0…1): nested headers sit under the outer one only while it is visible
   final Animation<double>? shown;
 
   const AppHeaderInset({super.key, required this.inset, this.shown, required super.child});
 
-  /// Відступ зверху для списків (0, якщо шапки немає)
+  /// Top padding for lists (0 if there is no header)
   static double of(BuildContext context) => context.dependOnInheritedWidgetOfExactType<AppHeaderInset>()?.inset ?? 0;
 
   static AppHeaderInset? maybeOf(BuildContext context) => context.getInheritedWidgetOfExactType<AppHeaderInset>();
@@ -2668,10 +2672,10 @@ class AppPullToRefresh extends StatefulWidget {
   State<AppPullToRefresh> createState() => _AppPullToRefreshState();
 }
 
-/// Власний «потяг для оновлення»: вміст під час потягу стоїть, стрілка йде за пальцем (і вниз, і назад угору),
-/// лишається, поки тримаєш палець, а поки триває оновлення, прокрутка заблокована.
+/// A custom "pull to refresh": the content stands still during the pull, the arrow follows the finger (down and back up),
+/// stays while you hold your finger, and scrolling is locked while the refresh runs.
 class _AppPullToRefreshState extends State<AppPullToRefresh> with SingleTickerProviderStateMixin {
-  /// Видима позиція стрілки (px) відносно початку; потяг пальця стискається цим коефіцієнтом
+  /// Visible arrow position (px) relative to the start; the finger pull is damped by this factor
   static const double _resistance = 0.5;
   static const double _maxVisual = 120;
   static const double _armedVisual = 60;
@@ -2717,12 +2721,12 @@ class _AppPullToRefreshState extends State<AppPullToRefresh> with SingleTickerPr
     _setPull(amount);
   }
 
-  /// Рух пальця [offset] (> 0 — униз) під час потягу. Повертає, скільки з нього застосувати до прокрутки
+  /// Finger movement [offset] (> 0 is down) during the pull. Returns how much of it to apply to scrolling
   double _userOffset(ScrollMetrics m, double offset) {
     if (!_pulling) return offset;
     final next = _pull + offset;
     if (next <= 0) {
-      // Стрілку повернули на місце: потяг скасовано, лишок руху — звичайна прокрутка
+      // The arrow was returned to its place: the pull is cancelled, the leftover motion is ordinary scrolling
       _pulling = false;
       _setPull(0);
       return next;
@@ -2796,13 +2800,13 @@ class _AppPullToRefreshState extends State<AppPullToRefresh> with SingleTickerPr
                                     strokeWidth: 2.5,
                                     color: uiTheme.accentColor,
                                     backgroundColor: uiTheme.borderSubtle,
-                                    // Кільце заповнюється за потягом; під час оновлення крутиться
+                                    // The ring fills with the pull; it spins during the refresh
                                     value: _refreshing ? null : (v / _armedVisual).clamp(0.0, 1.0),
                                   ),
                                 ),
                                 if (!_refreshing)
                                   Transform.rotate(
-                                    // Стрілка вниз розвертається вгору, коли потяг «заряджений»
+                                    // The down arrow turns up when the pull is "charged"
                                     angle: (v / _armedVisual).clamp(0.0, 1.0) * math.pi,
                                     child: Icon(Symbols.arrow_downward_rounded, size: 18, color: uiTheme.accentColor),
                                   ),
@@ -2823,7 +2827,7 @@ class _AppPullToRefreshState extends State<AppPullToRefresh> with SingleTickerPr
   }
 }
 
-/// Фізика: поки [locked] (оновлення) — прокрутки немає; під час потягу рух пальця йде в [onOffset], а вміст стоїть
+/// Physics: while [locked] (refreshing) there is no scrolling; during the pull finger motion goes to [onOffset] and the content stands still
 class _LockPhysics extends ScrollPhysics {
   final bool Function() locked;
   final double Function(ScrollMetrics, double) onOffset;
@@ -2834,9 +2838,9 @@ class _LockPhysics extends ScrollPhysics {
   @override
   _LockPhysics applyTo(ScrollPhysics? ancestor) => _LockPhysics(locked, onOffset, pulling, parent: buildParent(ancestor));
 
-  // Блокування й потяг стосуються лише вертикальної прокрутки сторінки. Горизонтальні каруселі не чіпаємо:
-  // `shouldAcceptUserOffset` обчислюється один раз (при розкладці) і назавжди вимикав жест у списків,
-  // що перебудувалися під час оновлення.
+  // Locking and pulling concern only the page's vertical scrolling. We do not touch horizontal carousels:
+  // `shouldAcceptUserOffset` is computed once (at layout) and disabled the gesture for good in lists
+  // that were rebuilt during the refresh.
   @override
   double applyPhysicsToUserOffset(ScrollMetrics position, double offset) {
     if (position.axis != Axis.vertical) return super.applyPhysicsToUserOffset(position, offset);
@@ -2852,7 +2856,7 @@ class _LockPhysics extends ScrollPhysics {
   }
 }
 
-/// Верхнє перетягування вертикального списку не розтягує вміст, а лише передається індикатору оновлення
+/// A top overscroll of a vertical list does not stretch the content but is only passed to the refresh indicator
 class _TopEdgeToRefreshBehavior extends ScrollBehavior {
   final ScrollBehavior base;
   final bool Function() locked;
@@ -2880,7 +2884,7 @@ class _TopEdgeToRefreshBehavior extends ScrollBehavior {
   Widget _gate(Widget child) => NotificationListener<OverscrollNotification>(
         onNotification: (n) {
           if (n.overscroll < 0 && n.depth == 0) {
-            // Верх: без розтягування; початок потягу передаємо індикатору оновлення
+            // Top: no stretching; the start of the pull is passed to the refresh indicator
             if (n.dragDetails != null) onTopPull(-n.overscroll);
             return true;
           }

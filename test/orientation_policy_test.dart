@@ -66,7 +66,7 @@ void main() {
 
   test('кнопка повороту всередині плеєра: при виході все одно повертається попередня орієнтація', () {
     policy.enterPlayer();
-    policy.toggle(landscapeNow: false); // портрет → альбомна
+    policy.toggle(landscapeNow: false); // portrait → landscape
     expect(applied.last, landscape);
     expect(policy.locked, isTrue);
     policy.leavePlayer();
@@ -86,7 +86,7 @@ void main() {
     policy.unlock();
     expect(applied.last, isEmpty);
     expect(policy.locked, isFalse);
-    policy.unlock(); // вдруге нічого не робить
+    policy.unlock(); // the second time it does nothing
     expect(applied.length, 2);
   });
 

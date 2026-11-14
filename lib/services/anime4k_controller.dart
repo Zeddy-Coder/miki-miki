@@ -8,8 +8,8 @@ import 'app_log.dart';
 import 'osd_message.dart';
 import 'storage_service.dart';
 
-/// Стан і керування Anime4K: режим, якість, увімкнено / вимкнено, пропуск для відео з великою
-/// роздільністю. Не залежить від Player: команди mpv надходять через [command].
+/// State and control of Anime4K: mode, quality, on / off, skip for high-resolution
+/// video. Independent of Player: mpv commands arrive through [command].
 class Anime4kController extends ChangeNotifier {
   Anime4kController({required this.command, required this.osd});
 
@@ -20,35 +20,39 @@ class Anime4kController extends ChangeNotifier {
   Anime4kMode mode = Anime4kMode.a;
   Anime4kQuality quality = Anime4kQuality.fast;
 
-  /// Не застосовувати до відео з висотою від N пікселів (0 — застосовувати завжди)
+  /// Do not apply to videos with a height of N pixels or more (0 means always apply)
   int skipHeight = 0;
 
-  /// Шейдери зараз підключені до рушія
+  /// Shaders are currently attached to the engine
   bool applied = false;
 
-  /// Тимчасово не застосовується: роздільність відео не менша за [skipHeight]
+  /// Temporarily not applied: the video resolution is not below [skipHeight]
   bool skipped = false;
 
-  /// Остання помилка (розпакування, команда mpv або компіляція шейдера)
+  /// Paused while the video is in a small window (mini player, picture-in-picture): the upscale cannot be seen there
+  /// and only burns GPU. The setting itself (enabled / mode) is untouched and comes back when the window grows again.
+  bool suspended = false;
+
+  /// Last error (unpacking, mpv command or shader compilation)
   String? error;
 
   int _videoHeight = 0;
 
-  /// Користувач увімкнув режим вручну — пропуск за роздільністю не діє до наступного файлу
+  /// The user enabled the mode manually: the resolution skip does not apply until the next file
   bool _forced = false;
 
-  /// Чи змінювали ми `glsl-shaders` у рушії (щоб не стирати шейдери з власного mpv.conf)
+  /// Whether we changed `glsl-shaders` in the engine (so we do not erase shaders from the user's own mpv.conf)
   bool _touched = false;
   DateTime? _appliedAt;
   Future<void> _queue = Future.value();
   bool _disposed = false;
 
-  /// Anime4K реально працює на поточному відео
-  bool get active => enabled && applied && !skipped;
+  /// Anime4K is actually working on the current video
+  bool get active => enabled && applied && !skipped && !suspended;
 
   int get videoHeight => _videoHeight;
 
-  /// Короткий стан для підписів: «Режим A · Fast», «Вимкнено», «Пропущено (1080p)»
+  /// Short state for captions: "Режим A · Fast", "Вимкнено", "Пропущено (1080p)"
   String get summary {
     if (!enabled) return 'Вимкнено';
     if (skipped) return 'Пропущено (${_videoHeight}p)';
@@ -76,12 +80,12 @@ class Anime4kController extends ChangeNotifier {
     }).catchError((_) {});
   }
 
-  /// Узгоджує рушій з поточним станом. Викликати після ініціалізації плеєра.
+  /// Syncs the engine with the current state. Call after player initialization.
   Future<void> syncToEngine() => _sync(announce: false);
 
   Future<void> _sync({required bool announce, List<String> keys = const []}) {
     return _enqueue(() async {
-      if (enabled && !skipped) {
+      if (enabled && !skipped && !suspended) {
         final err = await Anime4kService.apply(command, mode, quality);
         _touched = true;
         if (err != null) {
@@ -107,7 +111,7 @@ class Anime4kController extends ChangeNotifier {
       } else if (_touched || applied) {
         await Anime4kService.clear(command);
         applied = false;
-        AppLog.i('anime4k', skipped ? 'пропущено: відео ${_videoHeight}p не потребує апскейлу' : 'вимкнено');
+        AppLog.i('anime4k', suspended && enabled ? 'призупинено: мале вікно (міні-плеєр / PiP)' : skipped ? 'пропущено: відео ${_videoHeight}p не потребує апскейлу' : 'вимкнено');
         if (announce) {
           osd(OsdMessage(
             icon: Symbols.auto_awesome_rounded,
@@ -121,9 +125,17 @@ class Anime4kController extends ChangeNotifier {
     });
   }
 
+  /// Pauses / resumes the shaders for a small window (mini player, PiP). No OSD: the person did not ask for it.
+  Future<void> setSuspended(bool value) {
+    if (value == suspended) return Future.value();
+    suspended = value;
+    notifyListeners();
+    return enabled ? _sync(announce: false) : Future.value();
+  }
+
   bool _shouldSkip() => enabled && skipHeight > 0 && _videoHeight >= skipHeight && !_forced;
 
-  /// Вибір режиму: вмикає Anime4K і застосовує ланцюжок (Ctrl+1…6)
+  /// Mode choice: enables Anime4K and applies the chain (Ctrl+1…6)
   Future<void> setMode(Anime4kMode newMode) {
     mode = newMode;
     enabled = true;
@@ -143,7 +155,7 @@ class Anime4kController extends ChangeNotifier {
     return _sync(announce: true, keys: const ['Ctrl', '8']);
   }
 
-  /// Вимкнення (Ctrl+0)
+  /// Turn off (Ctrl+0)
   Future<void> disable({bool announce = true}) {
     enabled = false;
     skipped = false;
@@ -171,7 +183,7 @@ class Anime4kController extends ChangeNotifier {
   Future<void> toggleQuality() =>
       setQuality(quality == Anime4kQuality.fast ? Anime4kQuality.hq : Anime4kQuality.fast);
 
-  /// Застосування налаштувань із діалогу (діє пропуск за роздільністю)
+  /// Applying settings from the dialog (the resolution skip applies)
   Future<void> configure({
     required bool enabled,
     required Anime4kMode mode,
@@ -194,13 +206,13 @@ class Anime4kController extends ChangeNotifier {
     return _sync(announce: true);
   }
 
-  /// Нова роздільність відео: пропускаємо або повертаємо Anime4K
+  /// New video resolution: skip or restore Anime4K
   void onVideoHeight(int height) {
     _videoHeight = height;
     _reevaluateSkip();
   }
 
-  /// Відкрито інший файл: ручний вибір режиму більше не перекриває пропуск
+  /// Another file opened: a manual mode choice no longer overrides the skip
   void onFileChanged() {
     _forced = false;
     _reevaluateSkip();
@@ -215,7 +227,7 @@ class Anime4kController extends ChangeNotifier {
     }
   }
 
-  /// Рядок логу mpv: якщо одразу після вмикання з'явилася помилка шейдера — вимикаємо Anime4K
+  /// mpv log line: if a shader error appears right after enabling, turn Anime4K off
   void onEngineLog(String level, String text) {
     final at = _appliedAt;
     if (!applied || at == null) return;

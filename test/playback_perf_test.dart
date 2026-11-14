@@ -6,8 +6,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'support/fakes.dart';
 import 'support/perf_harness.dart';
 
-/// Вимірювання навантаження на інтерфейс під час відтворення (позиція 60 разів/с).
-/// Запуск: PERF_TAG=before flutter test test/playback_perf_test.dart
+/// Measuring the UI load during playback (position 60 times/s).
+/// Run: PERF_TAG=before flutter test test/playback_perf_test.dart
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 

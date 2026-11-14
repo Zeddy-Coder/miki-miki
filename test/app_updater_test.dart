@@ -42,7 +42,7 @@ void main() {
     expect(st.info.version, '1.2.0');
     expect(st.info.target, 'https://dl/m-arm64.apk');
     expect(st.info.size, 5000);
-    // Після перезапуску стан відновлюється без мережі
+    // After a restart the state is restored without the network
     final again = make((_) async => throw 'no net', store: store);
     expect(again.state.value, isA<UpdateAvailable>());
   });
@@ -73,7 +73,7 @@ void main() {
     expect(quiet.state.value, isA<UpdateIdle>());
   });
 
-  test('тиха перевірка не частіше, ніж раз на 12 годин; ручна завжди', () async {
+  test('тиха перевірка не частіше, ніж раз на 30 хвилин; ручна завжди', () async {
     var calls = 0;
     final store = <String, dynamic>{};
     final u = make((_) async {
@@ -95,7 +95,7 @@ void main() {
     expect(u.shouldPrompt(info), isTrue);
     u.skip('1.2.0');
     expect(u.shouldPrompt(info), isFalse);
-    // Пропуск переживає перезапуск
+    // The skip survives a restart
     expect(make((_) async => throw 'x', store: store).shouldPrompt(info), isFalse);
     expect(u.shouldPrompt(const UpdateInfo(version: '1.3.0', notes: '', pageUrl: 'p')), isTrue, reason: 'ще новіша версія знову пропонується');
     expect(u.shouldPrompt(const UpdateInfo(version: '1.1.0', notes: '', pageUrl: 'p')), isFalse, reason: 'не новіша за поточну');

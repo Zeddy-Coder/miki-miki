@@ -1,5 +1,5 @@
-/// Швидкий перегляд з «Продовжити перегляд»: шукає озвучки, обирає ту саму серію, на якій людина зупинилась,
-/// і одразу відкриває плеєр, не показуючи сторінку тайтлу.
+/// Quick watching from "Продовжити перегляд": finds the dubs, picks the same episode where the person stopped,
+/// and opens the player right away without showing the title page.
 library;
 
 import 'dart:async';
@@ -17,11 +17,11 @@ import 'watch_service.dart';
 class QuickPlay {
   const QuickPlay._();
 
-  /// Скільки чекаємо, поки знайдеться хоч одна озвучка
+  /// How long we wait for at least one dub to be found
   static const Duration timeout = Duration(seconds: 25);
 
-  /// Продовжує перегляд [anime]. `false` — з першого разу не вдалося (нічого не знайдено, тайтл ліцензований,
-  /// плеєр ще не готовий): тоді викликач відкриває сторінку тайтлу, де видно причину й можна обрати вручну.
+  /// Continues watching [anime]. `false`: failed on the first try (nothing found, the title is licensed,
+  /// the player is not ready): then the caller opens the title page, where the reason is visible and a manual choice is possible.
   static Future<bool> resume(
     HikkaAnime anime, {
     WatchService? service,
@@ -31,14 +31,14 @@ class QuickPlay {
     final svc = service ?? WatchService.instance;
     final load = svc.start(anime);
     try {
-      // Прогрес на Hikka беремо свіжим: його могли змінити на сайті чи іншому пристрої, а запис у памʼяті застарів би;
-      // без мережі лишається те, що вже було
+      // We take Hikka progress fresh: it could have changed on the site or another device, and the in-memory record would be stale;
+      // without a network, what we had stays
       final mine = await HikkaMyList.instance.entry(anime.slug, refresh: true).then<HikkaWatchEntry?>((e) => e, onError: (_) => HikkaMyList.instance.cached(anime.slug));
       final seen = math.max(mine?.episodes ?? 0, svc.store.watched(load.animeKey).length);
       final done = Completer<void>();
       void check() {
         if (done.isCompleted) return;
-        // Є варіант, де вже є наступна серія, або всі джерела вже відповіли (неповна озвучка першою не береться)
+        // There is a variant that already has the next episode, or all sources have already answered (an incomplete dub is not taken first)
         final ready = load.title.groups.any((g) => g.hasEpisode(seen + 1)) && load.defaultGroup(svc.store, seen: seen) != null;
         if (ready || !load.busy) done.complete();
       }
@@ -51,7 +51,7 @@ class QuickPlay {
       final title = load.title;
       var group = load.defaultGroup(svc.store, seen: seen);
       if (group == null || title.licensed) return false;
-      // Обрана вручну озвучка не має наступної серії: питаємо, куди перейти (скасування — нічого не відкриваємо)
+      // The manually chosen dub has no next episode: we ask where to go (cancelling opens nothing)
       final plan = onMissingNext == null ? null : load.missingNext(svc.store, seen: seen);
       if (plan != null) {
         final picked = await onMissingNext!(plan, seen + 1);

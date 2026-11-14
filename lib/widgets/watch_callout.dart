@@ -4,13 +4,13 @@ import 'package:material_symbols_icons/symbols.dart';
 import '../services/episode_check.dart';
 import '../services/ui_theme_service.dart';
 
-/// Жовтий для застережень про серії: на світлій темі темніший, щоб текст читався на білому
+/// Yellow for episode warnings: darker on the light theme so the text is readable on white
 Color watchWarnColor() => uiTheme.isLight ? const Color(0xFFB45309) : const Color(0xFFFFC23D);
 
-/// Варіант варто показати із застереженням: нумерація не збігається з Hikka або тайтл завершено, а серій менше
+/// The variant should be shown with a warning: the numbering does not match Hikka, or the title has finished with fewer episodes
 bool episodeCheckWarns(EpisodeCheck c) => c.isWarning || c.level == EpisodeCheckLevel.incomplete;
 
-/// Плашка з іконкою й тлом кольору [color]: застереження, підказки, нагадування про ліцензію
+/// A badge with an icon and a [color] background: warnings, hints, license reminders
 class WatchCallout extends StatelessWidget {
   final double scale;
   final IconData icon;
@@ -44,12 +44,12 @@ class WatchCallout extends StatelessWidget {
   }
 }
 
-/// Пояснення розбіжності кількості / нумерації серій із Hikka ([EpisodeCheck.note]); без розбіжності нічого не малює
+/// Explanation of an episode count / numbering mismatch with Hikka ([EpisodeCheck.note]); without a mismatch it draws nothing
 class EpisodeNote extends StatelessWidget {
   final double scale;
   final EpisodeCheck check;
 
-  /// Дрібніший текст (для вузької бічної панелі)
+  /// Smaller text (for a narrow side panel)
   final bool compact;
 
   const EpisodeNote({super.key, required this.scale, required this.check, this.compact = false});

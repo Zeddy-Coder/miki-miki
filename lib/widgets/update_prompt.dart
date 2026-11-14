@@ -9,8 +9,8 @@ import 'app_ui_kit.dart';
 import 'hikka/hikka_common.dart';
 import 'hikka/hikka_watch_dialogs.dart';
 
-/// Вікно «Доступне оновлення»: з'являється після запуску, коли на GitHub є новіша версія. Показує, що нового
-/// (нотатки релізу), і пропонує завантажити, відкласти або більше не нагадувати про цю версію.
+/// The "Доступне оновлення" window: appears after launch when GitHub has a newer version. Shows what is new
+/// (release notes) and offers to download, postpone, or stop reminding about this version.
 class UpdatePrompt extends StatelessWidget {
   final double scale;
   final UpdateInfo info;
@@ -24,7 +24,7 @@ class UpdatePrompt extends StatelessWidget {
     return AppDialogs.show<void>(context, builder: (ctx) => UpdatePrompt(scale: scale, info: info, current: u.currentVersion, updater: u));
   }
 
-  /// Нотатки релізу без markdown-розмітки заголовків і виділення
+  /// Release notes without markdown heading and emphasis markup
   static String cleanNotes(String raw) => raw
       .replaceAll('\r', '')
       .split('\n')

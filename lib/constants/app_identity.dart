@@ -1,8 +1,8 @@
-/// Назва й технічні ідентифікатори застосунку в одному місці.
+/// App name and technical identifiers in one place.
 ///
-/// Усе, що користувач бачить (вікно, «Про програму», журнал, заголовки запитів), бере назву звідси,
-/// а не з розкиданих рядків. Тека даних лишилася від попередньої назви лише як `legacyDataDirName`:
-/// дані з неї переносяться при першому запуску ([AppIdentity.migrateLegacyData]).
+/// Everything the user sees (window, "About", log, request headers) takes the name from here
+/// rather than from scattered strings. The data folder remains from the previous name only as `legacyDataDirName`:
+/// its data is migrated on first launch ([AppIdentity.migrateLegacyData]).
 library;
 
 import 'dart:io';
@@ -10,33 +10,33 @@ import 'dart:io';
 class AppIdentity {
   const AppIdentity._();
 
-  /// Назва для людей
+  /// Human-readable name
   static const String name = 'Miki Miki';
 
-  /// Коротка назва в одне слово (імена файлів, заголовки запитів)
+  /// Short one-word name (file names, request headers)
   static const String shortName = 'MikiMiki';
 
-  /// Ім'я пакета Dart / префікс технічних назв файлів і каналів
+  /// Dart package name / prefix for technical file and channel names
   static const String packageName = 'miki_miki';
 
-  /// Теки даних: `%APPDATA%/<dataDirName>` на Windows, `files/<dataDirName>` на Android
+  /// Data folders: `%APPDATA%/<dataDirName>` on Windows, `files/<dataDirName>` on Android
   static const String dataDirName = 'MikiMiki';
 
-  /// Тека даних під попередньою назвою (перенос при першому запуску)
+  /// Data folder under the previous name (migrated on first launch)
   static const String legacyDataDirName = 'MyPlayerFork';
 
-  /// Підпис у боковому меню й у «Про програму»
+  /// Label in the side menu and in "About"
   static const String tagline = 'Hikka · аніме українською';
 
-  /// Версія для людей (синхронна з `pubspec.yaml`)
-  static const String version = '1.1.4';
+  /// Human-readable version (kept in sync with `pubspec.yaml`)
+  static const String version = '1.1.5';
 
-  /// `User-Agent` запитів до сайтів і API (без особистих даних)
+  /// `User-Agent` of requests to sites and APIs (no personal data)
   static String userAgent(String purpose) => '$shortName/$version (Flutter; $purpose)';
 
-  /// Переносить дані зі старої теки в нову, якщо нової ще немає. Спершу пробує перейменувати теку
-  /// (миттєво), а коли не вийшло (інший диск, зайняті файли) — копіює. Повертає `true`, якщо щось перенесено.
-  /// Ніколи не кидає винятків: збій переносу не має заважати запуску (тоді застосунок почне з чистої теки).
+  /// Moves data from the old folder to the new one if the new one does not exist yet. First tries renaming the folder
+  /// (instant), and when that fails (another drive, locked files) it copies. Returns `true` if anything was moved.
+  /// Never throws: a migration failure must not block startup (the app then starts with a clean folder).
   static Future<bool> migrateLegacyData(Directory legacy, Directory current) async {
     try {
       if (await current.exists() || !await legacy.exists()) return false;

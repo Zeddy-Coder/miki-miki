@@ -8,7 +8,7 @@ import 'app_animation_kit.dart';
 import 'app_dock_widgets.dart';
 import 'app_ui_kit.dart';
 
-/// Міні-плеєр: відео в маленькому вікні поверх усіх. Керування з'являється при наведенні.
+/// Mini player: the video in a small window above everything. Controls appear on hover.
 class MiniPlayer extends StatefulWidget {
   final Player player;
   final VideoController controller;
@@ -46,7 +46,7 @@ class _MiniPlayerState extends State<MiniPlayer> {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                // Відео: клік — пауза/пуск, перетягування — переміщення вікна
+                // Video: a click is pause / play, dragging moves the window
                 GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTap: widget.player.playOrPause,
@@ -77,7 +77,7 @@ class _MiniPlayerState extends State<MiniPlayer> {
   Widget _buildOverlay(double scale) {
     return Stack(
       children: [
-        // Верх: назва + розгорнути / закрити
+        // Top: title + expand / close
         Positioned(
           top: 0,
           left: 0,
@@ -133,7 +133,7 @@ class _MiniPlayerState extends State<MiniPlayer> {
           ),
         ),
 
-        // Центр: пауза / пуск
+        // Center: pause / play
         Center(
           child: StreamBuilder<bool>(
             stream: widget.player.stream.playing,
@@ -161,7 +161,7 @@ class _MiniPlayerState extends State<MiniPlayer> {
           ),
         ),
 
-        // Низ: прогрес
+        // Bottom: progress
         Positioned(
           left: 0,
           right: 0,
@@ -196,7 +196,7 @@ class _MiniPlayerState extends State<MiniPlayer> {
                 end: Alignment.bottomCenter,
               ),
             ),
-            // Смужка оновлюється в проміле — не на кожну подію позиції
+            // The bar updates in per mille, not on every position event
             child: AppProgressLine(
               player: widget.player,
               height: 3 * scale,

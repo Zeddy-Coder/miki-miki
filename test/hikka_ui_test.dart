@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:miki_miki/models/hikka_models.dart';
 import 'package:miki_miki/services/backend_client.dart';
+import 'package:miki_miki/services/episode_alerts.dart';
 import 'package:miki_miki/services/banner_art.dart' show BannerArtwork;
 import 'package:miki_miki/services/hikka_images.dart';
 import 'package:miki_miki/services/hikka_nav.dart';
@@ -10,6 +11,7 @@ import 'package:miki_miki/services/hikka_prefs.dart';
 import 'package:miki_miki/services/storage_service.dart';
 import 'package:miki_miki/services/watch_store.dart';
 import 'package:miki_miki/services/ui_theme_service.dart';
+import 'package:miki_miki/utils/app_clock.dart';
 import 'package:miki_miki/utils/platform_info.dart';
 import 'package:miki_miki/widgets/app_settings_dialog.dart';
 import 'package:miki_miki/widgets/app_ui_kit.dart';
@@ -41,7 +43,7 @@ void setScreen(WidgetTester tester, Size size) {
   addTearDown(tester.view.reset);
 }
 
-/// Дає час мережі (підставній), диску й декодеру зображень: вони живуть у справжньому часі
+/// Gives time to the (fake) network, the disk and the image decoder: they live in real time
 Future<void> load(WidgetTester tester, {int rounds = 24}) async {
   for (int i = 0; i < rounds; i++) {
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 30)));
@@ -52,7 +54,7 @@ Future<void> load(WidgetTester tester, {int rounds = 24}) async {
 Future<void> shot(WidgetTester tester, String name) =>
     expectLater(find.byType(MaterialApp), matchesGoldenFile('shots/hikka_$name.png'));
 
-/// Перший вертикальний список на сцені (корінна вкладка під відкритою сторінкою сюди не потрапляє — вона поза сценою)
+/// The first vertical list on the stage (the root tab under an open page does not get here: it is off stage)
 Finder verticalScrollable() => find
     .byWidgetPredicate((w) => w is Scrollable && (w.axisDirection == AxisDirection.down || w.axisDirection == AxisDirection.up))
     .first;
@@ -64,7 +66,7 @@ Future<void> scrollPage(WidgetTester tester, double dy) async {
   await load(tester, rounds: 4);
 }
 
-/// Широкий банер AniList у карусельці (а не розмитий постер)
+/// A wide AniList banner in the carousel (not a blurred poster)
 bool isWideBanner(Widget w) {
   if (w is! Image) return false;
   final p = w.image;
@@ -118,7 +120,7 @@ void main() {
 
   void phone() => AppPlatform.debugMobile = true;
 
-  // ── Десктоп ────────────────────────────────────────────────────────────────
+  // ── Desktop ────────────────────────────────────────────────────────────────
 
   group('Десктоп 1280×720', () {
     testWidgets('«Продовжити перегляд»: горизонтальна картка; тап шукає озвучку, а не знайшовши — відкриває сторінку тайтлу', (tester) async {
@@ -166,7 +168,6 @@ void main() {
       expect(find.text('Проводжальниця Фрірен'), findsWidgets);
       expect(find.text('Опис'), findsOneWidget);
       expect(find.text('Персонажі'), findsWidgets);
-      expect(find.text('Франшиза'), findsOneWidget);
       expect(find.text('Рекомендації'), findsNothing, reason: 'нижня полиця не вантажиться, поки її не наблизили');
       await shot(tester, 'anime_desktop_top');
       await scrollPage(tester, 560);
@@ -175,6 +176,7 @@ void main() {
       await scrollPage(tester, 1600);
       await load(tester, rounds: 3);
       expect(find.text('Рекомендації'), findsOneWidget);
+      expect(find.text('Франшиза'), findsOneWidget);
       await shot(tester, 'anime_desktop_bottom');
     });
 
@@ -183,10 +185,10 @@ void main() {
       await tester.pumpWidget(hub());
       await load(tester);
       await scrollPage(tester, 560);
-      await tester.pump(const Duration(milliseconds: 500)); // шапка догортає анімацію й зсуває прокрутку
+      await tester.pump(const Duration(milliseconds: 500)); // the header finishes its animation and shifts the scroll
       final before = pageOffset(tester);
       expect(before, greaterThan(100));
-      // Перша картка, що справді видна на екрані
+      // The first card that is really visible on screen
       Offset? target;
       for (final e in find.byType(HikkaAnimeCard).evaluate()) {
         final c = tester.getCenter(find.byWidget(e.widget));
@@ -218,7 +220,8 @@ void main() {
       await load(tester);
       expect(tester.takeException(), isNull);
       expect(find.byType(HikkaCharacterCard), findsWidgets);
-      expect(find.text('Головний'), findsWidgets);
+      expect(find.text('Головні персонажі'), findsOneWidget);
+      expect(find.text('Другорядні персонажі'), findsOneWidget);
       await shot(tester, 'anime_characters_desktop');
 
       HikkaNav.instance.openCharacter('frieren-7f706c');
@@ -241,6 +244,49 @@ void main() {
       await load(tester, rounds: 6);
       expect(find.text('Основна історія'), findsWidgets);
       await shot(tester, 'franchise_groups_desktop');
+    });
+
+    testWidgets('автори: «Усі» відкриває групу, картка — сторінку людини з роботами й озвученими персонажами', (tester) async {
+      setScreen(tester, kDesktop);
+      await tester.pumpWidget(hub());
+      await load(tester, rounds: 4);
+      HikkaNav.instance.openAnimeStaff(frieren);
+      await load(tester);
+      expect(tester.takeException(), isNull);
+      expect(find.byType(HikkaPersonCard), findsWidgets);
+      await shot(tester, 'anime_staff_desktop');
+
+      await tester.tap(find.byType(HikkaPersonCard).first);
+      await load(tester);
+      expect(tester.takeException(), isNull);
+      expect(HikkaNav.instance.top?.kind, HikkaRouteKind.person);
+      expect(find.text('Опис людини.'), findsOneWidget);
+      expect(find.byType(HikkaAnimeCard), findsNWidgets(2), reason: 'вкладка «Аніме» відкрита одразу');
+      expect(find.textContaining('Режисер'), findsWidgets, reason: 'посада під назвою аніме');
+      await shot(tester, 'person_desktop');
+      await tester.tap(find.textContaining('Озвучені персонажі'));
+      await load(tester);
+      expect(tester.takeException(), isNull);
+      expect(find.byType(HikkaCharacterCard), findsOneWidget);
+    });
+
+    testWidgets('жанр чи студія зі сторінки тайтла: «Назад» з каталогу повертає на цю сторінку', (tester) async {
+      setScreen(tester, kNarrow);
+      await tester.pumpWidget(hub());
+      await load(tester, rounds: 4);
+      HikkaNav.instance.openAnime(frieren);
+      await load(tester);
+      expect(HikkaNav.instance.top?.kind, HikkaRouteKind.anime);
+      HikkaNav.instance.openCatalog(const HikkaSearchFilters(studios: {'madhouse-b52579'}, studioNames: {'madhouse-b52579': 'Madhouse'}));
+      await load(tester);
+      expect(HikkaNav.instance.top, isNull);
+      expect(HikkaNav.instance.main, MainTab.discover);
+      expect(HikkaNav.instance.back(), isTrue);
+      await load(tester);
+      expect(HikkaNav.instance.top?.kind, HikkaRouteKind.anime, reason: 'не «Головна», а сторінка, звідки відкрито каталог');
+      expect(HikkaNav.instance.back(), isTrue);
+      await load(tester);
+      expect(HikkaNav.instance.main, MainTab.home);
     });
 
     testWidgets('«Огляд»: поки розділ вантажиться, видно заглушки, а не коло', (tester) async {
@@ -277,7 +323,7 @@ void main() {
       expect(find.byType(HikkaAnimeCard), findsWidgets, reason: 'каталог на загальній сторінці');
       await tester.dragUntilVisible(find.byType(HikkaCollectionCard).first, find.byType(SingleChildScrollView).first, const Offset(0, -300));
       expect(find.byType(HikkaCollectionCard), findsWidgets);
-      await tester.drag(find.byType(SingleChildScrollView).first, const Offset(0, 250)); // шапка повертається
+      await tester.drag(find.byType(SingleChildScrollView).first, const Offset(0, 250)); // the header returns
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(HikkaChip, 'Колекції'));
       await load(tester);
@@ -314,7 +360,7 @@ void main() {
       expect(find.text('Скинути'), findsNothing);
       await tester.tap(find.text('Онґоїнґ'));
       await load(tester, rounds: 4);
-      // «Показати результати» застосовує вибране й закриває панель
+      // "Показати результати" applies the choice and closes the panel
       await tester.tap(find.text('Показати результати · 1'));
       await load(tester);
       expect(find.text('Показати результати · 1'), findsNothing);
@@ -323,11 +369,11 @@ void main() {
         contains('"status":["ongoing"]'),
       );
       await shot(tester, 'catalog_filtered_desktop');
-      // Вибір лишається: панель відкривається з ним, а «Назад» знову спершу закриває панель
+      // The choice stays: the panel opens with it, and "Назад" again first closes the panel
       await tester.tap(find.byTooltip('Фільтри'));
       await load(tester, rounds: 8);
       expect(find.text('Скинути'), findsOneWidget);
-      // «Назад» спершу закриває панель фільтрів
+      // "Назад" first closes the filter panel
       expect(HikkaNav.instance.back(), isTrue);
       await load(tester, rounds: 6);
       expect(find.text('Показати результати'), findsNothing);
@@ -365,7 +411,7 @@ void main() {
       await tester.pump();
       expect(opened.single, startsWith('https://hikka.io/collections/'));
 
-      // Тап по тайтлу колекції відкриває аніме поверх колекції, «Назад» повертає до неї
+      // A tap on a collection title opens the anime over the collection, "Назад" returns to it
       await tester.tap(find.byType(HikkaAnimeCard).first);
       await load(tester);
       expect(HikkaNav.instance.top!.kind, HikkaRouteKind.anime);
@@ -462,19 +508,79 @@ void main() {
       await shot(tester, 'lists_desktop');
     });
 
-    testWidgets('сповіщення: вікно з поясненням відкривається й закривається', (tester) async {
+    /// Notifications with their own in-memory store: the test does not touch the real one
+    EpisodeAlerts alertsWith(List<EpisodeAlert> items) {
+      var data = <String, dynamic>{'items': [for (final a in items) a.toJson()]};
+      final alerts = EpisodeAlerts(load: () => data, save: (d) => data = d, fetch: (since, page) async => (const <Map<String, dynamic>>[], 0));
+      EpisodeAlerts.instance = alerts;
+      return alerts;
+    }
+
+    testWidgets('сповіщення: порожня сторінка пояснює, що саме тут з’явиться', (tester) async {
+      alertsWith(const []);
       setScreen(tester, kDesktop);
       await tester.pumpWidget(hub());
       await load(tester);
+      expect(find.byKey(const ValueKey('bell-badge')), findsNothing);
       await tester.tap(find.byTooltip('Сповіщення'));
       await load(tester, rounds: 6);
       expect(tester.takeException(), isNull);
-      expect(find.text('Нова серія'), findsOneWidget);
-      expect(find.text('Нова озвучка'), findsOneWidget);
+      expect(find.text('Поки що тихо'), findsOneWidget);
+      expect(find.textContaining('в Японії'), findsOneWidget, reason: 'вихід в Японії без озвучення сповіщень не дає');
       await shot(tester, 'notifications_desktop');
-      await tester.tap(find.text('Зрозуміло'));
+      expect(HikkaNav.instance.top?.kind, HikkaRouteKind.notifications, reason: 'окрема сторінка, а не вікно');
+      expect(find.text('Сповіщення'), findsWidgets, reason: 'заголовок сторінки');
+      HikkaNav.instance.back();
       await load(tester, rounds: 6);
-      expect(find.text('Нова озвучка'), findsNothing);
+      expect(find.text('Поки що тихо'), findsNothing);
+      expect(HikkaNav.instance.top, isNull);
+    });
+
+    testWidgets('сповіщення: нові серії в обраній озвучці, лічильник на дзвіночку, тап відкриває тайтл', (tester) async {
+      final now = AppClock.now();
+      final alerts = alertsWith([
+        EpisodeAlert(id: 'a', slug: frieren, title: 'Проводжальниця Фрірен', episode: 7, teamName: 'Togarashi', at: now.subtract(const Duration(minutes: 12))),
+        EpisodeAlert(id: 'b', slug: 'other', title: 'Інший тайтл', episode: 3, teamName: 'Inari', kind: 'sub', at: now.subtract(const Duration(days: 1)), read: true),
+      ]);
+      setScreen(tester, kNarrow);
+      await tester.pumpWidget(hub());
+      await load(tester);
+      expect(find.text('1'), findsWidgets, reason: 'лічильник непрочитаних на дзвіночку');
+      expect(find.byKey(const ValueKey('bell-badge')), findsOneWidget);
+      await tester.tap(find.byTooltip('Сповіщення: 1 нових'));
+      await load(tester, rounds: 6);
+      expect(tester.takeException(), isNull);
+      expect(find.text('Вийшла серія 7'), findsOneWidget);
+      expect(find.text('Озвучення: Togarashi · 12 хв тому'), findsOneWidget);
+      expect(find.text('Субтитри: Inari · вчора'), findsOneWidget);
+      expect(find.byKey(const ValueKey('alert-unread')), findsOneWidget, reason: 'непрочитане одне');
+      await shot(tester, 'notifications_narrow');
+      await tester.tap(find.byKey(const ValueKey('alert-a')));
+      await load(tester, rounds: 6);
+      expect(HikkaNav.instance.top?.kind, HikkaRouteKind.anime);
+      expect(HikkaNav.instance.top?.slug, frieren);
+      expect(alerts.unread, 0, reason: 'тап позначає прочитаним');
+    });
+
+    testWidgets('сповіщення: повідомлення від розробника (без тайтлу) показується з текстом і не веде нікуди', (tester) async {
+      final now = AppClock.now();
+      final alerts = alertsWith([
+        EpisodeAlert(id: 'p1', slug: '', title: 'Miki Miki', episode: 0, teamName: '', at: now.subtract(const Duration(minutes: 3)), type: 'news', body: 'Тестове повідомлення'),
+        EpisodeAlert(id: 'p2', slug: '', title: 'Вийшла нова версія', episode: 0, teamName: '', at: now.subtract(const Duration(hours: 2)), type: 'update', body: '1.1.5 вже на GitHub', read: true),
+      ]);
+      setScreen(tester, kNarrow);
+      await tester.pumpWidget(hub());
+      await load(tester);
+      await tester.tap(find.byTooltip('Сповіщення: 1 нових'));
+      await load(tester, rounds: 6);
+      expect(find.text('Тестове повідомлення'), findsOneWidget);
+      expect(find.text('Від розробника · 3 хв тому'), findsOneWidget);
+      expect(find.text('Оновлення · 2 год тому'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('alert-p1')));
+      await load(tester, rounds: 6);
+      expect(HikkaNav.instance.top?.kind, HikkaRouteKind.notifications, reason: 'без тайтлу тап нікуди не веде');
+      expect(alerts.unread, 0);
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('пошукова панель «Головної» відкриває каталог із курсором у полі пошуку', (tester) async {
@@ -501,7 +607,7 @@ void main() {
         expect(find.text(d), findsOneWidget, reason: d);
       }
       expect(find.textContaining('серія'), findsWidgets, reason: 'сьогодні серії є');
-      final other = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'][(DateTime.now().weekday) % 7];
+      final other = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'][AppClock.now().weekday % 7];
       await tester.tap(find.text(other));
       await load(tester, rounds: 4);
       expect(find.byType(HikkaSwipeTabs), findsWidgets);
@@ -524,6 +630,38 @@ void main() {
       expect(label(), isNot(first), reason: 'через кілька секунд показано іншу серію');
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('календар: перша серія стоїть під вкладками днів, а не під ними (не перекрита шапкою)', (tester) async {
+      setScreen(tester, kNarrow);
+      await tester.pumpWidget(hub());
+      await load(tester, rounds: 4);
+      HikkaNav.instance.setMain(MainTab.discover);
+      HikkaNav.instance.setTab(HikkaTab.schedule);
+      await load(tester);
+      final tabsBottom = tester.getBottomLeft(find.text('Пн')).dy;
+      final firstEpisodeTop = tester.getTopLeft(find.textContaining('серія').first).dy;
+      expect(firstEpisodeTop, greaterThan(tabsBottom), reason: 'шапка з днями не має перекривати першу серію');
+    });
+
+    testWidgets('календар: дні — частина шапки: ховаються й повертаються разом із нею, порожнього проміжку над списком немає', (tester) async {
+      setScreen(tester, kNarrow);
+      await tester.pumpWidget(hub());
+      await load(tester, rounds: 4);
+      HikkaNav.instance.setMain(MainTab.discover);
+      HikkaNav.instance.setTab(HikkaTab.schedule);
+      await load(tester);
+      final shown = tester.getTopLeft(find.text('Пн')).dy;
+      expect(shown, greaterThan(0));
+      await tester.drag(find.textContaining('серія').first, const Offset(0, -450));
+      await load(tester, rounds: 6);
+      expect(tester.getBottomLeft(find.text('Пн')).dy, lessThan(1), reason: 'дні сховалися разом із шапкою');
+      final topTile = tester.getTopLeft(find.textContaining('серія').first).dy;
+      expect(topTile, lessThan(200), reason: 'над списком не лишилося порожнього проміжку');
+      await tester.drag(find.byType(ListView).first, const Offset(0, 120));
+      await load(tester, rounds: 6);
+      expect(tester.getTopLeft(find.text('Пн')).dy, greaterThan(0), reason: 'шапка з днями повернулася');
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('календар: свайп убік по днях не гортає дні — він для вкладок «Огляду»', (tester) async {
@@ -578,7 +716,7 @@ void main() {
       expect(tester.takeException(), isNull);
       await shot(tester, 'settings_desktop');
 
-      // Джерела перегляду вбудовані у вкладку, а не за окремою кнопкою
+      // Watch sources are built into the tab, not behind a separate button
       expect(find.text('Максимальна якість відео'), findsOneWidget);
       expect(find.text('Ключ Mikai API'), findsNothing, reason: 'ключі API — у вкладці «Розробник»');
 
@@ -586,7 +724,7 @@ void main() {
       await load(tester, rounds: 4);
       expect(HikkaPrefs.instance.titleLang, HikkaTitleLang.en);
 
-      // Друга назва: мова з'являється лише при ввімкненому перемикачі
+      // Second title: the language appears only when the switch is on
       expect(HikkaPrefs.instance.showSecondary, isTrue);
       await tester.tap(find.text('Ромаджі').last);
       await load(tester, rounds: 4);
@@ -601,7 +739,7 @@ void main() {
     });
   });
 
-  // ── Банери ─────────────────────────────────────────────────────────────────
+  // ── Banners ─────────────────────────────────────────────────────────────────
 
   group('Банери «Головної»', () {
     testWidgets('один запит до AniList на всі банери; широке зображення лише там, де банер є', (tester) async {
@@ -649,7 +787,7 @@ void main() {
       expect(carousel, findsOneWidget);
       int page() => tester.widget<PageView>(find.byType(PageView)).controller!.page!.round();
       expect(page(), 0);
-      await tester.pump(const Duration(milliseconds: 1600)); // таймер спрацював і запустив анімацію
+      await tester.pump(const Duration(milliseconds: 1600)); // the timer fired and started the animation
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 900));
       expect(page(), 1, reason: 'після паузи перейшла на другий банер');
@@ -703,19 +841,19 @@ void main() {
       final pager = find.byType(PageView);
       int shown() => tester.widget<PageView>(pager).controller!.page!.round() % 3;
       expect(shown(), 0);
-      // Двічі гортаємо пальцем уперед: другий банер, третій
+      // We swipe forward twice: the second banner, the third
       for (var i = 0; i < 2; i++) {
         await tester.drag(pager, const Offset(-300, 0));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 800));
       }
       expect(shown(), 2, reason: 'це останній банер');
-      // Ще раз уперед — знову перший (раніше карусель упиралась в кінець)
+      // Forward again: the first once more (before, the carousel hit the end)
       await tester.drag(pager, const Offset(-300, 0));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 800));
       expect(shown(), 0);
-      // Автогортання (без пальця) теж іде вперед
+      // Auto-scrolling (without a finger) also goes forward
       await tester.pumpWidget(const SizedBox());
       await tester.pumpWidget(app(HikkaBannerCarousel(
         items: [for (final a in server.animeList.take(3)) HikkaAnime.fromJson(a)],
@@ -735,7 +873,7 @@ void main() {
     });
   });
 
-  // ── Телефон ────────────────────────────────────────────────────────────────
+  // ── Phone ────────────────────────────────────────────────────────────────
 
   group('Телефон', () {
     testWidgets('портрет 448×997: головна', (tester) async {
@@ -886,7 +1024,7 @@ void main() {
     });
   });
 
-  // ── У складі головного екрана ──────────────────────────────────────────────
+  // ── As part of the main screen ──────────────────────────────────────────────
 
   group('Оболонка HomeHub', () {
     Widget home({EdgeInsets pad = EdgeInsets.zero}) => app(
@@ -912,7 +1050,7 @@ void main() {
       for (final old in ['Історія', 'Плейлисти', 'Каталог', 'Налаштування']) {
         expect(find.text(old), findsNothing, reason: 'старих пунктів у навігації вже немає: $old');
       }
-      // «Огляд» не відкривали — його запитів ще немає
+      // "Огляд" was not opened: it has no requests yet
       expect(server.count((r) => r.url.path == '/collections' || r.url.path == '/articles'), 0);
       await shot(tester, 'homehub_narrow_home');
 
@@ -928,7 +1066,7 @@ void main() {
       expect(find.text('Опис'), findsOneWidget);
       await shot(tester, 'homehub_narrow_anime');
 
-      // Кнопка «Назад» системи: спершу закриває сторінку, потім з іншої вкладки ведемо на «Головну»…
+      // The system "Back" button: first closes the page, then from another tab we lead to "Головна"…
       expect(HomeHub.backHandler!(), isTrue);
       await load(tester, rounds: 6);
       expect(HikkaNav.instance.top, isNull);
@@ -936,10 +1074,10 @@ void main() {
       expect(HomeHub.backHandler!(), isTrue);
       await load(tester, rounds: 6);
       expect(HikkaNav.instance.main, MainTab.home);
-      // …а з «Головної» вже виходимо із застосунку (обробник каже «нічого не закрито»)
+      // …and from "Головна" we exit the app (the handler says "nothing closed")
       expect(HomeHub.backHandler!(), isFalse);
 
-      // Повернення до «Огляду» зберігає його стан
+      // Returning to "Огляд" keeps its state
       await tester.tap(find.text('Огляд'));
       await load(tester, rounds: 6);
       expect(find.byType(HikkaCollectionCard), findsWidgets);
@@ -1015,7 +1153,7 @@ void main() {
       for (final label in ['Головна', 'Огляд', 'Списки', 'Профіль', 'Налаштування']) {
         expect(find.text(label), findsWidgets, reason: label);
       }
-      expect(find.text('v1.1.4'), findsOneWidget);
+      expect(find.text('v1.1.5'), findsOneWidget);
       expect(find.text('MyPlayer'), findsNothing);
       expect(find.text('YouTube Mobile Fork'), findsNothing);
       await shot(tester, 'homehub_desktop_home');
@@ -1053,7 +1191,7 @@ void main() {
     });
   });
 
-  // ── Стани й крайні випадки ─────────────────────────────────────────────────
+  // ── States and edge cases ─────────────────────────────────────────────────
 
   group('Стани', () {
     testWidgets('сторінка 18+ закрита, доки її не відкрито вручну', (tester) async {
@@ -1092,7 +1230,7 @@ void main() {
       expect(tester.takeException(), isNull);
       expect(find.text('Немає зв’язку з Hikka. Перевірте інтернет.'), findsWidgets);
       await shot(tester, 'offline_home');
-      // Кнопок кілька (стрічка, банери, полиці): беремо ту, що біля першої полиці — вона на екрані
+      // There are several buttons (ticker, banners, shelves): we take the one by the first shelf, which is on screen
       final retry = find.text('Повторити');
       expect(retry, findsNWidgets(7));
       server.offline = false;
@@ -1139,7 +1277,7 @@ void main() {
       await load(tester);
       expect(server.count((r) => r.url.path == '/anime/$frieren'), 2);
       expect(find.text('Опис'), findsOneWidget);
-      // Вкладки під сторінкою не перезавантажуються: це зайвий трафік
+      // Tabs under a page are not reloaded: that is extra traffic
       expect(server.count((r) => r.url.path == '/schedule/anime' || r.url.path == '/anime' && r.method == 'POST'), rootBefore);
       expect(tester.takeException(), isNull);
     });
@@ -1242,7 +1380,7 @@ void main() {
       expect(size, greaterThan(0));
       expect(PaintingBinding.instance.imageCache.currentSize, greaterThan(0), reason: 'картинки розкодовані й показані');
 
-      // «Новий запуск»: інший екземпляр сховища на тій самій теці й сервер зображень, що мовчить
+      // "Fresh launch": another store instance on the same folder and a silent image server
       await tester.pumpWidget(const SizedBox());
       PaintingBinding.instance.imageCache.clear();
       final second = HikkaImageStore(dir: env.imageDir, fetcher: (url) async => throw Exception('offline'));
@@ -1253,14 +1391,14 @@ void main() {
       expect(PaintingBinding.instance.imageCache.currentSize, greaterThan(0));
       expect(tester.takeException(), isNull);
 
-      // Очищення кешу звільняє місце
+      // Clearing the cache frees space
       final freed = await tester.runAsync(second.clear);
       expect(freed, greaterThanOrEqualTo(size!));
       expect(await tester.runAsync(second.diskSize), 0);
     });
   });
 
-  // ── Вузьке вікно на десктопі ───────────────────────────────────────────────
+  // ── Narrow window on desktop ───────────────────────────────────────────────
 
   group('Вузьке вікно десктопу', () {
     for (final size in const [Size(700, 700), Size(520, 700)]) {

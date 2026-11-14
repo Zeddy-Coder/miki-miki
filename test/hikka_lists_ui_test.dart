@@ -1,7 +1,9 @@
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:miki_miki/models/hikka_user_models.dart';
 import 'package:miki_miki/services/backend_client.dart';
 import 'package:miki_miki/services/hikka_api.dart';
 import 'package:miki_miki/services/hikka_auth.dart';
@@ -14,6 +16,7 @@ import 'package:miki_miki/widgets/hikka/hikka_cards.dart';
 import 'package:miki_miki/widgets/hikka/hikka_common.dart';
 import 'package:miki_miki/widgets/hikka/hikka_hub.dart';
 import 'package:miki_miki/widgets/hikka/hikka_page_kit.dart';
+import 'package:miki_miki/widgets/hikka/hikka_user_profile.dart';
 import 'package:miki_miki/widgets/home_hub.dart';
 
 import 'support/fakes.dart';
@@ -24,9 +27,9 @@ const Size kDesktop = Size(1280, 720);
 const Size kNarrow = Size(360, 780);
 
 const String frieren = 'sousou-no-frieren-ad4e3e';
-const String aot = 'shingeki-no-kyojin-0cf69a'; // 25 серій
-const String deathNote = 'death-note-e967c4'; // 37 серій
-const String onePunch = 'one-punch-man-fccb30'; // 12 серій
+const String aot = 'shingeki-no-kyojin-0cf69a'; // 25 episodes
+const String deathNote = 'death-note-e967c4'; // 37 episodes
+const String onePunch = 'one-punch-man-fccb30'; // 12 episodes
 const String kimetsu = 'kimetsu-no-yaiba-6d4c98';
 
 void setScreen(WidgetTester tester, Size size) {
@@ -35,7 +38,7 @@ void setScreen(WidgetTester tester, Size size) {
   addTearDown(tester.view.reset);
 }
 
-/// Дає час мережі (підставній), диску й декодеру зображень: вони живуть у справжньому часі
+/// Gives time to the (fake) network, the disk and the image decoder: they live in real time
 Future<void> load(WidgetTester tester, {int rounds = 12}) async {
   for (int i = 0; i < rounds; i++) {
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 30)));
@@ -46,13 +49,13 @@ Future<void> load(WidgetTester tester, {int rounds = 12}) async {
 Future<void> shot(WidgetTester tester, String name) =>
     expectLater(find.byType(MaterialApp), matchesGoldenFile('shots/hikka_$name.png'));
 
-/// Акаунт «tester» на підставному сервері Hikka: списки, улюблене, вхід. Змінюється запитами, як справжній.
+/// The "tester" account on the fake Hikka server: lists, favorites, sign-in. It changes with requests like a real one.
 class FakeAccountServer {
   final FakeHikka server;
   final Map<String, Map<String, dynamic>> mine = {};
   final Set<String> favourites = {};
 
-  /// «МЕТОД /шлях» усіх запитів до акаунта за порядком
+  /// "METHOD /path" of all account requests in order
   final List<String> calls = [];
   final List<Map<String, dynamic>> tokenBodies = [];
   final List<Map<String, dynamic>> listBodies = [];
@@ -95,6 +98,77 @@ class FakeAccountServer {
   }
 
   HikkaResponse _ok(Object? body) => HikkaResponse(200, jsonEncode(body));
+
+  /// November 12, 2025 (Wednesday), UTC midnight: activity days and history are counted from it so screenshots do not depend on the date
+  static const int profileDay = 1762905600;
+
+  /// Public profile: `/user/{u}`, `/user/{u}/stats`, `/user/{u}/activity`, `/follow/{u}/stats`, `/history/user/{u}`,
+  /// favorite characters. For unknown users, 404.
+  HikkaResponse? _profile(HikkaRequest r, List<String> segs) {
+    if (segs.isEmpty || segs.first == 'auth') return null;
+    final known = {'tester', 'other'};
+    String? name;
+    if (segs.first == 'user' && segs.length >= 2 && segs[1] != 'me') name = segs[1];
+    if (segs.first == 'follow' && segs.length == 3 && segs[2] == 'stats') name = segs[1];
+    if (segs.first == 'history' && segs.length == 3 && segs[1] == 'user') name = segs[2];
+    if (segs.first == 'favourite' && segs.length == 4 && segs[1] == 'character') name = segs[2];
+    if (name == null) return null;
+    calls.add('${r.method} ${r.url.path}');
+    if (!known.contains(name)) return _err(404, 'user:not_found');
+    if (segs.first == 'user' && segs.length == 2) {
+      return _ok({
+        ...kMe,
+        'username': name,
+        'created': 1705190224,
+        'description': name == 'tester' ? 'Дивлюсь усе, що виходить' : null,
+        'cover': null,
+        'role': name == 'tester' ? 'moderator' : 'user',
+        'links': [
+          {'url': 'https://t.me/tester', 'text': 'Telegram', 'icon': 'telegram'},
+        ],
+      });
+    }
+    if (segs.first == 'user' && segs[2] == 'stats') {
+      return _ok({
+        'favourites_count': {'anime': favourites.length, 'character': 1, 'collection': 0, 'manga': 2},
+        'comments_count': 741,
+        'reviews_count': 2,
+        'edits_count': 5552,
+      });
+    }
+    if (segs.first == 'user' && segs[2] == 'activity') {
+      return _ok([
+        for (int i = 364; i >= 0; i--) {'timestamp': profileDay - i * 86400, 'actions': (i * 7) % 11 == 0 ? 0 : (i * 13) % 37},
+      ]);
+    }
+    if (segs.first == 'follow') return _ok({'followers': 42, 'following': 60});
+    if (segs.first == 'favourite') {
+      return _ok(_page([
+        {'slug': 'afghanis-tan-6d7b4b', 'name_ua': 'Афганіс-тан', 'name_en': 'Afghanis-tan', 'image': null, 'synonyms': []},
+      ]));
+    }
+    // History: two events "today" (November 12, 2025) and two a day earlier; one is about manga (not shown)
+    Map<String, dynamic> h(String ref, int time, String type, Map<String, dynamic> before, Map<String, dynamic> after, {Map<String, dynamic>? content, bool isNew = false}) => {
+          'reference': ref,
+          'created': time,
+          'updated': time,
+          'history_type': type,
+          'user': kMe,
+          'content': content,
+          'data': {'before': before, 'after': after, if (type == 'watch') 'new_watch': isNew},
+        };
+    final day = profileDay - 3600; // November 11, 2025, 23:00 UTC
+    return _ok({
+      'pagination': {'total': 5, 'pages': 1, 'page': 1},
+      'list': [
+        h('h1', profileDay + 13 * 3600, 'watch', {'episodes': 4}, {'episodes': 5}, content: animeJson(aot)),
+        h('h2', profileDay + 9 * 3600, 'watch', {'status': 'watching', 'episodes': 26}, {'status': 'completed', 'episodes': 28}, content: animeJson(frieren)),
+        h('h3', day - 2 * 3600, 'read_manga', {'chapters': 1}, {'chapters': 2}, content: {'data_type': 'manga', 'slug': 'm', 'title_ua': 'Манґа'}),
+        h('h4', day - 3 * 3600, 'watch', {}, {'status': 'planned', 'episodes': 0}, content: animeJson(onePunch), isNew: true),
+        h('h5', day - 5 * 3600, 'favourite_anime_add', {}, {}, content: animeJson(kimetsu)),
+      ],
+    });
+  }
   HikkaResponse _err(int status, String code) => HikkaResponse(status, jsonEncode({'code': code, 'message': code}));
 
   Map<String, dynamic> _page(List<Map<String, dynamic>> items) => {
@@ -106,6 +180,8 @@ class FakeAccountServer {
     final p = r.url.path;
     final segs = p.split('/').where((s) => s.isNotEmpty).toList();
     final body = r.body == null ? const <String, dynamic>{} : jsonDecode(r.body!) as Map<String, dynamic>;
+    final profile = _profile(r, segs);
+    if (profile != null) return profile;
     final isAccount = p == '/auth/token' || p.startsWith('/auth/') || p == '/user/me' || segs.firstOrNull == 'watch' || segs.firstOrNull == 'favourite';
     if (!isAccount) return null;
     calls.add('${r.method} $p');
@@ -194,7 +270,7 @@ void main() {
     env.dispose();
   });
 
-  /// Людина вже ввійшла (токен і профіль збережені)
+  /// The person is already signed in (the token and profile are saved)
   void signIn({bool sync = true}) {
     HikkaAuth.instance = HikkaAuth(
       load: () => {'token': 'tok-ui', 'me': Map<String, dynamic>.of(kMe), if (!sync) 'sync': false},
@@ -212,7 +288,7 @@ void main() {
         debugShowCheckedModeBanner: false,
         home: Scaffold(
           backgroundColor: uiTheme.bgPrimary,
-          body: HikkaHub(scale: scale, onOpenSettings: ({int? tab}) {}, localLibraryBuilder: (_) => const SizedBox()),
+          body: HikkaHub(scale: scale, onOpenSettings: ({int? tab}) {}, localLibraryBuilder: (_) => const SizedBox(), settingsBuilder: (_) => const Center(child: Text('НАЛАШТУВАННЯ'))),
         ),
       );
 
@@ -449,15 +525,52 @@ void main() {
   });
 
   group('профіль', () {
-    testWidgets('картка акаунта: імʼя, перемикач синхронізації, вихід відкликає токен', (tester) async {
+    testWidgets('профіль як на hikka.io: шапка, «Список», «Активність», улюблене, «Історія»; акаунт і вихід', (tester) async {
       signIn();
       await openTab(tester, MainTab.profile);
+      await load(tester, rounds: 10);
       expect(find.text('tester'), findsOneWidget);
-      expect(find.text('Акаунт Hikka підключено'), findsOneWidget);
-      expect(find.text('Увійти через Hikka'), findsNothing);
-      expect(HikkaAuth.instance.syncProgress, isTrue);
+      expect(find.text('Модератор'), findsOneWidget);
+      expect(find.text('Дивлюсь усе, що виходить'), findsOneWidget);
+      expect(find.textContaining('стежать'), findsOneWidget);
+      expect(find.text('На Hikka з січня 2024'), findsOneWidget);
+      expect(find.text('Telegram'), findsOneWidget);
+      expect(find.text('Список'), findsOneWidget);
+      expect(find.text('Час перегляду'), findsOneWidget);
+      expect(find.text('Активність'), findsOneWidget);
+      expect(find.byType(HikkaActivityHeatmap), findsOneWidget);
+      expect(find.text('Правки'), findsOneWidget);
+      expect(find.text('5\u00a0552'), findsOneWidget);
+      expect(account.calls, containsAll(['GET /user/tester', 'GET /user/tester/stats', 'GET /follow/tester/stats', 'GET /user/tester/activity']));
+
+      // Status counters come from `GET /watch/tester/stats`
+      final summary = find.byType(HikkaWatchSummary);
+      expect(find.descendant(of: summary, matching: find.text('4')), findsOneWidget, reason: 'усього 4 тайтли — у центрі кільця');
+      expect(find.descendant(of: summary, matching: find.text('2')), findsOneWidget, reason: 'дивлюсь 2 — у легенді');
+      expect(find.descendant(of: summary, matching: find.textContaining('%')), findsNothing, reason: 'відсотків у легенді немає');
       await shot(tester, 'profile_signed_in_desktop');
 
+      // Below: favorites, "Історія" (manga dropped), "Акаунт"
+      await tester.scrollUntilVisible(find.text('Історія'), 300, scrollable: find.byType(Scrollable).first);
+      await load(tester, rounds: 6);
+      expect(find.text('Улюблені аніме'), findsOneWidget);
+      expect(find.text('Переглянуто епізод 5 з 25'), findsOneWidget);
+      expect(find.text('Завершено'), findsOneWidget);
+      expect(find.text('Додано до списку «У планах»'), findsOneWidget);
+      expect(find.text('Додано до улюблених'), findsOneWidget);
+      expect(find.text('Манґа'), findsNothing);
+      expect(find.text('Акаунт Hikka підключено'), findsNothing, reason: 'імʼя й аватар уже в шапці профілю');
+
+      // Account, settings and "Про застосунок" are icons in the header, not at the bottom of the page
+      expect(find.text('Передавати прогрес у списки'), findsNothing);
+      expect(find.text('Налаштування застосунку'), findsNothing);
+      expect(find.byTooltip('Налаштування застосунку'), findsOneWidget);
+      expect(find.byTooltip('Про Miki Miki'), findsNothing, reason: '«Про застосунок» — у налаштуваннях');
+      // The header hides on scrolling down: we scroll up
+      await tester.drag(find.byType(Scrollable).first, const Offset(0, 4000));
+      await load(tester, rounds: 6);
+      await tester.tap(find.byTooltip('Акаунт'));
+      await load(tester, rounds: 6);
       await tester.tap(find.text('Передавати прогрес у списки'));
       await load(tester, rounds: 3);
       expect(HikkaAuth.instance.syncProgress, isFalse);
@@ -468,6 +581,143 @@ void main() {
       expect(account.calls, containsAllInOrder(['GET /auth/token/info', 'DELETE /auth/token/token-ref-1']));
       expect(find.text('Гість'), findsOneWidget);
       expect(find.text('Увійти через Hikka'), findsOneWidget);
+      expect(find.byType(HikkaWatchSummary), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('лічильник статусу в профілі відкриває «Списки» на цьому статусі', (tester) async {
+      signIn();
+      await openTab(tester, MainTab.profile);
+      await load(tester, rounds: 10);
+      await tester.tap(find.descendant(of: find.byType(HikkaWatchSummary), matching: find.text('У планах')));
+      await load(tester, rounds: 8);
+      expect(HikkaNav.instance.main, MainTab.lists);
+      expect(account.listBodies.last['watch_status'], 'planned');
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('«Список»: кільце з усіма статусами (дрібні — краплі), натискання на дугу й центр', (tester) async {
+      setScreen(tester, kNarrow);
+      AppPlatform.debugMobile = true;
+      addTearDown(() => AppPlatform.debugMobile = null);
+      final tapped = <HikkaWatchStatus?>[];
+      await tester.pumpWidget(MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: ThemeData.dark(),
+        home: Scaffold(
+          backgroundColor: uiTheme.bgPrimary,
+          body: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                HikkaWatchSummary(
+                scale: 1,
+                stats: const HikkaWatchStats(completed: 488, watching: 21, planned: 69, dropped: 77, onHold: 18, duration: 215108),
+                onStatus: tapped.add,
+              ),
+              ],
+            ),
+          ),
+        ),
+      ));
+      await tester.pump();
+      await shot(tester, 'profile_donut_zeddy');
+      final donut = tester.widget<HikkaStatusDonut>(find.byType(HikkaStatusDonut));
+      final origin = tester.getTopLeft(find.byType(HikkaStatusDonut));
+      final l = donut.layout;
+      final r = (donut.size - donut.thickness) / 2;
+      Offset at(int j) {
+        final a = l.starts[j] + l.lengths[j] / 2;
+        return origin + Offset(donut.size / 2 + math.cos(a) * r, donut.size / 2 + math.sin(a) * r);
+      }
+
+      await tester.tapAt(at(1)); // "Дивлюсь", 21: a drop
+      await tester.tapAt(at(4)); // "Відкладено", 18
+      await tester.tapAt(origin + Offset(donut.size / 2, donut.size / 2));
+      await tester.tap(find.text('Кинуто'));
+      await tester.pump();
+      expect(tapped, [HikkaWatchStatus.watching, HikkaWatchStatus.onHold, null, HikkaWatchStatus.dropped]);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('аватар профілю: кільце навколо слідує за налаштуванням заокруглення (без заокруглення — квадрат)', (tester) async {
+      final old = uiTheme.radiusKey;
+      addTearDown(() => uiTheme.setRadiusKey(old));
+      uiTheme.setRadiusKey(UiThemeService.radiusMultipliers.entries.firstWhere((e) => e.value == 0).key);
+      signIn();
+      await openTab(tester, MainTab.profile);
+      await load(tester, rounds: 10);
+      final ring = tester.widget<Container>(find.byWidgetPredicate(
+        (w) => w is Container && w.decoration is BoxDecoration && (w.decoration! as BoxDecoration).color == uiTheme.bgPrimary && w.padding != null,
+      ).first);
+      final deco = ring.decoration! as BoxDecoration;
+      expect(deco.shape, BoxShape.rectangle);
+      expect((deco.borderRadius! as BorderRadius).topLeft, Radius.zero);
+      await shot(tester, 'profile_avatar_square');
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('повернення з налаштувань (рядок «Назад» зникає): вміст вкладки не підстрибує', (tester) async {
+      setScreen(tester, kNarrow);
+      AppPlatform.debugMobile = true;
+      addTearDown(() => AppPlatform.debugMobile = null);
+      signIn();
+      await openTab(tester, MainTab.profile, size: kNarrow);
+      await load(tester, rounds: 10);
+      await tester.drag(find.byType(Scrollable).first, const Offset(0, -700));
+      await load(tester, rounds: 6);
+      final before = tester.getTopLeft(find.text('Історія')).dy;
+      final scroll = tester.state<ScrollableState>(find.byType(Scrollable).first).position.pixels;
+      HikkaNav.instance.openSettings();
+      await load(tester, rounds: 10);
+      HikkaNav.instance.back();
+      final trace = <String>[];
+      for (int i = 0; i < 16; i++) {
+        await tester.pump(const Duration(milliseconds: 40));
+        final f = find.text('Улюблені аніме');
+        final h = find.text('Профіль');
+        final g = find.text('Улюблені персонажі');
+        trace.add('${f.evaluate().isEmpty ? '-' : tester.getTopLeft(f.first).dy.toStringAsFixed(0)}/${h.evaluate().isEmpty ? '-' : tester.getTopLeft(h.first).dy.toStringAsFixed(0)}');
+      }
+      // ignore: avoid_print
+      print('before=$before scroll=$scroll trace=$trace');
+      await load(tester, rounds: 6);
+      final after = tester.getTopLeft(find.text('Історія')).dy;
+      expect(after, closeTo(before, 1));
+    });
+
+    testWidgets('телефон: профіль без переповнень', (tester) async {
+      setScreen(tester, kNarrow);
+      AppPlatform.debugMobile = true;
+      addTearDown(() => AppPlatform.debugMobile = null);
+      signIn();
+      await openTab(tester, MainTab.profile, size: kNarrow);
+      await load(tester, rounds: 10);
+      expect(find.text('tester'), findsOneWidget);
+      expect(find.byType(HikkaActivityHeatmap), findsOneWidget);
+      await shot(tester, 'profile_signed_in_narrow');
+      await tester.scrollUntilVisible(find.text('Улюблені аніме'), 300, scrollable: find.byType(Scrollable).first);
+      await load(tester, rounds: 4);
+      await shot(tester, 'profile_favourites_narrow');
+      await tester.scrollUntilVisible(find.text('Історія'), 300, scrollable: find.byType(Scrollable).first);
+      await load(tester, rounds: 4);
+      await shot(tester, 'profile_history_narrow');
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('профіль іншого користувача: автор статті веде на його сторінку', (tester) async {
+      await openTab(tester, MainTab.home);
+      HikkaNav.instance.openUser('other');
+      await load(tester, rounds: 10);
+      expect(find.text('Користувач'), findsOneWidget);
+      expect(find.text('@other'), findsOneWidget);
+      expect(find.text('other'), findsOneWidget);
+      expect(find.text('Модератор'), findsNothing);
+      expect(find.text('Час перегляду'), findsOneWidget);
+      // Other users' status counters are not clickable
+      await tester.tap(find.descendant(of: find.byType(HikkaWatchSummary), matching: find.text('Дивлюсь')));
+      await load(tester, rounds: 3);
+      expect(HikkaNav.instance.main, MainTab.home);
       expect(tester.takeException(), isNull);
     });
   });
@@ -501,7 +751,7 @@ void main() {
       await shot(tester, 'anime_my_list_empty_desktop');
       await tester.tap(find.text('Додати в список'));
       await load(tester, rounds: 4);
-      expect(find.text('Серії та оцінка…'), findsOneWidget, reason: 'випадне меню, а не вікно');
+      expect(find.text('Серії…'), findsOneWidget, reason: 'випадне меню, а не вікно');
       expect(find.text('Видалити зі списку'), findsNothing, reason: 'запису ще немає');
       await tester.tap(find.text('Дивлюсь'));
       await load(tester, rounds: 10);
@@ -511,16 +761,26 @@ void main() {
       expect(find.textContaining('серій'), findsNothing, reason: 'кількість серій на кнопці статусу не показуємо');
       await shot(tester, 'anime_my_list_watching_desktop');
 
-      // Серце
+      // Heart
       await tester.tap(find.byTooltip('В улюблене'));
       await load(tester, rounds: 6);
       expect(account.favourites, contains(frieren));
       expect(find.byTooltip('Прибрати з улюбленого'), findsOneWidget);
 
-      // Змінити: «Переглянуто» добиває лічильник до кінця, оцінка 9
+      // The score badge has its own menu and does not open the status one
+      await tester.tap(find.text('Оцінити'));
+      await load(tester, rounds: 10);
+      expect(find.text('Видалити зі списку'), findsNothing, reason: 'меню оцінки не змішане зі статусами');
+      expect(find.text('Серії…'), findsNothing);
+      await tester.tap(find.text('8'));
+      await load(tester, rounds: 10);
+      expect(account.mine[frieren]?['score'], 8);
+      expect(account.mine[frieren]?['status'], 'watching', reason: 'оцінка не чіпає статус');
+
+      // Change: "Переглянуто" tops up the counter to the end, score 9
       await tester.tap(find.text('Дивлюсь'));
       await load(tester, rounds: 12);
-      await tester.tap(find.text('Серії та оцінка…'));
+      await tester.tap(find.text('Серії…'));
       await load(tester, rounds: 10);
       expect(find.text('Мій список'), findsOneWidget);
       await tester.tap(find.text('Переглянуто'));
@@ -535,7 +795,7 @@ void main() {
       expect(find.text('Переглянуто'), findsOneWidget);
       expect(find.textContaining('серій'), findsNothing);
 
-      // Прибрати
+      // Remove
       await tester.tap(find.text('Переглянуто'));
       await load(tester, rounds: 12);
       await tester.tap(find.text('Видалити зі списку'));

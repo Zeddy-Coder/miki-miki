@@ -1,5 +1,5 @@
-/// Чиста логіка відтворення серій із сайтів (без media_kit і Flutter): розділи плеєра з таймкодів сайту,
-/// ознака «серію переглянуто» й запуск із боку сторінки аніме. Усе, що торкається mpv, робить `PlayerStateController`.
+/// Pure logic of playing site episodes (without media_kit and Flutter): player chapters from the site's timestamps,
+/// the "episode watched" criterion and launching from the anime page. Everything that touches mpv is done by `PlayerStateController`.
 library;
 
 import '../models/media_models.dart';
@@ -7,13 +7,13 @@ import '../models/source_models.dart';
 import 'episode_check.dart';
 import 'watch_models.dart';
 
-/// Найкоротший проміжок між таймкодами, який вартує окремого розділу (секунди)
+/// The shortest gap between timestamps worth a separate chapter (seconds)
 const double _minGap = 1.0;
 
 Duration _sec(double s) => Duration(milliseconds: (s * 1000).round());
 
-/// Назви розділів — англійські ключові слова, які `AppFormatters.translateChapterTitle` перекладає
-/// («Opening» → «Опенінґ»): за ними кнопка «Пропустити» знає, що розділ можна пропускати.
+/// Chapter names are English keywords that `AppFormatters.translateChapterTitle` translates
+/// ("Opening" → "Опенінґ"): the "Skip" button uses them to know that a chapter can be skipped.
 String _title(TimeStamp t) {
   switch (t.type) {
     case ChapterType.opening:
@@ -29,9 +29,9 @@ String _title(TimeStamp t) {
   }
 }
 
-/// Розділи з таймкодів сайту. Плеєр вважає розділи суцільними (кожен триває до початку наступного),
-/// тому проміжки між таймкодами заповнюються розділами «Серія», які не пропонуються до пропуску.
-/// Без жодного коректного таймкода розділів немає.
+/// Chapters from the site's timestamps. The player treats chapters as continuous (each lasts until the next starts),
+/// so gaps between timestamps are filled with "Серія" chapters that are not offered for skipping.
+/// Without a single valid timestamp there are no chapters.
 List<VideoChapter> chaptersFromTimestamps(List<TimeStamp> stamps, Duration total) {
   final totalSec = total.inMilliseconds / 1000.0;
   final list = [
@@ -43,13 +43,13 @@ List<VideoChapter> chaptersFromTimestamps(List<TimeStamp> stamps, Duration total
   final out = <VideoChapter>[];
   var cursor = 0.0;
   for (final s in list) {
-    var start = s.start < cursor ? cursor : s.start; // накладені таймкоди підрізаємо
+    var start = s.start < cursor ? cursor : s.start; // overlapping timestamps are trimmed
     final end = (totalSec > 0 && s.end > totalSec) ? totalSec : s.end;
     if (end - start < _minGap) continue;
     if (start - cursor >= _minGap) {
       out.add(VideoChapter(title: 'Episode', startTime: _sec(cursor), endTime: _sec(start)));
     } else {
-      start = cursor; // крихітний проміжок приєднуємо до розділу
+      start = cursor; // a tiny gap is attached to the chapter
     }
     out.add(VideoChapter(title: _title(s), startTime: _sec(start), endTime: _sec(end)));
     cursor = end;
@@ -61,8 +61,8 @@ List<VideoChapter> chaptersFromTimestamps(List<TimeStamp> stamps, Duration total
   return out;
 }
 
-/// Чи можна вважати серію переглянутою: дивилися понад [fraction] тривалості або (якщо [byEnding]) дійшли до титрів
-/// (ендінґ, що починається в другій половині серії).
+/// Whether the episode can be considered watched: more than [fraction] of the duration was watched or (if [byEnding]) the credits were reached
+/// (an ending that starts in the second half of the episode).
 bool episodeSeen(Duration position, Duration total, List<TimeStamp> stamps, {double fraction = 0.85, bool byEnding = true}) {
   if (total <= Duration.zero) return false;
   final pos = position.inMilliseconds;
@@ -75,21 +75,21 @@ bool episodeSeen(Duration position, Duration total, List<TimeStamp> stamps, {dou
   return false;
 }
 
-/// Усе, що потрібно плеєру, щоб почати відтворення серій із сайту
+/// Everything the player needs to start playing site episodes
 class RemoteLaunch {
-  /// Що знайдено для аніме (усі озвучки — для перемикання під час перегляду)
+  /// What was found for the anime (all dubs, for switching while watching)
   final WatchTitle title;
 
-  /// Обрана озвучка
+  /// The chosen dub
   final WatchGroup group;
 
-  /// З якої серії почати (ключ `episodeKey`); `null` — з першої
+  /// Which episode to start from (the `episodeKey`); `null` means the first
   final String? epKey;
 
   final String animeTitle;
   final String? poster;
 
-  /// Що Hikka каже про кількість серій: за цим плеєр показує, де нумерація може не збігатися
+  /// What Hikka says about the episode count: the player uses it to show where numbering may not match
   final HikkaEpisodeInfo? hikka;
 
   const RemoteLaunch({
@@ -108,14 +108,14 @@ class RemoteLaunch {
         poster: poster,
       );
 
-  /// Індекс початкової серії в [session]
+  /// Index of the starting episode in [session]
   int get startIndex {
     final i = epKey == null ? -1 : session.indexOfKey(epKey!);
     return i < 0 ? 0 : i;
   }
 }
 
-/// Міст між сторінками застосунку (Hikka, джерела) і плеєром: плеєр реєструє обробник, решта лише викликає `play`.
+/// A bridge between the app's pages (Hikka, sources) and the player: the player registers a handler, the rest only call `play`.
 class WatchLauncher {
   WatchLauncher._();
 
@@ -129,7 +129,7 @@ class WatchLauncher {
 
   static bool get available => _handler != null;
 
-  /// Запускає перегляд; `false` — плеєр ще не готовий
+  /// Starts watching; `false`: the player is not ready yet
   static Future<bool> play(RemoteLaunch launch) async {
     final h = _handler;
     if (h == null) return false;

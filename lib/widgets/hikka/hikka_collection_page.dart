@@ -14,8 +14,8 @@ import 'hikka_community_cards.dart';
 import 'hikka_markdown_view.dart';
 import 'hikka_page_kit.dart';
 
-/// Сторінка колекції: назва, автор, опис і всі записи; розділи автора — окремими блоками. Якщо автор залишив
-/// до записів коментарі, записи йдуть рядками з коментарем, інакше — сіткою постерів.
+/// Collection page: title, author, description and all entries; the author's sections as separate blocks. If the author left
+/// comments on the entries, entries go as rows with a comment, otherwise as a poster grid.
 class HikkaCollectionPage extends StatefulWidget {
   final HikkaRoute route;
   final double scale;
@@ -81,7 +81,7 @@ class _HikkaCollectionPageState extends State<HikkaCollectionPage> {
     _load();
   }
 
-  // ── Шапка ──────────────────────────────────────────────────────────────────
+  // ── Header ──────────────────────────────────────────────────────────────────
 
   Widget _header(HikkaCollection c, double pad) {
     final scale = _scale;
@@ -161,7 +161,7 @@ class _HikkaCollectionPageState extends State<HikkaCollectionPage> {
     );
   }
 
-  // ── Записи ─────────────────────────────────────────────────────────────────
+  // ── Entries ─────────────────────────────────────────────────────────────────
 
   Widget _groupTitle(String label, int count, double pad) {
     final scale = _scale;
@@ -256,7 +256,7 @@ class _HikkaCollectionPageState extends State<HikkaCollectionPage> {
         controller: _scroll,
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
-          SliverToBoxAdapter(child: SizedBox(height: AppHeaderInset.of(context))), // місце під шапкою-накладкою
+          SliverToBoxAdapter(child: SizedBox(height: AppHeaderInset.of(context))), // room under the overlay header
           SliverToBoxAdapter(child: _header(c, pad)),
           body,
           SliverToBoxAdapter(child: SizedBox(height: 28 * scale + widget.bottomInset)),
@@ -266,7 +266,7 @@ class _HikkaCollectionPageState extends State<HikkaCollectionPage> {
   }
 }
 
-/// Запис колекції з коментарем автора: мініатюра постера, назва, мітки й текст коментаря
+/// A collection entry with the author's comment: a poster thumbnail, title, marks and the comment text
 class _EntryRow extends StatelessWidget {
   final HikkaCollectionEntry entry;
   final double scale;

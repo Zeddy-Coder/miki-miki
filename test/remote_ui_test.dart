@@ -26,14 +26,14 @@ void setScreen(WidgetTester tester, Size size) {
   addTearDown(tester.view.reset);
 }
 
-/// Кадр, що застосовує зміну, і ще два з часом — анімації (поява, перемикання, прокрутка) встигають завершитись
+/// The frame that applies the change and two more with time: animations (appearance, switching, scrolling) finish
 Future<void> settle(WidgetTester tester) async {
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 400));
   await tester.pump(const Duration(milliseconds: 400));
 }
 
-/// Стенд із довгим лімітом на відкриття: таймер-сторож не спрацьовує посеред перевірки
+/// A stand with a long open limit: the watchdog timer does not fire in the middle of a check
 Rig newRig({List<int> episodes = const [1, 2, 3]}) => Rig(episodes: episodes, openTimeout: const Duration(seconds: 30));
 
 Widget statusHost(Rig rig, {VoidCallback? onClose, VoidCallback? onPanel}) => MaterialApp(
@@ -113,7 +113,7 @@ void main() {
 
     testWidgets('плеєр не відповів — підпис «Пробую інший плеєр — Sibnet…»', (tester) async {
       setScreen(tester, kDesktop);
-      final rig = Rig(); // короткі ліміти (справжній час)
+      final rig = Rig(); // short limits (real time)
       await tester.pumpWidget(statusHost(rig));
       await tester.runAsync(() async {
         await rig.driver.start(rig.launch());
@@ -161,7 +161,7 @@ void main() {
       await tester.runAsync(() => rig.driver.start(rig.launch()));
       await settle(tester);
       expect(find.text('Наступна серія'), findsNothing);
-      expect(rig.driver.hoster, 'Sibnet'); // останній спробуваний
+      expect(rig.driver.hoster, 'Sibnet'); // the last one tried
 
       rig.engine.failOpen = null;
       await tester.tap(find.text('Інший плеєр'));
@@ -208,7 +208,7 @@ void main() {
       for (final e in secondary.evaluate()) {
         expect(tester.getSize(find.byWidget(e.widget)).height, greaterThanOrEqualTo(48));
       }
-      expect(tester.takeException(), isNull); // картка вміщується у вузький екран
+      expect(tester.takeException(), isNull); // the card fits a narrow screen
       rig.driver.stop();
     });
 
@@ -257,7 +257,7 @@ void main() {
       }
       expect(find.text('Зараз відтворюється'), findsOneWidget);
       expect(find.text('Переглянуто'), findsOneWidget);
-      expect(find.textContaining('Команда А · Moon · 1080p'), findsOneWidget); // що зараз грає
+      expect(find.textContaining('Команда А · Moon · 1080p'), findsOneWidget); // what is playing now
 
       await tester.tap(find.text('Серія 3'));
       expect(picked, [2]);
@@ -341,12 +341,12 @@ void main() {
       await tester.tap(find.text('Команда Б'));
       await settle(tester);
       expect(rig.driver.groupId, 'g2');
-      expect(rig.driver.entry!.epKey, '2'); // та сама серія в іншому варіанті
+      expect(rig.driver.entry!.epKey, '2'); // the same episode in another variant
       expect(rig.driver.session!.entries, hasLength(2));
       rig.driver.stop();
     });
 
-    /// Три варіанти для тайтлу, де на Hikka рівно 12 серій: склеєний (24), правильний (12), неповний (7)
+    /// Three variants for a title with exactly 12 episodes on Hikka: merged (24), correct (12), incomplete (7)
     Future<(Rig, WatchGroup, WatchGroup, WatchGroup)> mismatchRig(WidgetTester tester, {bool sheet = false}) async {
       final rig = newRig(episodes: [for (var n = 1; n <= 24; n++) n]);
       final merged = WatchGroup(id: 'm', sourceId: 'src', label: 'Склеєні', episodes: [for (var n = 1; n <= 24; n++) ep(n)]);
@@ -378,13 +378,13 @@ void main() {
       final (rig, _, _, _) = await mismatchRig(tester);
 
       expect(find.text('Перемикається з того ж місця. Вибір запамʼятовується'), findsOneWidget);
-      // Поточний варіант склеєний: пояснення над списком
+      // The current variant is merged: an explanation above the list
       expect(find.textContaining('Тут 24 серій, а на Hikka їх лише 12.'), findsOneWidget);
       expect(find.textContaining('передаватимуться на Hikka за номером серії'), findsOneWidget);
       expect(find.text('Озвучення · 1–24 сер. · src'), findsOneWidget);
       expect(find.text('Озвучення · 1–12 сер. · src'), findsOneWidget);
       expect(find.text('Озвучення · 1–7 сер. · src'), findsOneWidget);
-      // Жовта позначка біля склеєного й неповного, правильний варіант — без неї
+      // A yellow mark by the merged and the incomplete one, the correct variant without it
       expect(warnIn('Склеєні'), findsOneWidget);
       expect(warnIn('Неповна'), findsOneWidget);
       expect(warnIn('Рівно'), findsNothing);

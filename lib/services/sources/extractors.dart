@@ -1,6 +1,6 @@
-/// Екстрактори відео зі вбудованих плеєрів: сторінка плеєра → прямі посилання (HLS-варіанти / mp4).
-/// Сайти-джерела (UAKino, Anitube …) лише віддають адресу плеєра — витягує потік спільний тут код.
-/// Підтримано: Ashdi (`ashdi.vip`) і Moon (`moonanime.*`).
+/// Video extractors from embedded players: player page → direct links (HLS variants / mp4).
+/// Source sites (UAKino, Anitube …) only give the player address; the shared code here extracts the stream.
+/// Supported: Ashdi (`ashdi.vip`) and Moon (`moonanime.*`).
 library;
 
 import 'dart:convert';
@@ -13,7 +13,7 @@ import 'html_select.dart';
 import 'source_http.dart';
 import 'source_log.dart';
 
-/// Заголовки, з якими браузер відкриває плеєр у `<iframe>`: частина плеєрів (Moon) без них відповідає 400.
+/// Headers a browser uses to open the player in an `<iframe>`: some players (Moon) answer 400 without them.
 Map<String, String> embedHeaders(String referer) => {
       'Referer': referer,
       'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -23,14 +23,14 @@ Map<String, String> embedHeaders(String referer) => {
       'Sec-Fetch-Site': 'cross-site',
     };
 
-/// `[Назва]https://…,[Назва2]https://…` — формат переліків у плеєрах (якості, субтитри)
+/// `[Name]https://…,[Name2]https://…`: the list format in players (qualities, subtitles)
 List<({String label, String url})> parseBracketList(String? s) {
   if (s == null || s.isEmpty || s == 'null') return const [];
   final re = RegExp(r'\[([^\]]*)\]\s*((?:https?:)?//[^,\[\s]+)');
   return [for (final m in re.allMatches(s)) (label: m.group(1)!.trim(), url: m.group(2)!)];
 }
 
-/// Мітка мови субтитрів → код для mpv (решту лишаємо як є)
+/// Subtitle language label → mpv code (the rest stays as is)
 String subtitleLang(String label) {
   final l = label.toLowerCase();
   if (l.contains('укр') || l == 'uk' || l == 'ua') return 'uk';
@@ -43,19 +43,19 @@ String subtitleLang(String label) {
 abstract class VideoExtractor {
   const VideoExtractor();
 
-  /// Назва плеєра для показу («Moon», «Ashdi»)
+  /// Player name for display ("Moon", "Ashdi")
   String get name;
 
   bool canHandle(Uri url);
 
-  /// `referer` — сторінка сайту, з якої «вбудовано» плеєр (деякі плеєри відсікають чужі джерела)
+  /// `referer`: the site page the player is "embedded" in (some players cut off foreign sources)
   Future<List<Video>> extract(SourceHttp http, String url, {String? referer});
 }
 
 class VideoExtractors {
   static const List<VideoExtractor> all = [AshdiExtractor(), MoonExtractor()];
 
-  /// Для тестів: відео Moon так, як їх бачить плеєр (через локальний проксі, якщо ввімкнено)
+  /// For tests: Moon videos as the player sees them (through the local proxy, if enabled)
   static Future<List<Video>> moonViaProxyForTest(List<Video> videos) => MoonExtractor._viaProxy(videos);
 
   static VideoExtractor? forUrl(String url) {
@@ -66,11 +66,11 @@ class VideoExtractors {
     return null;
   }
 
-  /// Підпис плеєра за адресою; `null` — невідомий плеєр
+  /// Player label by address; `null`: unknown player
   static String? playerName(String url) => forUrl(url)?.name;
 }
 
-/// Усе, що однакове для плеєрів з HLS: master → варіанти якості (для прямого mp4 — одне відео)
+/// Everything common to HLS players: master → quality variants (for a direct mp4, one video)
 Future<List<Video>> videosFromPlaylist(
   SourceHttp http,
   String playlistUrl, {
@@ -145,11 +145,11 @@ class AshdiExtractor extends VideoExtractor {
 
 // ── Moon ───────────────────────────────────────────────────────────────────────
 
-/// Moon (`moonanime.net` / `.art`): сторінка плеєра ховає посилання у двох шарах кодування,
-/// обидва зворотні без жодного секрету на сервері:
-///  1) інлайн-скрипт `atob("…")` → потоковий XOR (зерно + 32-байтний ключ усередині самого блоку) → код JS;
-///  2) у ньому `rawVideo = f("…")`, де `f` — base64 + XOR статичним рядком-ключем (ключ теж у коді).
-/// Тож JS-рушій не потрібен: достатньо повторити дві арифметичні операції.
+/// Moon (`moonanime.net` / `.art`): the player page hides the link in two layers of encoding,
+/// both reversible with no server-side secret:
+///  1) an inline script `atob("…")` → stream XOR (a seed + a 32-byte key inside the block itself) → JS code;
+///  2) in it `rawVideo = f("…")`, where `f` is base64 + XOR with a static key string (the key is in the code too).
+/// So no JS engine is needed: repeating two arithmetic operations is enough.
 class MoonExtractor extends VideoExtractor {
   const MoonExtractor();
 
@@ -163,10 +163,10 @@ class MoonExtractor extends VideoExtractor {
   static final RegExp _keyDef = RegExp(r'''var\s+k\s*=\s*["']([^"']{4,64})["']\s*;\s*var\s+b\s*=\s*atob''');
   static final RegExp _skipDef = RegExp(r'__skipSegments\s*=\s*(\[[\s\S]*?\])\s*;');
 
-  /// У шаблоні PlayerJS таймкоди лежать у закодованому JSON: `__skipCtx = (… JSON.parse(f("…")) …)`
+  /// In the PlayerJS template the timestamps are in encoded JSON: `__skipCtx = (… JSON.parse(f("…")) …)`
   static final RegExp _skipEncoded = RegExp(r'''__skipCtx\s*=[\s\S]{0,400}?JSON\.parse\(\s*\w+\(\s*["']([^"']+)["']\s*\)\s*\)''');
 
-  /// Конфіг `new Playerjs({ … })` (другий шаблон сторінки): від виклику до кінця блока
+  /// The `new Playerjs({ … })` config (the page's second template): from the call to the end of the block
   static String? _playerjsConfig(String js) {
     final i = js.indexOf('new Playerjs(');
     if (i < 0) return null;
@@ -175,7 +175,7 @@ class MoonExtractor extends VideoExtractor {
     return js.substring(i, stop);
   }
 
-  /// Шар 1: блок з `atob(...)` → вихідний код
+  /// Layer 1: the block with `atob(...)` → source code
   static String decodeLayer1(String base64Blob) {
     final b = base64.decode(base64.normalize(base64Blob));
     if (b.length <= 33) throw const SourceException(SourceErrorKind.badResponse, 'Moon: короткий блок');
@@ -190,7 +190,7 @@ class MoonExtractor extends VideoExtractor {
     return utf8.decode(out, allowMalformed: true);
   }
 
-  /// Шар 2: base64 + XOR рядком-ключем
+  /// Layer 2: base64 + XOR with a key string
   static String decodeXorString(String base64Text, String key) {
     final b = base64.decode(base64.normalize(base64Text));
     final k = utf8.encode(key);
@@ -198,8 +198,8 @@ class MoonExtractor extends VideoExtractor {
     return utf8.decode(out, allowMalformed: true);
   }
 
-  /// Значення поля, заданого викликом декодера (`rawVideo = f("…")`, `file: f("…")`) або звичайним рядком.
-  /// `sep` — роздільник між іменем і значенням: `=` у шаблоні Video.js, `:` у конфігу PlayerJS.
+  /// Value of a field set by a decoder call (`rawVideo = f("…")`, `file: f("…")`) or by a plain string.
+  /// `sep` is the separator between name and value: `=` in the Video.js template, `:` in the PlayerJS config.
   static String? _named(String js, String name, String key, {String sep = '='}) {
     final head = '["\']?\\b$name["\']?\\s*$sep\\s*';
     final call = RegExp('$head\\w+\\(\\s*["\']([^"\']*)["\']\\s*\\)').firstMatch(js);
@@ -211,8 +211,8 @@ class MoonExtractor extends VideoExtractor {
     return lit?.group(1);
   }
 
-  /// Розбір завантаженої сторінки плеєра: посилання на відео, субтитри, таймкоди пропуску.
-  /// Moon віддає два шаблони: Video.js (`var rawVideo = f("…")`) і PlayerJS (`new Playerjs({ file: f("…") })`).
+  /// Parsing the loaded player page: the video link, subtitles, skip timestamps.
+  /// Moon serves two templates: Video.js (`var rawVideo = f("…")`) and PlayerJS (`new Playerjs({ file: f("…") })`).
   static ({String video, String subtitle, List<TimeStamp> skips}) parsePage(String html) {
     final blobs = _blob.allMatches(html).map((m) => m.group(1)!).toList()..sort((a, b) => b.length.compareTo(a.length));
     if (blobs.isEmpty) throw const SourceException(SourceErrorKind.badResponse, 'Moon: у сторінці немає блоку плеєра');
@@ -264,7 +264,7 @@ class MoonExtractor extends VideoExtractor {
   }
 
 
-  /// Таймкод пропуску з типом сегмента Moon (`opening`, `mixed_ending`, `recap` …)
+  /// A skip timestamp with a Moon segment type (`opening`, `mixed_ending`, `recap` …)
   static TimeStamp _skip(double s, double e, String t, String? name) {
     final type = switch (t) {
       'opening' => ChapterType.opening,
@@ -282,10 +282,10 @@ class MoonExtractor extends VideoExtractor {
     return TimeStamp(s, e, label, type);
   }
 
-  /// Хости Premium API: `.net` основний, `.art` запасний (якщо один із них недоступний у мережі)
+  /// Premium API hosts: `.net` is primary, `.art` is the fallback (if one of them is unreachable on the network)
   static const List<String> _apiHosts = ['https://api.moonanime.net', 'https://api.moonanime.art'];
 
-  /// GET до Premium API: мережева помилка чи 5xx → наступний хост; відповідь про ключ, квоту чи відсутній тайтл остаточна
+  /// GET to the Premium API: a network error or 5xx → the next host; an answer about the key, quota or a missing title is final
   static Future<Map<String, dynamic>> _apiGet(SourceHttp http, String path, Map<String, String> headers) async {
     SourceException? last;
     for (final host in _apiHosts) {
@@ -304,7 +304,7 @@ class MoonExtractor extends VideoExtractor {
     throw last ?? const SourceException(SourceErrorKind.network, 'Moon API недоступний');
   }
 
-  /// Slug відео з адреси плеєра `…/iframe/<slug>/`
+  /// The video slug from the player address `…/iframe/<slug>/`
   static String? slugOf(Uri url) {
     final seg = url.pathSegments;
     final i = seg.indexOf('iframe');
@@ -312,7 +312,7 @@ class MoonExtractor extends VideoExtractor {
     return seg[i + 1];
   }
 
-  /// Відповідь Premium API: `{ok: true, data: …}`; помилки ключа й квоти стають `SourceException`
+  /// Premium API response: `{ok: true, data: …}`; key and quota errors become `SourceException`
   static Map<String, dynamic> _apiData(SourceResponse res) {
     Object? body;
     try {
@@ -332,7 +332,7 @@ class MoonExtractor extends VideoExtractor {
     throw SourceException(kind, 'Moon API ${res.status} $code', status: res.status);
   }
 
-  /// Відео через Premium API: пряме HLS-посилання, субтитри й таймкоди без розбору сторінки плеєра
+  /// Video via the Premium API: a direct HLS link, subtitles and timestamps without parsing the player page
   static Future<List<Video>> _viaApi(SourceHttp http, Uri uri, String slug, String key) async {
     final h = {'Authorization': 'Bearer $key', 'Accept': 'application/json'};
     final enc = Uri.encodeComponent(slug);
@@ -372,7 +372,7 @@ class MoonExtractor extends VideoExtractor {
       try {
         return await _viaApi(http, uri, slug, key);
       } on SourceException catch (e) {
-        // Ключ не діє, квота вичерпана чи API недоступний: плеєр усе одно відкриється розбором сторінки
+        // The key does not work, the quota is exhausted or the API is unavailable: the player still opens by parsing the page
         SourceLog.add('Moon API не вийшло (${e.detail}), розбираю сторінку плеєра');
       }
     }
@@ -383,7 +383,7 @@ class MoonExtractor extends VideoExtractor {
     if (page.video.trimLeft().startsWith('[{') || page.video.trimLeft().startsWith('{')) {
       throw const SourceException(SourceErrorKind.unsupported, 'Moon: це сторінка з плейлистом серіалу, потрібна адреса окремої серії');
     }
-    // CDN Moon відповідає 403, якщо в запиті немає `Accept-Language` (ffmpeg його не шле) — додаємо браузерні заголовки
+    // Moon's CDN answers 403 if the request has no `Accept-Language` (ffmpeg does not send it), so we add browser headers
     final playHeaders = {'Referer': 'https://${uri.host}/', 'User-Agent': kBrowserUserAgent, ...HlsProxy.browserDefaults};
     final subs = [for (final s in parseBracketList(page.subtitle)) Track(s.url, subtitleLang(s.label))];
     final sources = parseBracketList(page.video);
@@ -411,7 +411,7 @@ class MoonExtractor extends VideoExtractor {
     return _viaProxy(out);
   }
 
-  /// На Android libmpv не проходить CDN Moon (TLS/403): віддаємо відео через локальний проксі (`HlsProxy`)
+  /// On Android libmpv cannot get through Moon's CDN (TLS/403): we serve the video through a local proxy (`HlsProxy`)
   static Future<List<Video>> _viaProxy(List<Video> videos) async {
     if (!HlsProxy.enabled) return videos;
     try {
@@ -425,9 +425,9 @@ class MoonExtractor extends VideoExtractor {
   }
 }
 
-// ── Серія з кількома плеєрами ──────────────────────────────────────────────────────
+// ── An episode with several players ──────────────────────────────────────────────────────
 
-/// Плеєр, в якому лежить серія: назва (`moon`, `ashdi` …) і адреса
+/// The player an episode lives in: name (`moon`, `ashdi` …) and address
 class EmbedLink {
   final String provider;
   final String url;
@@ -435,19 +435,19 @@ class EmbedLink {
   const EmbedLink(this.provider, this.url);
 }
 
-/// Порядок вибору плеєра: перший, що віддасть відео. Fenix і Tortuga поки не підтримані.
+/// Player selection order: the first to give a video wins. Fenix and Tortuga are not supported yet.
 const List<String> kProviderOrder = ['moon', 'ashdi'];
 
-/// Назва плеєра за адресою (`moon`, `ashdi`) або порожній рядок
+/// Player name by address (`moon`, `ashdi`) or an empty string
 String providerOf(String url) => VideoExtractors.playerName(url)?.toLowerCase() ?? '';
 
-/// Серії з кількома плеєрами кладуть їх у `SEpisode.data` як `{"e": [["moon","https://…"], …]}`
+/// Episodes with several players put them in `SEpisode.data` as `{"e": [["moon","https://…"], …]}`
 String encodeEmbeds(Iterable<EmbedLink> embeds, {Map<String, Object?> extra = const {}}) => jsonEncode({
       'e': [for (final m in embeds) [m.provider, m.url]],
       ...extra,
     });
 
-/// Плеєри серії: зі `data`, а якщо його нема — єдина адреса `url`
+/// Episode players: from `data`, and if there is none, the single `url` address
 List<EmbedLink> embedsOf(SEpisode ep) {
   final d = ep.data;
   if (d != null && d.isNotEmpty) {
@@ -458,13 +458,13 @@ List<EmbedLink> embedsOf(SEpisode ep) {
         if (list.isNotEmpty) return list;
       }
     } on FormatException {
-      // падаємо на url
+      // fall back to url
     }
   }
   return [EmbedLink(providerOf(ep.url), ep.url)];
 }
 
-/// Плеєри, які вміємо відкривати, у порядку [kProviderOrder] (решта — за наявністю екстрактора)
+/// Players we can open, in the order of [kProviderOrder] (the rest by the presence of an extractor)
 List<Hoster> hostersFor(SEpisode ep) {
   final out = <Hoster>[];
   for (final m in embedsOf(ep)) {
@@ -481,7 +481,7 @@ List<Hoster> hostersFor(SEpisode ep) {
   return out;
 }
 
-/// Відео плеєра (хостингу)
+/// Video of a player (hoster)
 Future<List<Video>> hosterVideosOf(SourceHttp http, Hoster h, {String? referer}) async {
   if (h.videos != null) return h.videos!;
   final ex = VideoExtractors.forUrl(h.url);
@@ -489,7 +489,7 @@ Future<List<Video>> hosterVideosOf(SourceHttp http, Hoster h, {String? referer})
   return ex.extract(http, h.url, referer: referer);
 }
 
-/// Пробує плеєри серії по черзі; перший, що дав відео, виграє
+/// Tries the episode's players in turn; the first to give a video wins
 Future<List<Video>> videosOfEpisode(SourceHttp http, SEpisode ep, {String? referer}) async {
   final hs = hostersFor(ep);
   if (hs.isEmpty) {

@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 
-/// Автоприховування панелей керування на сенсорному екрані.
+/// Auto-hiding the control panels on a touch screen.
 ///
-/// Курсора немає, тож «зона наведення» не працює: панелі показує тап по відео, а ховає цей таймер.
-/// Кожен дотик до екрана ([arm]) відкладає приховування, тому панелі не зникають під пальцем.
+/// There is no cursor, so the "hover zone" does not work: a tap on the video shows the panels and this timer hides them.
+/// Every touch on the screen ([arm]) postpones hiding, so the panels do not vanish under a finger.
 class TouchHideTimer {
   TouchHideTimer({
     required this.shouldStayVisible,
@@ -12,7 +12,7 @@ class TouchHideTimer {
     this.delay = const Duration(seconds: 4),
   });
 
-  /// Чи треба лишити панелі (пауза, відкрите меню, прискорення тощо) — тоді вони не ховаються
+  /// Whether to keep the panels (pause, an open menu, speed-up etc.): then they do not hide
   final bool Function() shouldStayVisible;
   final VoidCallback onHide;
   final Duration delay;
@@ -21,7 +21,7 @@ class TouchHideTimer {
 
   bool get isArmed => _timer != null;
 
-  /// (Пере)запускає відлік. Викликається на кожен дотик, поки панелі видно.
+  /// (Re)starts the countdown. Called on every touch while the panels are visible.
   void arm() {
     _timer?.cancel();
     _timer = Timer(delay, () {

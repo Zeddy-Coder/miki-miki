@@ -12,9 +12,13 @@ import 'services/app_log.dart';
 import 'services/backend_client.dart';
 import 'services/app_updater.dart';
 import 'services/deep_links.dart';
+import 'services/episode_alerts.dart';
 import 'services/hikka_api.dart';
 import 'services/hikka_disk_cache.dart';
 import 'services/hikka_lists.dart';
+import 'services/media_controls.dart';
+import 'services/push_notifications.dart';
+import 'services/settings_sync.dart';
 import 'services/storage_service.dart';
 import 'services/system_controls.dart';
 import 'services/thumbnail_service.dart';
@@ -25,24 +29,30 @@ import 'widgets/app_ui_kit.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   MediaKit.ensureInitialized();
-  // Незалежні ініціалізації виконуємо паралельно (вікно ↔ читання збережених налаштувань)
+  // Independent initializations run in parallel (window ↔ reading saved settings)
   await Future.wait([
     if (AppPlatform.isDesktop) windowManager.ensureInitialized(),
     StorageService.init(),
   ]);
-  // Журнал піднімаємо одразу після налаштувань, щоб записати і помилки запуску
+  // The log is started right after settings so startup errors are recorded too
   await AppLog.instance.init(
     directory: Directory('${StorageService.appBasePath}/logs'),
     detailed: StorageService.getDetailedLog(),
   );
   AppDiagnostics.instance.install();
   AppLog.i('застосунок', 'запуск ${AppDiagnostics.build}');
-  await ThumbnailService.init(); // Кеш прев'юшок відео
-  uiTheme.init(); // Ініціалізація глобальної теми
-  HikkaApi.instance.disk = HikkaDiskCache(); // Відповіді Hikka на диску: старт зі збереженого, оновлення у фоні
-  unawaited(HikkaMyList.instance.loadIndex(delay: const Duration(seconds: 4))); // Статуси зі списків Hikka для позначок на постерах (якщо ввійшли)
-  unawaited(Future<void>.delayed(const Duration(seconds: 8), () => AppUpdater.instance.check(auto: true))); // Тиха перевірка нових версій на GitHub (раз на 12 год)
-  unawaited(BackendClient.instance.refreshMoonKey()); // Ключ Moon із бекенду (у фоні, без очікування)
+  await ThumbnailService.init(); // Video preview cache
+  uiTheme.init(); // Global theme initialization
+  HikkaApi.instance.disk = HikkaDiskCache(); // Hikka responses on disk: start from the stored copy, refresh in the background
+  unawaited(HikkaMyList.instance.loadIndex(delay: const Duration(seconds: 4))); // Statuses from Hikka lists for poster badges (if signed in)
+  unawaited(Future<void>.delayed(const Duration(seconds: 6), () => EpisodeAlerts.instance.check().then((_) {}, onError: (Object _) {}))); // New episodes in the chosen dub (Mikai feed)
+  unawaited(Future<void>.delayed(const Duration(seconds: 3), () => AppUpdater.instance.check(auto: true))); // Silent check for new versions on GitHub (at most once per 30 min; also on returning to the app)
+  unawaited(EpisodeAlerts.instance.importInbox()); // pushes received while the app was closed
+  PushNotifications.instance.start(); // Android: push about new episodes (works once the person turns it on)
+  SettingsSync.instance.start(); // Settings, themes and positions of the Hikka account on every device
+  unawaited(BackendClient.instance.refreshMoonKey()); // Moon key from the backend (in the background, without waiting)
+
+  MediaControls.init(); // Windows: headphone / keyboard media keys
 
   if (AppPlatform.isDesktop) {
     const WindowOptions windowOptions = WindowOptions(
@@ -57,10 +67,10 @@ void main() async {
       await windowManager.focus();
     });
   } else {
-    // Телефон: обидві орієнтації (їх визначає датчик і системний автоповорот); кнопка повороту в плеєрі
-    // може зафіксувати одну. Системні панелі показує головна, ховає — лише плеєр (див. контролер).
+    // Phone: both orientations (set by the sensor and system auto-rotate); the rotate button in the player
+    // can lock one. The home screen shows system bars; only the player hides them (see the controller).
     SystemControls.init();
-    // Застосунок запущено за посиланням miki://open/…: виконуємо його, коли інтерфейс уже піднявся
+    // The app was launched via a miki://open/… link: handle it once the UI is up
     unawaited(SystemControls.initialLink().then((l) {
       if (l != null) Future<void>.delayed(const Duration(milliseconds: 600), () => DeepLinks.handle(l));
     }));
@@ -74,7 +84,7 @@ void main() async {
     title: AppIdentity.name,
     debugShowCheckedModeBanner: false,
     navigatorObservers: [AppNavObserver()],
-    // Телефон: великий системний шрифт не має ламати панелі з фіксованою висотою
+    // Phone: a large system font must not break panels with a fixed height
     builder: (context, child) {
       if (!AppPlatform.isMobile || child == null) return child ?? const SizedBox.shrink();
       final mq = MediaQuery.of(context);
@@ -84,7 +94,7 @@ void main() async {
       );
     },
     scrollBehavior: const AppScrollBehavior(),
-    // Стандартні віджети Material (виділення тексту, індикатори, курсор) беруть колір акценту з теми застосунку
+    // Standard Material widgets (text selection, indicators, cursor) take their accent color from the app theme
     theme: ThemeData.dark().copyWith(
       scaffoldBackgroundColor: Colors.black,
       colorScheme: ThemeData.dark().colorScheme.copyWith(

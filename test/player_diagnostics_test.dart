@@ -58,9 +58,9 @@ void main() {
   test('позиція стоїть без буферизації', () {
     final w = analyzeSync(snap(0, posMs: 5000), snap(3, posMs: 5000));
     expect(w.single, contains('не рухається'));
-    // а при буферизації — це нормально
+    // and while buffering, that is normal
     expect(analyzeSync(snap(0, posMs: 5000), snap(3, posMs: 5000, buffering: true)), isEmpty);
-    // і на паузі
+    // and on pause
     expect(analyzeSync(snap(0, posMs: 5000, playing: false), snap(3, posMs: 5000, playing: false)), isEmpty);
   });
 
@@ -70,7 +70,7 @@ void main() {
   });
 
   test('швидкість відтворення враховується', () {
-    // ×2: за 3 с позиція має зрости на 6 с
+    // ×2: in 3 s the position must grow by 6 s
     expect(analyzeSync(snap(0, posMs: 0, rate: 2), snap(3, posMs: 6000, rate: 2)), isEmpty);
   });
 

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart' show Color, HSVColor, PaintingBinding;
+import 'package:miki_miki/utils/app_clock.dart';
 import 'package:miki_miki/models/hikka_models.dart' show HikkaTitleLang;
 import 'package:miki_miki/services/banner_art.dart';
 import 'package:miki_miki/services/hikka_api.dart';
@@ -16,25 +17,25 @@ import 'package:miki_miki/services/source_registry.dart';
 import 'package:miki_miki/services/watch_service.dart';
 import 'package:miki_miki/services/watch_store.dart';
 
-/// Справжні відповіді API Hikka, збережені під час розробки (test/data/hikka_samples).
+/// Real Hikka API responses saved during development (test/data/hikka_samples).
 const String kSamples = 'test/data/hikka_samples';
 
 Object? sample(String name) => jsonDecode(File('$kSamples/$name').readAsStringSync());
 
 Map<String, dynamic> sampleMap(String name) => sample(name) as Map<String, dynamic>;
 
-/// Підставний сервер Hikka: віддає записані відповіді за методом і шляхом, ведучи журнал запитів.
-/// Списки (каталог, персонажі) нарізаються по сторінках зі 100 записів вибірки.
+/// A fake Hikka server: serves recorded responses by method and path, keeping a request log.
+/// Lists (catalog, characters) are cut into pages of 100 records of the sample.
 class FakeHikka {
   final List<HikkaRequest> log = [];
 
-  /// Імітація відсутності мережі
+  /// Simulating the absence of a network
   bool offline = false;
 
-  /// Скільки найближчих запитів завершити помилкою сервера (повтор має це пережити)
+  /// How many of the nearest requests to end with a server error (a retry must survive it)
   int failNext = 0;
 
-  /// Додаткові відповіді (акаунт, списки): якщо повертає не `null`, записана відповідь не шукається
+  /// Extra responses (account, lists): if it returns non-`null`, the recorded response is not looked up
   HikkaResponse? Function(HikkaRequest r)? interceptor;
 
   late final List<Map<String, dynamic>> animeList = [
@@ -45,22 +46,34 @@ class FakeHikka {
     for (int i = 1; i <= 8; i++) sampleMap('char_$i.json'),
   ];
 
-  /// Аніме, яке сервер вважає «хентаєм» (для перевірки закритої сторінки 18+)
+  /// An anime the server considers "hentai" (for checking the closed 18+ page)
   static const String adultSlug = 'adult-test-rx';
 
-  /// Колекція, яку сервер позначає 18+ (для перевірки закритої сторінки колекції)
+  /// A collection the server marks 18+ (for checking the closed collection page)
   static const String adultCollection = 'adult-collection-test';
 
-  /// Зсуває розклад серій тайтлу, що виходить, у майбутнє відносно «зараз»: записаний знімок старіє,
-  /// а тест «наступна серія» має працювати завжди
+  /// Shifts the schedule of an airing title's episodes into the future relative to "now": the recorded snapshot ages,
+  /// and the "next episode" test must always work
   bool freshSchedule = false;
 
-  /// Час виходу [i]-ї серії в тестах: сьогодні о 23:30, далі щотижня — підписи не залежать від дня тижня, у якому
-  /// запущено тести. (Якщо тести йдуть після 23:30, перша серія вже вийшла — знімки екрана тоді іншого вигляду.)
+  /// Air time of the [i]-th episode in tests: today at 23:30, then weekly: labels do not depend on the weekday the
+  /// tests run on. (If the tests run after 23:30, the first episode has already aired and screenshots look different.)
   static int _airing(int i) {
-    final n = DateTime.now();
+    final n = AppClock.now();
     final d = DateTime(n.year, n.month, n.day + 7 * i, 23, 30);
     return d.millisecondsSinceEpoch ~/ 1000;
+  }
+
+  /// The schedule snapshot was recorded in one specific week and ages. All records shift by a whole number of weeks
+  /// (weekday and hour stay) so the snapshot's window covers "now": there are episodes today, and the other days are as in the snapshot.
+  static List<Map<String, dynamic>> _scheduleNow(List<Map<String, dynamic>> all, {DateTime? now}) {
+    if (all.isEmpty) return all;
+    const week = 7 * 86400;
+    final t = (now ?? AppClock.now()).millisecondsSinceEpoch ~/ 1000;
+    final first = all.map((e) => e['airing_at'] as int).reduce((a, b) => a < b ? a : b);
+    // The window start is the first record's shift by whole weeks nearest to "now" (not later)
+    final shift = ((t - first) ~/ week) * week;
+    return [for (final e in all) {...e, 'airing_at': (e['airing_at'] as int) + shift}];
   }
 
   Map<String, dynamic> _rebased(Map<String, dynamic> a) {
@@ -128,7 +141,7 @@ class FakeHikka {
     }
     if (r.method == 'POST' && path == '/schedule/anime') {
       final all = (sampleMap('sched_default.json')['list'] as List).cast<Map<String, dynamic>>();
-      return _json(_page(all, r.url));
+      return _json(_page(_scheduleNow(all), r.url));
     }
     if (r.method == 'POST' && path == '/characters') {
       final q = (body['query'] as String?)?.toLowerCase();
@@ -143,7 +156,7 @@ class FakeHikka {
     }
     if (r.method == 'GET' && path == '/genres') return _json(sample('genres.json'));
 
-    // Спільнота: колекції й статті
+    // Community: collections and articles
     if (r.method == 'POST' && path == '/collections') {
       var all = (sampleMap('collections_list.json')['list'] as List).cast<Map<String, dynamic>>();
       final type = body['content_type'];
@@ -196,6 +209,22 @@ class FakeHikka {
       final slugs = [for (final a in (sampleMap('related_franchise.json')['anime'] as List)) (a as Map)['slug']];
       return slugs.contains(segs[2]) ? _json(sample('related_franchise.json')) : notFound();
     }
+    // People: we pass the first crew person off as a card with works
+    if (r.method == 'GET' && segs.isNotEmpty && segs[0] == 'people') {
+      final person = ((sampleMap('staff.json')['list'] as List).first as Map<String, dynamic>)['person'] as Map<String, dynamic>;
+      if (segs.length == 2) return _json({...person, 'description_ua': 'Опис людини.', 'anime_count': 2, 'characters_count': 1, 'manga_count': 0});
+      if (segs.length == 3 && segs[2] == 'anime') {
+        return _json(_page([
+          for (final a in animeList.take(2))
+            {'anime': a, 'roles': [{'name_ua': 'Режисер', 'name_en': 'Director'}]},
+        ], r.url));
+      }
+      if (segs.length == 3 && segs[2] == 'characters') {
+        return _json(_page([
+          {'character': characters.first, 'anime': animeList.first},
+        ], r.url));
+      }
+    }
     if (r.method == 'GET' && segs.length == 2 && segs[0] == 'characters') {
       for (final c in characters) {
         if (c['slug'] == segs[1]) return _json(c);
@@ -210,7 +239,7 @@ class FakeHikka {
   }
 }
 
-// ── Підставні картинки ───────────────────────────────────────────────────────
+// ── Fake images ───────────────────────────────────────────────────────────
 
 int _crc(List<int> bytes) {
   var c = 0xFFFFFFFF;
@@ -234,8 +263,8 @@ List<int> _chunk(String type, List<int> data) {
 
 List<int> _be32(int v) => [(v >> 24) & 255, (v >> 16) & 255, (v >> 8) & 255, v & 255];
 
-/// Кольорове зображення PNG (вертикальний градієнт від відтінку, що залежить від [seed]).
-/// Дає змогу бачити на скриншотах різні «постери» без мережі.
+/// A colored PNG image (a vertical gradient from a hue that depends on [seed]).
+/// Lets screenshots show different "posters" without a network.
 Uint8List fakePng(String seed, {int w = 42, int h = 60}) {
   final hue = (seed.hashCode.abs() % 360).toDouble();
   final top = HSVColor.fromAHSV(1, hue, 0.55, 0.88).toColor();
@@ -257,33 +286,37 @@ Uint8List fakePng(String seed, {int w = 42, int h = 60}) {
 }
 
 
-// ── Усе разом для тестів сторінок ────────────────────────────────────────────
+// ── Everything together for page tests ────────────────────────────────────────
 
-/// Підставні сервіси, які потрібні сторінкам на основі Hikka: мережа Hikka, картинки, банери AniList, перегляд і
-/// навігація. Створюється в `setUp`, `dispose()` — у `tearDown`.
+/// Fake services that Hikka-based pages need: the Hikka network, images, AniList banners, watching and
+/// navigation. Created in `setUp`, `dispose()` in `tearDown`.
 class HikkaTestEnv {
   final FakeHikka server = FakeHikka()..freshSchedule = true;
   final Directory imageDir = Directory.systemTemp.createTempSync('hikka_env');
 
-  /// Адреси, які просили відкрити в браузері
+  /// Addresses that were asked to open in a browser
   final List<String> opened = [];
 
-  /// Які тайтли мають банер в «AniList» (за MAL-id); решта — без банера, тож показується розмитий постер
+  /// Which titles have a banner in "AniList" (by MAL id); the rest have none, so a blurred poster is shown
   bool Function(int malId) hasBanner = (id) => id.isEven;
 
-  /// Скільки запитів зроблено до «AniList»
+  /// How many requests were made to "AniList"
   int bannerRequests = 0;
 
-  /// Скільки запитів зроблено до «TMDB»
+  /// How many requests were made to "TMDB"
   int tmdbRequests = 0;
 
+  /// A fixed "now" for screens with days and hours: Wednesday, November 4, 2026, 12:00: the schedule snapshot's window
+  static final DateTime fixedNow = DateTime(2026, 11, 4, 12);
+
   HikkaTestEnv() {
-    // Кеш розкодованих картинок спільний на весь файл: без очищення наступний тест узагалі не питав би сховище
+    AppClock.now = () => fixedNow;
+    // The decoded image cache is shared across the whole file: without clearing, the next test would not ask the store at all
     PaintingBinding.instance.imageCache
       ..clear()
       ..clearLiveImages();
     HikkaApi.instance = HikkaApi(sender: server.call, retryDelay: Duration.zero);
-    // Акаунт: у пам'яті, браузер — лише журнал, локальна адреса входу не піднімається (код вставляють вручну)
+    // Account: in memory, the browser is only a log, the local sign-in address is not brought up (the code is pasted manually)
     HikkaAuth.instance = HikkaAuth(
       load: () => {},
       save: (_) {},
@@ -296,7 +329,7 @@ class HikkaTestEnv {
     HikkaMyList.instance = HikkaMyList();
     HikkaImageStore.instance = HikkaImageStore(dir: imageDir, fetcher: (url) async => fakePng(url));
     HikkaPrefs.instance = HikkaPrefs(titleLang: HikkaTitleLang.ua, allowAdult: false);
-    // Блок «Дивитись» не ходить у мережу: джерел немає, сховище — у памʼяті
+    // The "Дивитись" block does not go to the network: there are no sources, the store is in memory
     WatchService.instance = WatchService(
       registry: SourceRegistry(sources: const [], prefs: SourcePrefs(load: () => {}, save: (_) {})),
       store: WatchStore(load: () => {}, save: (_) {}),
@@ -340,6 +373,7 @@ class HikkaTestEnv {
   }
 
   void dispose() {
+    AppClock.now = DateTime.now;
     try {
       imageDir.deleteSync(recursive: true);
     } catch (_) {}

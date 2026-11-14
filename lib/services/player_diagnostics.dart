@@ -1,8 +1,8 @@
-/// Журнал подій плеєра та періодичний «знімок» синхронізації звуку й відео.
+/// Player event log and a periodic snapshot of audio / video sync.
 ///
-/// Слухає потоки `Player` (відтворення, буферизація, доріжки, помилки, лог libmpv) і кожні 3 с у детальному
-/// режимі читає з рушія показники синхронізації: `avsync`, втрачені / запізнілі кадри, буфер, швидкість.
-/// Відхилення (розбіжність A/V, втрата кадрів, зупинка позиції) пишуться як попередження.
+/// Listens to the `Player` streams (playback, buffering, tracks, errors, libmpv log) and every 3 s in verbose
+/// mode reads sync metrics from the engine: `avsync`, dropped / late frames, buffer, speed.
+/// Deviations (A/V mismatch, frame loss, position stall) are written as warnings.
 library;
 
 import 'dart:async';
@@ -13,7 +13,7 @@ import '../utils/formatters.dart';
 import 'app_diagnostics.dart';
 import 'app_log.dart';
 
-/// Знімок показників рушія (для порівняння з попереднім і для тестів)
+/// Snapshot of engine metrics (for comparison with the previous one and for tests)
 class SyncSnapshot {
   final DateTime at;
   final Duration position;
@@ -42,7 +42,7 @@ class SyncSnapshot {
   });
 }
 
-/// Порівнює два знімки й повертає застереження (порожній список — усе гаразд)
+/// Compares two snapshots and returns warnings (an empty list means all is well)
 List<String> analyzeSync(SyncSnapshot? prev, SyncSnapshot cur) {
   final out = <String>[];
   final a = cur.avsync;
@@ -73,7 +73,7 @@ class PlayerDiagnostics {
 
   final Player player;
 
-  /// Додатковий текст у знімку (шейдери, джерело…)
+  /// Extra text in the snapshot (shaders, source…)
   final String Function()? context;
 
   final List<StreamSubscription<dynamic>> _subs = [];
@@ -115,7 +115,7 @@ class PlayerDiagnostics {
     return parts.join(' ');
   }
 
-  /// Коротка форма адреси (без довгого запиту)
+  /// Short form of an address (without the long query)
   static String _short(String uri) {
     final q = uri.indexOf('?');
     final base = q < 0 ? uri : '${uri.substring(0, q)}?…';
@@ -154,7 +154,7 @@ class PlayerDiagnostics {
     }
   }
 
-  /// Відео відкрито: фіксуємо, чим його буде відтворено, і куди йде звук
+  /// The video is opened: we record how it will be played and where the sound goes
   Future<void> _onDuration(Duration d) async {
     final uri = _currentUri();
     if (uri == null || uri == _describedUri) return;
@@ -184,7 +184,7 @@ class PlayerDiagnostics {
     } catch (_) {}
   }
 
-  /// Один знімок показників рушія (викликається таймером; публічний для перевірки)
+  /// One snapshot of engine metrics (called by a timer; public for testing)
   Future<void> sample() async {
     if (_disposed || _sampling || !AppLog.on) return;
     final st = player.state;
@@ -234,7 +234,7 @@ class PlayerDiagnostics {
       }
       _prev = cur;
     } catch (_) {
-      // діагностика не має заважати відтворенню
+      // diagnostics must not interfere with playback
     } finally {
       _sampling = false;
     }

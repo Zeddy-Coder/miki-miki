@@ -59,8 +59,8 @@ class AppFormatters {
     return title.isNotEmpty ? title : "Відео";
   }
 
-  /// Переклад назви розділу. Результат запам'ятовується: функція компілює десятки
-  /// регулярних виразів, а викликається з підписів, панелей і кнопки «Пропустити».
+  /// Translation of a chapter name. The result is memoized: the function compiles dozens
+  /// of regular expressions and is called from labels, panels and the "Skip" button.
   static String translateChapterTitle(String rawTitle) {
     final cached = _chapterTitleCache[rawTitle];
     if (cached != null) return cached;
@@ -171,7 +171,7 @@ class AppFormatters {
     title = title.replaceAll(RegExp(r'[\(\[\{]\s*[\)\]\}]'), '').trim();
     final ctLower = title.toLowerCase();
 
-    // Очищення тавтологій
+    // Removing tautologies
     final bool isTautology = ctLower.isEmpty ||
         ctLower == "subs" ||
         ctLower == "sub" ||
@@ -216,4 +216,4 @@ class AppFormatters {
     _trackTitleCache[cacheKey] = result;
     return result;
   }
-}
+}

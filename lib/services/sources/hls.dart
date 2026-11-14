@@ -1,6 +1,6 @@
-/// Розбір майстер-плейлиста HLS (m3u8): варіанти якості й додаткові доріжки (EXT-X-MEDIA).
-/// Чиста Dart-логіка. Аналог того, що UAKino робить у Aniyomi підрядковими пошуками, але повноцінно:
-/// з лапками в атрибутах, відносними адресами та без залежності від порядку атрибутів.
+/// Parsing an HLS master playlist (m3u8): quality variants and extra tracks (EXT-X-MEDIA).
+/// Pure Dart logic. Analogous to what UAKino does in Aniyomi with substring searches, but properly:
+/// with quotes in attributes, relative addresses and no dependence on attribute order.
 library;
 
 import '../../models/source_models.dart';
@@ -35,7 +35,7 @@ class HlsMaster {
   const HlsMaster(this.variants, this.renditions);
 }
 
-/// Атрибути рядка `#EXT-X-…:KEY=VALUE,KEY="a,b"` → мапа (лапки знімаються)
+/// Attributes of a line `#EXT-X-…:KEY=VALUE,KEY="a,b"` → a map (quotes are stripped)
 Map<String, String> parseHlsAttributes(String s) {
   final out = <String, String>{};
   var i = 0;
@@ -62,7 +62,7 @@ Map<String, String> parseHlsAttributes(String s) {
   return out;
 }
 
-/// Розбирає майстер-плейлист. `null` — це не m3u8 або у ньому немає варіантів (тоді це «медіа-плейлист»).
+/// Parses a master playlist. `null`: it is not an m3u8 or has no variants (then it is a "media playlist").
 HlsMaster? parseHlsMaster(String text, Uri base) {
   if (!text.contains('#EXTM3U')) return null;
   final lines = text.split(RegExp(r'\r?\n'));
@@ -72,7 +72,7 @@ HlsMaster? parseHlsMaster(String text, Uri base) {
     final line = lines[i].trim();
     if (line.startsWith('#EXT-X-STREAM-INF:')) {
       final attrs = parseHlsAttributes(line.substring('#EXT-X-STREAM-INF:'.length));
-      // адреса — наступний непорожній рядок, що не є тегом
+      // the address is the next non-empty line that is not a tag
       String? uri;
       for (int j = i + 1; j < lines.length; j++) {
         final next = lines[j].trim();
@@ -112,8 +112,8 @@ HlsMaster? parseHlsMaster(String text, Uri base) {
   return HlsMaster(variants, renditions);
 }
 
-/// Варіанти якості → список `Video` (найкраща якість першою). Спершу — «Авто» (сам майстер-плейлист:
-/// лишає вибір доріжок і якості за mpv), якщо `withAuto`.
+/// Quality variants → a list of `Video` (best quality first). First "Авто" (the master playlist itself:
+/// leaves track and quality choice to mpv), if `withAuto`.
 List<Video> videosFromHls(HlsMaster master, Uri masterUrl, {Map<String, String> headers = const {}, bool withAuto = true}) {
   final sorted = [...master.variants]..sort((a, b) {
       final h = (b.height ?? 0).compareTo(a.height ?? 0);

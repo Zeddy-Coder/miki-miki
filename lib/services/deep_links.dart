@@ -2,13 +2,13 @@ import 'app_log.dart';
 import 'hikka_auth.dart';
 import 'hikka_nav.dart';
 
-/// Посилання `miki://open/…`, якими застосунок відкривається ззовні (з браузера, повідомлення, іншого застосунку).
+/// `miki://open/…` links that open the app from outside (a browser, a message, another app).
 ///
-/// Підтримується:
-/// - `miki://open` — просто відкрити застосунок (на це переспрямовує сторінка після входу в Hikka);
-/// - `miki://open/anime/<slug>`, `/character/<slug>`, `/collection/<id>`, `/article/<slug>` — відкрити сторінку;
-/// - `miki://open/auth?reference=<код>` — завершити вхід у Hikka, але лише поки вхід справді триває
-///   (чуже посилання не може непомітно залогінити вас в чужий акаунт).
+/// Supported:
+/// - `miki://open`: just open the app (the page redirects here after Hikka sign-in);
+/// - `miki://open/anime/<slug>`, `/character/<slug>`, `/collection/<id>`, `/article/<slug>`: open a page;
+/// - `miki://open/auth?reference=<code>`: finish Hikka sign-in, but only while a sign-in is actually in progress
+///   (a foreign link cannot silently sign you in to someone else's account).
 class DeepLinks {
   DeepLinks._();
 
@@ -17,10 +17,10 @@ class DeepLinks {
 
   static final RegExp _id = RegExp(r'^[A-Za-z0-9._\-]{1,160}$');
 
-  /// Посилання на сторінку тайтлу, яким можна ділитися
+  /// Shareable link to a title page
   static String anime(String slug) => '$scheme://$host/anime/$slug';
 
-  /// Обробляє посилання. `true` — розпізнано й виконано (або це просто відкриття), `false` — проігноровано.
+  /// Handles a link. `true`: recognized and executed (or it is just an open), `false`: ignored.
   static bool handle(String link, {HikkaNav? nav, HikkaAuth? auth}) {
     final uri = Uri.tryParse(link.trim());
     if (uri == null || uri.scheme != scheme || uri.host != host) return false;

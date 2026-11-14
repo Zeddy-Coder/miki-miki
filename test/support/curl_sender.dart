@@ -3,8 +3,8 @@ import 'dart:io';
 
 import 'package:miki_miki/services/sources/source_http.dart';
 
-/// Транспорт для живих перевірок у пісочниці: `dart:io` тут не проходить крізь проксі, а `curl` — проходить.
-/// Поводиться як `IoSourceTransport`: один стрибок, без перенаправлень, тіло обмежується `maxBodyBytes`.
+/// Transport for live checks in the sandbox: `dart:io` does not pass through the proxy here, but `curl` does.
+/// Behaves like `IoSourceTransport`: one hop, no redirects, the body is limited to `maxBodyBytes`.
 SourceSender curlSender() => (SourceRequest r) async {
       final dir = Directory.systemTemp.createTempSync('curl_sender');
       try {
@@ -23,7 +23,7 @@ SourceSender curlSender() => (SourceRequest r) async {
         if (p.exitCode != 0 && out.isEmpty) {
           throw SourceException(SourceErrorKind.network, 'curl ${p.exitCode}: ${p.stderr}');
         }
-        // у виводі може бути кілька блоків заголовків (Connection Established від проксі) — беремо останній
+        // the output may contain several header blocks (Connection Established from the proxy): we take the last
         final blocks = out.split(RegExp(r'\r?\n\r?\n')).where((b) => b.trim().isNotEmpty).toList();
         final head = blocks.lastWhere((b) => b.startsWith('HTTP/'), orElse: () => blocks.isEmpty ? '' : blocks.last);
         final lines = head.split(RegExp(r'\r?\n'));

@@ -13,7 +13,7 @@ import 'support/perf_harness.dart';
 
 const _s = Duration(seconds: 1);
 
-/// Емуляція потоку mpv: тіки з кроком [step] від поточної позиції на [span]
+/// mpv stream emulation: ticks with step [step] from the current position over [span]
 Future<void> play(WidgetTester tester, FakePlayer p, Duration span, {int hz = 60}) async {
   final dt = Duration(microseconds: (1000000 / hz).ceil());
   final n = (span.inMicroseconds / dt.inMicroseconds).ceil();
@@ -63,7 +63,7 @@ void main() {
         await Future<void>.delayed(Duration.zero);
       }
       expect(rawEvents, 180);
-      expect(secEvents, inInclusiveRange(2, 3)); // 3 секунди відтворення
+      expect(secEvents, inInclusiveRange(2, 3)); // 3 seconds of playback
     });
 
     test('проміле перераховується і при зміні тривалості', () async {
@@ -111,7 +111,7 @@ void main() {
       var pos = p.state.position; // 20:00 → 4
       expect(v.value, 4);
       for (var i = 0; i < 600; i++) {
-        pos += const Duration(milliseconds: 500); // 5 хвилин
+        pos += const Duration(milliseconds: 500); // 5 minutes
         p.tickPosition(pos);
         await Future<void>.delayed(Duration.zero);
       }
@@ -133,12 +133,12 @@ void main() {
       var n = 0;
       pr.addListener(() => n++);
       var pos = Duration.zero;
-      for (var i = 0; i < 24 * 60; i++) { // хвилина відтворення, 24 Гц
+      for (var i = 0; i < 24 * 60; i++) { // a minute of playback, 24 Hz
         pos += const Duration(microseconds: 41667);
         p.tickPosition(pos);
         await Future<void>.delayed(Duration.zero);
       }
-      // 90 хв / 1000 кроків = 5,4 с на крок → за хвилину ≈ 11 сповіщень, а не 1440
+      // 90 min / 1000 steps = 5.4 s per step → about 11 notifications per minute, not 1440
       expect(n, inInclusiveRange(10, 12));
       expect(pr.played, closeTo(1 / 90, 0.0005));
       pr.dispose();
@@ -197,7 +197,7 @@ void main() {
       expect(ChapterMath.indexAt(const [VideoChapter(title: 'x', startTime: Duration(seconds: 10))], const Duration(seconds: 5)), -1);
     });
 
-    // Еталон: точна копія попередньої логіки SkipButton (до оптимізації)
+    // Reference: an exact copy of the previous SkipButton logic (before optimization)
     int oldSkip(List<VideoChapter> chs, Duration pos, Duration total) {
       VideoChapter? found;
       int foundIdx = -1;
@@ -295,7 +295,7 @@ void main() {
       expect(find.text('1:30:00'), findsOneWidget);
       p.setDuration(const Duration(minutes: 24, seconds: 5));
       await tester.pump(const Duration(milliseconds: 16));
-      expect(find.text('24:05'), findsWidgets); // верхня панель + нижня
+      expect(find.text('24:05'), findsWidgets); // top bar + bottom bar
       expect(find.text('1:30:00'), findsNothing);
     });
 
@@ -327,7 +327,7 @@ void main() {
     });
 
     testWidgets('смужка прогресу: перемальовується рідко, а прихована — взагалі ні', (tester) async {
-      // Рахуємо малювання CustomPaint смужки
+      // We count the bar's CustomPaint draws
       int seekPaints = 0;
       void hook(RenderObject ro) {
         if (ro is RenderCustomPaint && ro.painter.runtimeType.toString() == '_SeekPainter') seekPaints++;
@@ -339,7 +339,7 @@ void main() {
         seekPaints = 0;
         await play(tester, p, const Duration(seconds: 6));
         final visiblePaints = seekPaints;
-        // 90 хв на ~1000 пікселях → ≈ 5,4 с на піксель: за 6 с — не більше кількох малювань
+        // 90 min over ~1000 pixels → ≈ 5.4 s per pixel: over 6 s, no more than a few draws
         expect(visiblePaints, lessThanOrEqualTo(4), reason: 'малювань за 6 с: $visiblePaints');
 
         show.value = false;
@@ -380,21 +380,21 @@ void main() {
       final (p, _) = await mount(tester, visible: false, at: const Duration(minutes: 1, seconds: 28));
       expect(find.textContaining('Пропустити'), findsNothing);
 
-      await play(tester, p, const Duration(seconds: 3)); // 1:31 — всередині опенінґу
+      await play(tester, p, const Duration(seconds: 3)); // 1:31: inside the opening
       await tester.pump(const Duration(milliseconds: 600));
       expect(find.text('Пропустити опенінґ'), findsOneWidget);
 
-      await play(tester, p, const Duration(seconds: 12)); // 1:43 — ще в межах 15 с
+      await play(tester, p, const Duration(seconds: 12)); // 1:43: still within 15 s
       expect(find.text('Пропустити опенінґ'), findsOneWidget);
 
-      await play(tester, p, const Duration(seconds: 4)); // 1:47 — вже пізніше 15 с
+      await play(tester, p, const Duration(seconds: 4)); // 1:47: already later than 15 s
       await tester.pump(const Duration(milliseconds: 600));
       expect(find.textContaining('Пропустити'), findsNothing);
       expect(tester.takeException(), isNull);
     });
 
     testWidgets('«Пропустити»: клік перемотує до кінця розділу', (tester) async {
-      // Панель прихована: кнопка внизу (при видимій панелі її нижню частину перекриває док)
+      // Panel hidden: the button is at the bottom (with the panel visible the dock covers its lower part)
       final (p, _) = await mount(tester, visible: false, at: const Duration(minutes: 1, seconds: 35));
       await tester.pump(const Duration(milliseconds: 600));
       await tester.tap(find.text('Пропустити опенінґ'));
@@ -413,7 +413,7 @@ void main() {
         VideoChapter(title: 'Credits', startTime: Duration(minutes: 20)),
       ];
       final (p, _) = await mount(tester, visible: false, at: const Duration(minutes: 89, seconds: 40), chapters: chs);
-      // 89:40 — це 69 хв після початку «Credits» (>15 с) → кнопки нема
+      // 89:40 is 69 min after the start of "Credits" (>15 s) → no button
       expect(find.textContaining('Пропустити'), findsNothing);
       p.tickPosition(const Duration(minutes: 20, seconds: 5));
       await tester.pump(const Duration(milliseconds: 600));
@@ -466,7 +466,7 @@ void main() {
       ));
       double fillWidth() {
         final boxes = tester.widgetList<Container>(find.descendant(of: find.byType(AppProgressLine), matching: find.byType(Container))).toList();
-        // другий Container — заливка
+        // the second Container is the fill
         return tester.getSize(find.byWidget(boxes[1])).width;
       }
 

@@ -26,13 +26,13 @@ void main() {
 
     test('flatten: лише серії з плеєром, який ми вміємо відкрити; озвучка — підпис релізу', () {
       final eps = MikaiSource().flatten(player);
-      expect(eps.length, 52); // 53 серій у релізах, одна лише з Fenix
+      expect(eps.length, 52); // 53 episodes in releases, one only from Fenix
       final first = eps.first;
       expect(first.voice, 'TuTaZaSho');
       expect(first.name, 'Серія 1');
       expect(first.number, 1);
       expect(first.url, startsWith('https://moonanime.'));
-      // Fenix лишається у даних (на майбутнє), але плеєром не пропонується
+      // Fenix stays in the data (for the future) but is not offered by the player
       expect(embedsOf(first).map((e) => e.provider), containsAll(['fenix', 'moon']));
       expect(hostersFor(first).map((h) => h.name), ['Moon']);
     });
@@ -162,7 +162,7 @@ void main() {
       final first = await MikaiSource(http: site.http).allTeams(refresh: true);
       expect(first.map((t) => t.name), ['A', 'B']);
       expect(site.log.where((r) => '${r.url}'.contains('/teams')).length, 2, reason: 'обидві сторінки');
-      // Наступне читання: зі збереженого, мережі немає
+      // The next read: from the saved copy, no network
       final offline = FakeSite({});
       expect((await MikaiSource(http: offline.http).allTeams()).map((t) => t.name), ['A', 'B']);
       expect(offline.log, isEmpty);
@@ -171,7 +171,7 @@ void main() {
     test('episodes: усі релізи, впорядковано за озвучкою й номером', () async {
       final site = FakeSite({'/anime/7601/player': fixture('mikai_player.json')});
       final eps = await MikaiSource(http: site.http).episodes(const SAnime(url: '7601', title: 'x'));
-      expect(eps.length, 52); // 53 серій у релізах, одна лише з Fenix
+      expect(eps.length, 52); // 53 episodes in releases, one only from Fenix
       for (int i = 1; i < eps.length; i++) {
         final a = eps[i - 1], b = eps[i];
         final c = (a.voice ?? '').compareTo(b.voice ?? '');

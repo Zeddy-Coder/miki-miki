@@ -1,6 +1,6 @@
-/// UAKino (uakino.best) — фільми, серіали й аніме українською (розділ «animeukr»).
-/// Порт розширення Aniyomi «UAKino» (yuzono/anime-repo): список з `div.movie-item`, серії з AJAX-плейлиста
-/// DLE (`playlists.php`) або з плеєра Ashdi для серіалів, відео — через спільні екстрактори (Ashdi, Moon).
+/// UAKino (uakino.best): films, series and anime in Ukrainian (the "animeukr" section).
+/// A port of the Aniyomi extension "UAKino" (yuzono/anime-repo): the list from `div.movie-item`, episodes from the DLE AJAX playlist
+/// (`playlists.php`) or from the Ashdi player for series, video through the shared extractors (Ashdi, Moon).
 library;
 
 import 'dart:convert';
@@ -31,14 +31,14 @@ class UaKinoSource extends HttpAnimeSource {
   static const String _animeSection = '/animeukr';
   static const String _items = 'div.movie-item';
 
-  /// У видачі пошуку картки мають ще й клас `short-item` (як у розширенні Aniyomi)
+  /// In search results the cards also have the class `short-item` (as in the Aniyomi extension)
   static const String _searchItems = 'div.movie-item.short-item';
   static const String _next = 'a:contains(Далі)';
 
-  /// Популярне: за рейтингом, усі роки (верхня межа — поточний рік; у розширенні було зашито 2024)
+  /// Popular: by rating, all years (the upper bound is the current year; the extension hardcoded 2024)
   String get _popularPath => '$_animeSection/f/c.year=1921,${DateTime.now().year}/sort=rating;desc';
 
-  // ── Списки ──────────────────────────────────────────────────────────────────────
+  // ── Lists ──────────────────────────────────────────────────────────────────────
 
   @override
   Future<SAnimePage> popular(int page) async {
@@ -82,7 +82,7 @@ class UaKinoSource extends HttpAnimeSource {
     );
   }
 
-  // ── Сторінка аніме ──────────────────────────────────────────────────────────────
+  // ── Anime page ──────────────────────────────────────────────────────────────
 
   @override
   Future<SAnime> details(SAnime anime) async {
@@ -104,9 +104,9 @@ class UaKinoSource extends HttpAnimeSource {
     );
   }
 
-  // ── Серії ───────────────────────────────────────────────────────────────────────
+  // ── Episodes ───────────────────────────────────────────────────────────────────────
 
-  /// Ідентифікатор новини DLE: прихований `<input id=post_id>`, а як його нема — число на початку імені сторінки
+  /// DLE news id: a hidden `<input id=post_id>`, and if there is none, the number at the start of the page name
   String newsId(Document doc, String animeUrl) {
     final v = attrOf(doc, 'input[id=post_id]', 'value');
     if (v.isNotEmpty) return v;
@@ -120,7 +120,7 @@ class UaKinoSource extends HttpAnimeSource {
     return t;
   }
 
-  /// Серії з відповіді AJAX-плейлиста. Однакові (озвучка, номер) з різних плеєрів зливаються в одну серію.
+  /// Episodes from the AJAX playlist response. Identical (dub, number) from different players merge into one episode.
   List<SEpisode> parsePlaylist(String responseHtml) {
     final byKey = <String, List<EmbedLink>>{};
     final meta = <String, ({String name, String? voice})>{};
@@ -152,7 +152,7 @@ class UaKinoSource extends HttpAnimeSource {
 
   static final RegExp _ashdiFile = RegExp(r"file\s*:\s*'(.*?)'", dotAll: true);
 
-  /// Серії серіалу з плеєра Ashdi: JSON «озвучка → сезон → серія»
+  /// Series episodes from the Ashdi player: JSON "dub → season → episode"
   List<SEpisode> parseAshdiSerial(String scripts) {
     final m = _ashdiFile.firstMatch(scripts);
     if (m == null) return const [];
@@ -175,7 +175,7 @@ class UaKinoSource extends HttpAnimeSource {
         if (folder is List) {
           walk(folder, [...path, title]);
         } else if (file is String && file.isNotEmpty) {
-          // path: [озвучка, сезон?]; title — серія
+          // path: [dub, season?]; title is the episode
           String? voice;
           String? seasonTitle;
           if (path.length >= 2) {
@@ -224,7 +224,7 @@ class UaKinoSource extends HttpAnimeSource {
         if (list.isNotEmpty) return list;
       }
     }
-    // не серіал з плейлистом: плеєр у iframe
+    // not a series with a playlist: the player is in an iframe
     final playerUrl = _withScheme(attrOf(doc, 'iframe#pre', 'src'));
     if (playerUrl.isEmpty) return const [];
     if (playerUrl.contains('/serial/')) {
@@ -242,12 +242,12 @@ class UaKinoSource extends HttpAnimeSource {
     ];
   }
 
-  // ── Відео ───────────────────────────────────────────────────────────────────────
+  // ── Video ───────────────────────────────────────────────────────────────────────
 
   @override
   Future<List<Video>> videos(SEpisode episode) async {
     if (hostersFor(episode).isNotEmpty) return videosOfEpisode(http, episode, referer: '$baseUrl/');
-    // посилання на сам плейлист HLS чужого хоста (серіали Ashdi віддають прямі m3u8)
+    // a link to the HLS playlist itself on a foreign host (Ashdi series give direct m3u8)
     final url = episode.url;
     if (url.split('?').first.toLowerCase().endsWith('.m3u8')) {
       final headers = {'Referer': '$baseUrl/', 'User-Agent': kBrowserUserAgent};

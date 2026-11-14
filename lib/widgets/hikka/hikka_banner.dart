@@ -15,28 +15,28 @@ import '../../utils/platform_info.dart';
 import '../app_animation_kit.dart';
 import 'hikka_common.dart';
 
-/// Розміри банера (скелет завантаження повторює їх, щоб сторінка не стрибала)
+/// Banner sizes (the loading skeleton repeats them so the page does not jump)
 class HikkaBannerCarouselMetrics {
   const HikkaBannerCarouselMetrics._();
 
-  /// Висота банера за його шириною
+  /// Banner height by its width
   static double heightFor(double cardWidth) => (cardWidth * 0.5).clamp(150.0, 210.0);
 }
 
-/// Завантажувач банерів тайтлів (MAL-id → зображення); у тестах підміняється
+/// Title banner loader (MAL id → image); replaced in tests
 typedef HikkaBannerArtLoader = Future<Map<int, BannerArtwork>> Function(List<HikkaAnime> items);
 
-/// Банери «Головної»: карусель поточних онґоїнґів. Фон — широкий банер з AniList (чи TheMovieDB), а поки він
-/// вантажиться або його немає — той самий постер, прокручений крізь крихітну копію (розмиття без дорогого
-/// `BackdropFilter`); поверх нього чіткий постер, назва та кнопка «Дивитись».
-/// Сама гортає кожні [autoAdvance], коли вкладка на екрані; дотик чи перетягування зупиняє автогортання на деякий час.
+/// "Головна" banners: a carousel of current ongoing titles. The background is a wide banner from AniList (or TheMovieDB), and while it
+/// loads or is missing, the same poster scaled through a tiny copy (blur without an expensive
+/// `BackdropFilter`); over it a sharp poster, the title and the "Дивитись" button.
+/// It scrolls itself every [autoAdvance] when the tab is on screen; a touch or drag stops auto-scrolling for a while.
 class HikkaBannerCarousel extends StatefulWidget {
   final List<HikkaAnime> items;
   final double scale;
   final double pad;
   final Duration autoAdvance;
 
-  /// Звідки брати широкі банери; за замовчуванням — `BannerArt.instance`
+  /// Where to get wide banners from; by default `BannerArt.instance`
   final HikkaBannerArtLoader? artLoader;
 
   const HikkaBannerCarousel({
@@ -85,7 +85,7 @@ class _HikkaBannerCarouselState extends State<HikkaBannerCarousel> {
     return true;
   }
 
-  /// Підтягує широкі банери; до відповіді (чи при збої) картка лишається без банера
+  /// Fetches wide banners; until the response (or on failure) the card stays without a banner
   void _loadArt() {
     final gen = ++_artGeneration;
     final load = widget.artLoader ?? BannerArt.instance.load;
@@ -108,13 +108,13 @@ class _HikkaBannerCarouselState extends State<HikkaBannerCarousel> {
   void _tick() {
     final c = _controller;
     if (!mounted || c == null || !c.hasClients || widget.items.length < 2) return;
-    // Вкладка на іншому екрані (Offstage) — не гортаємо
+    // The tab is on another screen (Offstage): we do not scroll
     if (!TickerMode.valuesOf(context).enabled) return;
     if (DateTime.now().isBefore(_pausedUntil)) return;
-    // Телефон: карусель безкінечна й завжди йде вперед; широке вікно: після останнього — на початок
+    // Phone: the carousel is endless and always goes forward; wide window: after the last one, back to the start
     final n = widget.items.length;
     var cur = (c.page ?? c.initialPage.toDouble()).round();
-    // Дійшли до дальнього краю віртуальних сторінок — непомітно повертаємось до середини (той самий банер)
+    // Reached the far edge of the virtual pages: quietly return to the middle (the same banner)
     if (_loopMode && cur >= n * (_loops + _loops ~/ 2)) {
       cur -= n * (_loops ~/ 2);
       c.jumpToPage(cur);
@@ -125,7 +125,7 @@ class _HikkaBannerCarouselState extends State<HikkaBannerCarousel> {
 
   void _pause() => _pausedUntil = DateTime.now().add(widget.autoAdvance * 2);
 
-  /// Скільки «кіл» віртуальних сторінок: безкінечне гортання в обидва боки без стрибків
+  /// How many "laps" of virtual pages: endless scrolling both ways without jumps
   static const int _loops = 50;
 
   PageController _controllerFor(double fraction, bool loop) {
@@ -150,7 +150,7 @@ class _HikkaBannerCarouselState extends State<HikkaBannerCarousel> {
         builder: (context, box) {
           final width = box.maxWidth;
           final maxCard = 640 * (AppPlatform.isMobile ? 1.0 : scale);
-          // Телефон: банер майже на всю ширину, сусідній виглядає збоку. Широке вікно: банер фіксованої ширини зліва.
+          // Phone: the banner is almost full width, the neighbor peeks from the side. Wide window: a fixed-width banner on the left.
           final single = items.length == 1;
           final fraction = width <= maxCard / 0.92 ? (single ? 1.0 : 0.92) : (maxCard / width).clamp(0.3, 1.0);
           final centered = fraction >= 0.8;
@@ -237,7 +237,7 @@ class _Banner extends StatelessWidget {
     final a = anime;
     final r = uiTheme.borderRadius(18 * scale);
     final title = a.title(HikkaPrefs.instance.titleLang);
-    // «TV-серіал» — звичайний випадок і місця на вузькому банері не варте: позначаємо лише фільми, OVA тощо
+    // "TV-серіал" is the ordinary case and not worth the room on a narrow banner: we mark only movies, OVAs etc.
     final meta = [if (a.typeLabel.isNotEmpty && a.mediaType != 'tv') a.typeLabel, if (a.seasonLabel.isNotEmpty) a.seasonLabel].join(' · ');
     final posterHeight = height - 24 * scale;
     final progress = a.episodesLabel;
@@ -259,7 +259,7 @@ class _Banner extends StatelessWidget {
             fit: StackFit.expand,
             children: [
               if (art?.url != null) _WideBackdrop(key: ValueKey(art!.url), url: art!.url!),
-              // Затемнення зліва направо: текст читається на будь-якому постері
+              // Darkening from left to right: the text is readable on any poster
               const DecoratedBox(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
@@ -301,7 +301,7 @@ class _Banner extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                             style: hikkaStyle(17 * scale, color: white, weight: FontWeight.bold, height: 1.2),
                           ),
-                          // Тип із сезоном і оцінка в одному рядку: так банер не розростається на вузькому екрані
+                          // Type with season and score on one line: so the banner does not grow on a narrow screen
                           if (meta.isNotEmpty || a.hasScore)
                             Padding(
                               padding: EdgeInsets.only(top: 4 * scale),
@@ -347,7 +347,7 @@ class _Banner extends StatelessWidget {
   }
 }
 
-/// Широкий банер (TheMovieDB, запасний — AniList): проявляється, коли завантажиться
+/// Wide banner (TheMovieDB, AniList as fallback): fades in once loaded
 class _WideBackdrop extends StatelessWidget {
   final String url;
 
@@ -375,8 +375,8 @@ class _WideBackdrop extends StatelessWidget {
   }
 }
 
-/// Підкладка під шапкою сторінки тайтлу: широкий банер, який плавно тоне у фон сторінки (текст лишається читабельним
-/// в будь-якій темі). Адреса береться з тих самих джерел, що й банер на головній; поки її немає — порожнє місце.
+/// Backdrop under the title page header: a wide banner that smoothly sinks into the page background (the text stays readable
+/// in any theme). The address comes from the same sources as the home banner; until it exists, an empty space.
 class HikkaTitleBackdrop extends StatefulWidget {
   final HikkaAnime anime;
   final HikkaBannerArtLoader? artLoader;

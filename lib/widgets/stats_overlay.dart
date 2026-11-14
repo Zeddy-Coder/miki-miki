@@ -43,7 +43,7 @@ class _StatsOverlayState extends State<StatsOverlay> {
   bool _copied = false;
   bool _saved = false;
   bool _saveFailed = false;
-  int _tab = 0; // 0 — огляд, 1 — логи libmpv, 2 — журнал джерел перегляду
+  int _tab = 0; // 0 is overview, 1 is libmpv logs, 2 is the watch-source log
   final ScrollController _overviewScroll = AppSmoothScrollController();
 
   final ScrollController _sourceScroll = ScrollController();
@@ -72,7 +72,7 @@ class _StatsOverlayState extends State<StatsOverlay> {
     super.dispose();
   }
 
-  /// Блок про відео, швидкість і синхронізацію (спільний для файлу й буфера обміну)
+  /// A block about video, speed and sync (shared by the file and the clipboard)
   String _videoBlock() {
     final vTrack = widget.player.state.tracks.video.firstOrNull;
     final aTrack = widget.player.state.track.audio;
@@ -120,7 +120,7 @@ ${widget.mpvLogs.join('\n')}
     });
   }
 
-  /// Зберігає повний звіт (журнал сесії + показники плеєра + логи libmpv) в окремий файл
+  /// Saves the full report (session log + player metrics + libmpv logs) into a separate file
   Future<void> _saveReportToFile() async {
     final result = await LogExport.save(extra: [
       ('ПОТОЧНИЙ СТАН ВІДТВОРЕННЯ', _videoBlock()),
@@ -297,7 +297,7 @@ ${widget.mpvLogs.join('\n')}
     );
   }
 
-  // ── Вкладка «Огляд» ────────────────────────────────────────────────────────
+  // ── The "Огляд" tab ────────────────────────────────────────────────────────
 
   Widget _buildOverviewTab(double scale) {
     final stats = widget.stats;
@@ -366,7 +366,7 @@ ${widget.mpvLogs.join('\n')}
     );
   }
 
-  // ── Вкладки «Логи» (libmpv) і «Джерела» ────────────────────────────────────
+  // ── The "Логи" (libmpv) and "Джерела" tabs ────────────────────────────────────
 
   Widget _buildSourcesTab(double scale) => _buildLogsTab(scale, lines: SourceLog.instance.lines, controller: _sourceScroll, empty: 'Журнал порожній — відкрийте серію з «Дивитись»');
 
@@ -377,7 +377,7 @@ ${widget.mpvLogs.join('\n')}
       padding: EdgeInsets.fromLTRB(24 * scale, 4 * scale, 24 * scale, 12 * scale),
       child: Container(
         decoration: BoxDecoration(
-          // Термінал лишається темним в обох темах: кольори логів підібрані під темний фон
+          // The terminal stays dark in both themes: the log colors are tuned for a dark background
           color: const Color(0xFF0D0D0D),
           borderRadius: uiTheme.borderRadius(10 * scale),
           border: Border.all(color: uiTheme.colors.borderSubtle),

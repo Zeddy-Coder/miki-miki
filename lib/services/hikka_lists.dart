@@ -1,5 +1,5 @@
-/// Мої списки Hikka: запис про тайтл (статус, серії, оцінка), улюблене й передача прогресу з плеєра.
-/// Усе тримається в памʼяті лише поки людина ввійшла; при виході кеш скидається.
+/// My Hikka lists: a title entry (status, episodes, score), favorites and sending progress from the player.
+/// Everything is kept in memory only while the person is signed in; on sign-out the cache is reset.
 library;
 
 import 'dart:async';
@@ -14,7 +14,7 @@ import 'hikka_auth.dart';
 import 'storage_service.dart';
 
 class HikkaMyList extends ChangeNotifier {
-  /// Спільний екземпляр (у тестах підміняється)
+  /// Shared instance (replaced in tests)
   static HikkaMyList instance = HikkaMyList();
 
   final HikkaAuth? _authOverride;
@@ -22,16 +22,16 @@ class HikkaMyList extends ChangeNotifier {
   final SectionLoader? _loadOverride;
   final SectionSaver? _saveOverride;
 
-  /// Збережені статуси: позначки на постерах з'являються одразу, а оновлення з мережі — не частіше за раз на кілька годин
+  /// Saved statuses: poster badges appear immediately, and a network refresh happens at most once every few hours
   static const String indexSection = 'hikka_status_index';
   static const Duration indexMaxAge = Duration(hours: 6);
 
-  /// Запис про тайтл за slug (`null` — у списках його немає)
+  /// Entry for a title by slug (`null` means it is in no lists)
   final Map<String, HikkaWatchEntry?> _entries = {};
   final Map<String, Future<HikkaWatchEntry?>> _loading = {};
   final Map<String, bool> _favourites = {};
 
-  /// Статус кожного тайтлу в моїх списках (для позначок на постерах): заповнюється одним проходом по всіх списках
+  /// Status of each title in my lists (for poster badges): filled in one pass over all lists
   final Map<String, HikkaWatchStatus> _index = {};
   bool _indexed = false;
   int _indexAt = 0;
@@ -53,7 +53,7 @@ class HikkaMyList extends ChangeNotifier {
   HikkaAuth get _auth => _authOverride ?? HikkaAuth.instance;
   HikkaApi get _api => _apiOverride ?? HikkaApi.instance;
 
-  /// Росте при кожній зміні списків: за ним сторінка «Списки» перезавантажується
+  /// Grows on every list change: the "Списки" page reloads on it
   int get version => _version;
 
   bool get signedIn => _auth.signedIn;
@@ -66,7 +66,7 @@ class HikkaMyList extends ChangeNotifier {
     if (now) unawaited(loadIndex());
   }
 
-  /// Скидає все, що знаємо про списки (вихід, зміна акаунта)
+  /// Resets everything known about the lists (sign-out, account change)
   void clear() {
     _entries.clear();
     _loading.clear();
@@ -82,17 +82,17 @@ class HikkaMyList extends ChangeNotifier {
     _bump();
   }
 
-  // ── Статуси для позначок на постерах ──────────────────────────────
+  // ── Statuses for poster badges ──────────────────────────────
 
-  /// Статус тайтлу в моїх списках; `null` — його там немає або ще невідомо
+  /// Status of a title in my lists; `null` means it is not there or not known yet
   HikkaWatchStatus? statusOf(String slug) {
     if (!signedIn) return null;
     if (_entries.containsKey(slug)) return _entries[slug]?.status;
     return _index[slug];
   }
 
-  /// Статуси всіх тайтлів зі списків: спершу з диска (миттєво), потім, якщо дані старші за [indexMaxAge], з мережі
-  /// (по 100 за запит, після [delay], щоб не конкурувати з першим екраном); помилка не фатальна — позначок просто не буде
+  /// Statuses of all titles from the lists: first from disk (instantly), then, if the data is older than [indexMaxAge], from the network
+  /// (100 per request, after [delay] so as not to compete with the first screen); an error is not fatal, there just will be no badges
   Future<void> loadIndex({bool refresh = false, Duration delay = Duration.zero}) {
     final name = _auth.username;
     if (!signedIn || name.isEmpty) return Future.value();
@@ -108,7 +108,7 @@ class HikkaMyList extends ChangeNotifier {
     await _fillIndex(name);
   }
 
-  /// Підхоплює збережені статуси; `true` — вони достатньо свіжі, мережа не потрібна
+  /// Picks up the saved statuses; `true` means they are fresh enough and the network is not needed
   bool _restoreIndex(String name) {
     try {
       final data = (_loadOverride ?? (() => StorageService.getSection(indexSection)))();
@@ -176,13 +176,13 @@ class HikkaMyList extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ── Запис про тайтл ──────────────────────────────────────────────
+  // ── Title entry ──────────────────────────────────────────────────
 
-  /// Те, що вже відомо без мережі: `null` у значенні — тайтлу в списках немає; ключа немає — невідомо
+  /// What is already known without the network: `null` as a value means the title is in no lists; no key means unknown
   bool knows(String slug) => _entries.containsKey(slug);
   HikkaWatchEntry? cached(String slug) => _entries[slug];
 
-  /// Мій запис про тайтл (з мережі один раз, далі з памʼяті)
+  /// My entry for a title (from the network once, then from memory)
   Future<HikkaWatchEntry?> entry(String slug, {bool refresh = false}) {
     if (!signedIn) return Future.value(null);
     if (!refresh && _entries.containsKey(slug)) return Future.value(_entries[slug]);
@@ -194,8 +194,8 @@ class HikkaMyList extends ChangeNotifier {
     });
   }
 
-  /// Зберігає запис і повертає те, що відповів сервер.
-  /// [total] — скільки серій у тайтлі: для «Переглянуто» лічильник добивається до кінця, як на сайті.
+  /// Saves the entry and returns what the server answered.
+  /// [total] is how many episodes the title has: for "Переглянуто" the counter is topped up to the end, as on the site.
   Future<HikkaWatchEntry> save(
     String slug, {
     HikkaWatchStatus? status,
@@ -219,7 +219,7 @@ class HikkaMyList extends ChangeNotifier {
     return _entries[slug]!;
   }
 
-  /// Прибирає тайтл зі списків
+  /// Removes the title from the lists
   Future<void> remove(String slug) async {
     await _api.removeWatch(slug);
     _entries[slug] = null;
@@ -229,7 +229,7 @@ class HikkaMyList extends ChangeNotifier {
     _bump();
   }
 
-  /// Скільки тайтлів у кожному статусі
+  /// How many titles are in each status
   Future<HikkaWatchStats> stats({bool refresh = false}) async {
     final name = _auth.username;
     if (name.isEmpty) return const HikkaWatchStats();
@@ -237,7 +237,7 @@ class HikkaMyList extends ChangeNotifier {
     return _stats = await _api.watchStats(name);
   }
 
-  // ── Улюблене ─────────────────────────────────────────────────────
+  // ── Favorites ─────────────────────────────────────────────────────
 
   bool? favouriteCached(String slug) => _favourites[slug];
 
@@ -254,11 +254,11 @@ class HikkaMyList extends ChangeNotifier {
     _bump();
   }
 
-  // ── Прогрес із плеєра ────────────────────────────────────────────
+  // ── Progress from the player ────────────────────────────────────────────
 
-  /// Яку серію вважати переглянутою у списку Hikka: номер серії з джерела (12-та серія — це 12), але не більше
-  /// за кількість серій тайтлу на Hikka («13 з 12» — відмічено 12). Якщо всі номери варіанта лежать за межами
-  /// тайтлу (наскрізна нумерація 13…24) або номера немає — [position], теж із стелею [total].
+  /// Which episode to count as watched in the Hikka list: the source's episode number (episode 12 is 12), but no more
+  /// than the title's episode count on Hikka ("13 of 12" is marked 12). If all of the variant's numbers lie outside
+  /// the title (continuous numbering 13…24) or there is no number, [position], also capped by [total].
   static int episodeNumber({double? number, required int position, int? total, bool trustNumber = true}) {
     var r = position;
     final n = number;
@@ -267,9 +267,9 @@ class HikkaMyList extends ChangeNotifier {
     return r < 1 ? 1 : r;
   }
 
-  /// Серію [episode] тайтлу [slug] переглянуто. Додає тайтл у «Дивлюсь», піднімає лічильник серій і
-  /// переводить у «Переглянуто» після останньої. Ніколи не зменшує прогрес і не чіпає вже завершене.
-  /// Усі збої тихі: перегляд важливіший за синхронізацію.
+  /// Episode [episode] of title [slug] was watched. Adds the title to "Дивлюсь", raises the episode counter and
+  /// moves it to "Переглянуто" after the last one. Never lowers progress and never touches an already completed one.
+  /// All failures are silent: watching matters more than syncing.
   Future<void> syncEpisode(String slug, int episode, {int? total}) {
     if (!signedIn || !_auth.syncProgress || episode < 1) return Future.value();
     final prev = _syncing[slug] ?? Future<void>.value();
@@ -280,8 +280,8 @@ class HikkaMyList extends ChangeNotifier {
     });
   }
 
-  /// Знімає позначку «переглянуто» з серії [episode]: прогрес на Hikka стає на одну серію менший, але лише якщо
-  /// він її враховував; решта списку не змінюється. Те саме правило входу й синхронізації, що й у [syncEpisode]
+  /// Removes the "watched" mark from episode [episode]: Hikka progress drops by one episode, but only if
+  /// it counted that one; the rest of the list is unchanged. Same sign-in and sync rule as [syncEpisode]
   Future<void> unmarkEpisode(String slug, int episode, {int? total}) {
     if (!signedIn || !_auth.syncProgress || episode < 1) return Future.value();
     final prev = _syncing[slug] ?? Future<void>.value();
@@ -312,7 +312,7 @@ class HikkaMyList extends ChangeNotifier {
 
   Future<void> _syncOne(String slug, int episode, int? total) async {
     try {
-      // Свіжий запис: на сайті прогрес міг піти вперед, а за застарілим кешем ми б його занизили
+      // Fresh entry: on the site progress may have moved ahead, and with a stale cache we would understate it
       final old = await entry(slug, refresh: true);
       if (old != null) {
         if (old.status == HikkaWatchStatus.completed) return;

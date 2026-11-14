@@ -11,10 +11,10 @@ import '../services/ui_theme_service.dart';
 import '../utils/formatters.dart';
 import 'app_animation_kit.dart';
 
-/// Колесо миші над віджетом. Спрацьовує лише для найглибшого (найближчого до курсора)
-/// слухача, тому колесо над кнопкою не змінює ще й гучність відео під нею.
+/// Mouse wheel over a widget. Fires only for the deepest (closest to the cursor)
+/// listener, so the wheel over a button does not also change the volume of the video under it.
 class AppWheelRegion extends StatelessWidget {
-  /// +1 — крутять вгору, -1 — вниз
+  /// +1 means scrolling up, -1 down
   final ValueChanged<int> onWheel;
   final Widget child;
 
@@ -36,9 +36,9 @@ class AppWheelRegion extends StatelessWidget {
   }
 }
 
-/// Як `ValueListenableBuilder`, але з вимикачем [live]: поки він вимкнений (панель керування
-/// прихована), віджет не перебудовується від подій, а при вмиканні одразу показує актуальне.
-/// Потрібен, щоб підписи часу не будили інтерфейс, коли їх не видно.
+/// Like `ValueListenableBuilder`, but with a [live] switch: while it is off (the control panel
+/// is hidden), the widget does not rebuild on events, and when it is turned on it shows the current value at once.
+/// Needed so time labels do not wake the UI when they are not visible.
 class AppClockBuilder<T> extends StatefulWidget {
   final ValueListenable<T> listenable;
   final bool live;
@@ -76,12 +76,12 @@ class _AppClockBuilderState<T> extends State<AppClockBuilder<T>> {
     if (widget.live && mounted) setState(() {});
   }
 
-  // Значення читаємо в момент побудови: перебудова з боку батька завжди показує актуальне
+  // The value is read at build time: a rebuild from the parent always shows the current one
   @override
   Widget build(BuildContext context) => widget.builder(context, widget.listenable.value);
 }
 
-/// Тонка смужка прогресу (згорнутий та міні-плеєр): оновлюється в проміле, а не на кожну подію позиції
+/// A thin progress bar (collapsed and mini player): updates in per mille, not on every position event
 class AppProgressLine extends StatelessWidget {
   final Player player;
   final double height;
@@ -113,7 +113,7 @@ class AppProgressLine extends StatelessWidget {
   }
 }
 
-/// Скляна поверхня оверлею (така сама, як у AppOverlayButton)
+/// Glass overlay surface (the same as in AppOverlayButton)
 BoxDecoration _glass({double radius = 8, bool hover = false}) {
   var bg = const Color(0xFF16161A).withValues(alpha: 0.55);
   if (hover) bg = Color.alphaBlend(Colors.white.withValues(alpha: 0.08), bg);
@@ -125,12 +125,12 @@ BoxDecoration _glass({double radius = 8, bool hover = false}) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Гучність
+// Volume
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Кнопка гучності з повзунком, що висувається. Повзунок завжди змонтований (не зникає
-/// й не «губить» ховер), лишається розкритим під час перетягування навіть коли курсор
-/// вийшов за межі, а клікабельна зона займає всю висоту.
+/// A volume button with a sliding-out slider. The slider is always mounted (it does not disappear
+/// or "lose" hover), stays open while dragging even when the cursor
+/// left the bounds, and the clickable area takes the full height.
 class AppVolumeControl extends StatefulWidget {
   final double scale;
   final double volume; // 0..100
@@ -170,7 +170,7 @@ class _AppVolumeControlState extends State<AppVolumeControl> {
         : (widget.volume > 50 ? Symbols.volume_up_rounded : Symbols.volume_down_rounded);
 
     final double btnW = 38 * scale;
-    final double sliderW = 92 * scale; // зона повзунка (разом з відступами)
+    final double sliderW = 92 * scale; // slider zone (with the padding)
     final double trackW = 70 * scale;
 
     return MouseRegion(
@@ -210,7 +210,7 @@ class _AppVolumeControlState extends State<AppVolumeControl> {
                     ),
                   ),
                 ),
-                // Зона повзунка: вся висота, відступи по боках теж реагують
+                // Slider zone: full height, the side padding responds too
                 GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTapDown: (d) => _setFromDx(d.localPosition.dx - 6 * scale, trackW),
@@ -287,26 +287,26 @@ class _VolumePainter extends CustomPainter {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Повзунок прогресу
+// Progress slider
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Повзунок прогресу: великий хітбокс, ховер-підсвітка до курсора, буфер, сегменти глав,
-/// прив'язка до глав, перетягування з плавним слідуванням і прев'ю кадру перемотки.
+/// Progress slider: a large hitbox, hover highlight up to the cursor, buffer, chapter segments,
+/// snapping to chapters, dragging with smooth following and a seek frame preview.
 class AppSeekBar extends StatefulWidget {
   final double scale;
   final Player player;
   final List<VideoChapter> chapters;
 
-  /// false — панель прихована: смужка не стежить за позицією (жодних кадрів вхолосту)
+  /// false: the panel is hidden: the bar does not follow the position (no idle frames)
   final bool live;
 
-  /// Висота зони дотику (за замовчуванням 30 × scale; на телефоні — 48 dp)
+  /// Height of the touch zone (30 × scale by default; 48 dp on a phone)
   final double? hitHeight;
 
-  /// Масштаб підказки з прев'ю кадру (за замовчуванням дорівнює scale)
+  /// Scale of the frame-preview tooltip (equals scale by default)
   final double? bubbleScale;
 
-  /// Палець/курсор почав (true) або закінчив (false) перетягування — щоб панелі не ховались посеред жесту
+  /// A finger/cursor started (true) or finished (false) dragging: so the panels do not hide mid-gesture
   final ValueChanged<bool>? onDragChanged;
 
   const AppSeekBar({
@@ -404,8 +404,8 @@ class _AppSeekBarState extends State<AppSeekBar> {
       _dragFraction = f;
       _hoverX = dx.clamp(0.0, width);
     });
-    // Потік (мережа): під час перетягування рушій не засипаємо перемотками — вони зависають, остання йде при відпусканні.
-    // Локальний файл перемотується «наживо» (з прев'ю кадрів).
+    // A stream (network): during dragging we do not flood the engine with seeks, they hang; the last one goes on release.
+    // A local file seeks "live" (with frame previews).
     if (_drag && !force && !SeekPreviewService.supports(_currentUri())) return;
     final now = DateTime.now();
     if (force || now.difference(_lastSeek).inMilliseconds >= 40) {
@@ -414,7 +414,7 @@ class _AppSeekBarState extends State<AppSeekBar> {
     }
   }
 
-  /// Палець відпущено (або жест скасовано): остаточна перемотка й повне скидання стану перетягування
+  /// The finger is released (or the gesture is cancelled): the final seek and a full reset of the drag state
   void _finishDrag({bool seek = true}) {
     if (seek && _drag && _total > Duration.zero) {
       _lastSeek = DateTime.now();
@@ -444,7 +444,7 @@ class _AppSeekBarState extends State<AppSeekBar> {
     return LayoutBuilder(
       builder: (context, c) {
         final width = c.maxWidth;
-        // Перемальовуємо смужку лише коли вона зсунулась на фізичний піксель
+        // We repaint the bar only when it moved by a physical pixel
         _progress.steps = width * dpr;
         return SizedBox(
           height: hitH,
@@ -463,7 +463,7 @@ class _AppSeekBarState extends State<AppSeekBar> {
                   },
                   onExit: (_) => setState(() => _hover = false),
                   onHover: (e) => _onHover(e.localPosition.dx, width),
-                  // Прямі події вказівника замість жестів: перетягування не може «зависнути» через конкуренцію жестів
+                  // Raw pointer events instead of gestures: dragging cannot "hang" because of gesture competition
                   child: Listener(
                     behavior: HitTestBehavior.opaque,
                     onPointerDown: (e) {
@@ -489,8 +489,8 @@ class _AppSeekBarState extends State<AppSeekBar> {
                     },
                     child: AppAnimatedValue(
                       value: active ? 1 : 0,
-                      // Позицію й буфер малює сам painter (repaint: _progress) — без перебудови віджетів.
-                      // Власний шар: рух бігунка чи курсора не перемальовує всю панель керування.
+                      // The painter itself draws the position and buffer (repaint: _progress), without rebuilding widgets.
+                      // Its own layer: moving the thumb or cursor does not repaint the whole control panel.
                       builder: (context, t) => RepaintBoundary(
                         child: CustomPaint(
                           size: Size(width, hitH),
@@ -612,11 +612,11 @@ class _AppSeekBarState extends State<AppSeekBar> {
 
 class _SeekPainter extends CustomPainter {
   final ClockProgress progress;
-  final double? dragFraction; // під час перетягування — положення пальця/курсора
+  final double? dragFraction; // while dragging, the position of the finger / cursor
   final double? hoverFraction;
   final List<double> chapters;
   final double scale;
-  final double t; // 0..1 — наскільки «розкрита» смужка (ховер/перетягування)
+  final double t; // 0..1: how "expanded" the bar is (hover / drag)
 
   _SeekPainter({
     required this.progress,
@@ -673,7 +673,7 @@ class _SeekPainter extends CustomPainter {
       band(s, playedX, s, e, act);
     }
 
-    // Бігунок у стилі повзунків кіта: акцентове кільце з темною крапкою всередині
+    // A thumb in the style of the kit's sliders: an accent ring with a dark dot inside
     final thumbR = (6.0 + 1.5 * t) * scale;
     final cx = playedX.clamp(thumbR, w - thumbR);
     if (t > 0.01) {

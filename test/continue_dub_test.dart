@@ -1,5 +1,5 @@
-// «Продовжити перегляд» як список «Дивлюсь»: порядок за переглядом, тайтли поза списком, «Нова серія» лише в обраній
-// озвучці; пріоритет команд для кнопки «Дивитись».
+// "Продовжити перегляд" as the "Дивлюсь" list: order by viewing, titles outside the list, "Нова серія" only in the chosen
+// dub; team priority for the "Дивитись" button.
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -39,7 +39,7 @@ void main() {
       store.setLast('hikka:a', '3', 'mikai|x|1');
       store.setAvailable('hikka:a', 'mikai|x|1', 'Inari', 5);
       expect(ContinueWatching.dubOf(store, 'hikka:a'), (5, 'Inari', 5));
-      store.setLast('hikka:a', '3', 'mikai|x|2'); // перейшов на іншу команду
+      store.setLast('hikka:a', '3', 'mikai|x|2'); // switched to another team
       expect(ContinueWatching.dubOf(store, 'hikka:a').$1, isNull, reason: 'дані попередньої команди не підходять');
       expect(ContinueWatching.dubOf(store, 'hikka:none').$1, isNull);
     });
@@ -110,7 +110,7 @@ void main() {
     test('серед тих, де є наступна серія, вибір за пріоритетом, а не просто перший зі знайдених', () {
       StorageService.saveWatchTeamPriority(['Glass Moon', 'Inari']);
       final l = load([g('a', 'Amanogawa', 9), g('i', 'Inari', 19), g('m', 'Glass Moon', 15), g('f', 'FanVoxUA', 19)]);
-      store.setPinnedGroup('hikka:a', 'a'); // обрана раніше, але в ній лише 9 серій
+      store.setPinnedGroup('hikka:a', 'a'); // chosen earlier, but it has only 9 episodes
       expect(l.defaultGroup(store, seen: 11)!.id, 'm', reason: 'Glass Moon першою в пріоритеті й має 12-ту');
       expect(l.defaultGroup(store, seen: 16)!.id, 'i', reason: 'у Glass Moon лише 15 серій: наступна за пріоритетом — Inari');
       expect(l.defaultGroup(store, seen: 3)!.id, 'a', reason: 'у обраній для тайтлу 4-та є, тож лишається вона');
@@ -205,10 +205,10 @@ void main() {
       final fake = FakeHikka();
       final catalog = HikkaApi(sender: fake.call, retryDelay: Duration.zero);
 
-      // Локально дивились ще й інший тайтл, якого немає в списках, — пізніше за «Дивлюсь»
+      // Another title not in the lists was also watched locally, later than "Дивлюсь"
       store
-        ..setLast('hikka:$slug', '2', 'mikai|x|1') // раніше
-        ..setLast('hikka:$ongoingSlug', '3', 'g'); // пізніше, поза списком
+        ..setLast('hikka:$slug', '2', 'mikai|x|1') // earlier
+        ..setLast('hikka:$ongoingSlug', '3', 'g'); // later, outside the list
       final items = await ContinueWatching.load(store: store, api: HikkaApi(sender: (r) async {
         final path = r.url.path;
         if (path.contains('/watch/')) return server.call(r);

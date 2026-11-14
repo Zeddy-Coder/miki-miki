@@ -15,18 +15,18 @@ class BottomDock extends StatefulWidget {
   final double scale;
   final Player player;
   final double currentSpeed;
-  /// Гучність і «mute»: слухаємо лише повзунок гучності, а не весь док
+  /// Volume and "mute": we listen only to the volume slider, not the whole dock
   final ValueListenable<VolumeState> volume;
   final bool isFullscreen;
   final String? drawerOwner;
   final bool isEpisodesOpen;
   final List<VideoChapter> chapters;
 
-  /// false — панель прихована: підписи часу, прогрес і розділ не стежать за відтворенням
-  /// (інтерфейс не прокидається вхолосту), а при показі одразу оновлюються
+  /// false: the panel is hidden: time labels, progress and chapter do not follow playback
+  /// (the UI does not wake up idle), and on showing they update at once
   final bool live;
 
-  /// Anime4K зараз працює (на кнопці з'являється індикатор)
+  /// Anime4K is working now (an indicator appears on the button)
   final bool anime4kActive;
   final GlobalKey anime4kKey;
   final GlobalKey subsKey;
@@ -46,7 +46,7 @@ class BottomDock extends StatefulWidget {
   final VoidCallback onEpisodesTap;
   final VoidCallback onChaptersTap;
 
-  /// «Попередній / наступний»: типово — наступний файл черги; для серій із сайту задає контролер
+  /// "Previous / next": by default the next queue file; for site episodes the controller sets it
   final VoidCallback? onPrevious;
   final VoidCallback? onNext;
 
@@ -90,7 +90,7 @@ class BottomDock extends StatefulWidget {
 class _BottomDockState extends State<BottomDock> {
   late PlaybackClock _clock;
 
-  /// Номер поточного розділу: змінюється лише на межі розділів, а не на кожну подію позиції
+  /// Current chapter number: changes only at chapter boundaries, not on every position event
   late ClockValue<int> _chapterIdx;
 
   @override
@@ -126,12 +126,12 @@ class _BottomDockState extends State<BottomDock> {
     final scale = widget.scale;
     final player = widget.player;
 
-    // Активний стан кнопки = відкрите її меню (навіть якщо ви зайшли в підменю через «Налаштування» — тоді активна лише кнопка налаштувань)
+    // The button's active state = its menu is open (even if you entered a submenu via "Налаштування", then only the settings button is active)
     final bool isA4kOpen = widget.drawerOwner == 'anime4k';
     final bool isSubActive = widget.drawerOwner == 'subs';
     final bool isAudActive = widget.drawerOwner == 'audio';
     final bool isSpdActive = widget.drawerOwner == 'speed';
-    // Однакова ширина обох міток (за довжиною тривалості), щоб сікбар був відцентрований
+    // The same width of both labels (by the duration length) so the seek bar is centered
     final String durText = AppFormatters.formatTime(player.state.duration);
     final double timeW = (durText.length.clamp(4, 8) * 7.6 + 22) * scale;
     final bool seekButtons = StorageService.getSeekButtons();
@@ -178,7 +178,7 @@ class _BottomDockState extends State<BottomDock> {
               final double centerW = (seekButtons ? 212 : 128) * scale;
               final double rightFull = 412 * scale;
               final bool symmetric = w >= 2 * rightFull + centerW + 48 * scale;
-              // Місця мало — «Епізоди» стає іконкою (кнопки не стискаємо)
+              // Little room: "Епізоди" becomes an icon (we do not squeeze the buttons)
               final bool compactEp = !symmetric && (w - centerW - rightFull - 24 * scale) < 52 * scale;
               final double rightW = (compactEp ? 340 : 412) * scale;
               final double needed = 52 * scale + centerW + rightW + 24 * scale;
@@ -450,7 +450,7 @@ class _BottomDockState extends State<BottomDock> {
                         right,
                       ],
               );
-              // Крайній випадок: зовсім вузьке вікно — стискаємо весь ряд як одне ціле
+              // Edge case: a very narrow window, so we shrink the whole row as one piece
               if (w < needed) {
                 row = FittedBox(fit: BoxFit.scaleDown, child: SizedBox(width: needed, child: row));
               }

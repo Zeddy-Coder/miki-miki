@@ -4,15 +4,15 @@ import 'package:flutter/services.dart';
 import 'player_state_controller.dart';
 import 'shortcut_catalog.dart';
 
-/// Обробка гарячих клавіш за каталогом [ShortcutCatalog].
-/// Використовує фізичні клавіші, тому комбінації працюють в будь-якій розкладці.
+/// Handles hotkeys by the [ShortcutCatalog].
+/// Uses physical keys, so combinations work in any keyboard layout.
 class KeyboardShortcuts {
   KeyboardShortcuts._();
 
-  /// Коли відео ще не відкрито, діють лише ці дії
+  /// Until a video is opened, only these actions apply
   static const Set<String> _allowedWithoutMedia = {'open_file', 'help', 'fullscreen', 'escape', 'ontop'};
 
-  /// Фокус у текстовому полі — клавіші плеєра не перехоплюємо
+  /// Focus in a text field: we do not intercept player keys
   static bool _isTyping() {
     final ctx = FocusManager.instance.primaryFocus?.context;
     if (ctx == null) return false;
@@ -24,7 +24,7 @@ class KeyboardShortcuts {
     if (_isTyping()) return KeyEventResult.ignored;
 
     final keyboard = HardwareKeyboard.instance;
-    // Win+клавіша — системні комбінації
+    // Win+key: system combinations
     if (keyboard.isMetaPressed) return KeyEventResult.ignored;
 
     final def = ShortcutCatalog.find(
@@ -37,7 +37,7 @@ class KeyboardShortcuts {
     if (def == null) return KeyEventResult.ignored;
     if (c.isHome && !_allowedWithoutMedia.contains(def.id)) return KeyEventResult.ignored;
 
-    // Утримання клавіші повторює лише «безперервні» дії (перемотка, гучність…)
+    // Holding a key repeats only "continuous" actions (seek, volume…)
     if (event is KeyRepeatEvent && !def.repeat) return KeyEventResult.handled;
 
     c.handleInteraction();

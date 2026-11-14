@@ -9,7 +9,7 @@ import '../app_animation_kit.dart';
 import 'hikka_cards.dart';
 import 'hikka_common.dart';
 
-/// Усі персонажі аніме: сітка портретів із позначкою «Головний» / «Другорядний»
+/// All characters of an anime: portrait grids by the "Головні" and "Другорядні" sections
 class HikkaAnimeCharactersPage extends StatefulWidget {
   final HikkaRoute route;
   final double scale;
@@ -28,7 +28,7 @@ class _HikkaAnimeCharactersPageState extends State<HikkaAnimeCharactersPage> {
   @override
   void initState() {
     super.initState();
-    // Список лишається в маршруті: повернувшись «Назад» від персонажа, людина бачить те саме місце
+    // The list stays in the route: returning with "Back" from a character, the person sees the same place
     final cached = widget.route.memo['pager'];
     if (cached is HikkaPager<HikkaCharacterRole>) {
       _pager = cached;
@@ -65,11 +65,9 @@ class _HikkaAnimeCharactersPageState extends State<HikkaAnimeCharactersPage> {
       maxTileWidth: 150,
       emptyIcon: Symbols.person_search_rounded,
       emptyText: 'Для цього аніме ще немає персонажів',
-      itemBuilder: (context, r) => HikkaCharacterCard(
-        character: r.character,
-        scale: scale,
-        caption: r.main ? 'Головний' : 'Другорядний',
-      ),
+      // The server returns main characters first: the grid splits into "Головні" and "Другорядні"
+      sectionOf: (r) => r.main ? 'Головні персонажі' : 'Другорядні персонажі',
+      itemBuilder: (context, r) => HikkaCharacterCard(character: r.character, scale: scale),
     );
   }
 }

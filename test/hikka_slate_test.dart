@@ -6,7 +6,7 @@ import 'package:miki_miki/widgets/hikka/hikka_slate_view.dart';
 
 import 'support/hikka_fakes.dart';
 
-// Текст статті Hikka (документ Slate): розмітка, посилання, спойлери, картинки. Без шрифтів і знімків.
+// Hikka article text (a Slate document): markup, links, spoilers, images. No fonts or screenshots.
 
 SlateNode leaf(String text, {bool bold = false, bool italic = false}) => SlateNode(text: text, bold: bold, italic: italic);
 SlateNode node(String type, List<SlateNode> children, {String? url}) => SlateNode(type: type, children: children, url: url);
@@ -96,7 +96,7 @@ void main() {
     await tester.pump();
     expect(got, ['https://hikka.io/anime/frieren']);
 
-    // Без власного обробника: аніме відкривається в застосунку, а зовнішнє посилання — у браузері
+    // Without a custom handler: an anime opens in the app, and an external link in the browser
     await tester.pumpWidget(host(HikkaSlateView(
       scale: 1,
       nodes: [

@@ -2,9 +2,9 @@ import 'package:media_kit/media_kit.dart';
 
 import 'lang_match.dart';
 
-/// Що саме плеєр має увімкнути для щойно відкритого файлу
+/// What exactly the player should enable for a freshly opened file
 class TrackPlan {
-  /// `null` — нічого не міняти (лишається вибір mpv); [SubtitleTrack.no] — вимкнути субтитри
+  /// `null`: change nothing (the mpv choice stays); [SubtitleTrack.no] turns subtitles off
   final SubtitleTrack? subtitle;
   final AudioTrack? audio;
 
@@ -13,26 +13,26 @@ class TrackPlan {
   bool get isEmpty => subtitle == null && audio == null;
 }
 
-/// Автовибір доріжок субтитрів і звуку за пріоритетом мов із налаштувань («Пріоритет мов субтитрів / аудіодоріжок»).
+/// Auto-selecting subtitle and audio tracks by the language priority from settings ("Пріоритет мов субтитрів / аудіодоріжок").
 ///
-/// Сам mpv мову з налаштувань не знає: за замовчуванням він вмикає лише доріжку з позначкою «за замовчуванням», тож
-/// у файлі, де такої позначки нема, субтитрів не видно, хоч би що було в налаштуваннях. Тут доріжку обирає плеєр:
-/// перша мова зі списку, для якої є доріжка. Мову беремо з мітки доріжки (`ukr`, `uk`, `pt-BR`), а коли мітки нема
-/// чи вона «und» — із назви («Українські», «Ukrainian [FanVox]», «UA»).
+/// mpv itself does not know the language from settings: by default it turns on only a track marked "default", so
+/// in a file without such a mark no subtitles are visible, whatever the settings say. Here the player picks the track:
+/// the first language from the list that has a track. The language is taken from the track label (`ukr`, `uk`, `pt-BR`), and when there is no label
+/// or it is "und", from the title ("Українські", "Ukrainian [FanVox]", "UA").
 class TrackDefaults {
   const TrackDefaults._();
 
-  /// Не повні субтитри: лише написи, пісні, «примусові». Їх беремо, коли повних цією мовою нема
+  /// Not full subtitles: only signs, songs, "forced". We take them when there are no full ones in this language
   static final RegExp _partialSubs = RegExp(r'\b(signs?|songs?|forced|karaoke)\b|надпис|написи|пісн|караоке', caseSensitive: false);
 
-  /// Не основне аудіо: коментарі режисера, тифлокоментар
+  /// Not the main audio: director's commentary, audio description
   static final RegExp _extraAudio = RegExp(r'\b(commentary|descriptive|description)\b|коментар|тифлокоментар', caseSensitive: false);
 
   static _Cand<T>? _pick<T>(List<_Cand<T>> cands, List<String> priorities, bool Function(String title) lesser) {
     for (final code in priorities) {
       final fit = cands.where((c) => LangMatch.matches(code, language: c.language, title: c.title)).toList();
       if (fit.isEmpty) continue;
-      // Повна доріжка перед неповною, текстова перед зображенням, «за замовчуванням» перед рештою, далі — як у файлі
+      // A full track before a partial one, text before image, "default" before the rest, then as in the file
       int rank(_Cand<T> c) => (lesser(c.title ?? '') ? 4 : 0) + (c.image ? 2 : 0) + (c.isDefault ? 0 : 1);
       fit.sort((a, b) {
         final r = rank(a).compareTo(rank(b));
@@ -43,7 +43,7 @@ class TrackDefaults {
     return null;
   }
 
-  /// Яку доріжку субтитрів увімкнути: перша мова зі списку, для якої вона є. `null` — жодної такої нема
+  /// Which subtitle track to turn on: the first language from the list that has one. `null`: there is none
   static SubtitleTrack? pickSubtitle(List<SubtitleTrack> tracks, List<String> priorities) {
     final cands = <_Cand<SubtitleTrack>>[
       for (int i = 0; i < tracks.length; i++)
@@ -53,7 +53,7 @@ class TrackDefaults {
     return _pick(cands, priorities, _partialSubs.hasMatch)?.track;
   }
 
-  /// Яку аудіодоріжку увімкнути: перша мова зі списку, для якої вона є. `null` — жодної такої нема
+  /// Which audio track to turn on: the first language from the list that has one. `null`: there is none
   static AudioTrack? pickAudio(List<AudioTrack> tracks, List<String> priorities) {
     final cands = <_Cand<AudioTrack>>[
       for (int i = 0; i < tracks.length; i++)
@@ -63,8 +63,8 @@ class TrackDefaults {
     return _pick(cands, priorities, _extraAudio.hasMatch)?.track;
   }
 
-  /// Вибір для файлу з наявними [tracks]. Субтитри вимкнено в налаштуваннях ([subtitlesEnabled] = false) — `no`,
-  /// але лише коли в файлі є бодай одна доріжка (інакше нічого й вимикати).
+  /// Choice for a file with the given [tracks]. Subtitles are off in settings ([subtitlesEnabled] = false): `no`,
+  /// but only when the file has at least one track (otherwise there is nothing to turn off).
   static TrackPlan plan(Tracks tracks, {required bool subtitlesEnabled, required List<String> subPriorities, required List<String> audioPriorities}) {
     final hasSubs = tracks.subtitle.any((t) => t.id != 'auto' && t.id != 'no');
     SubtitleTrack? sub;

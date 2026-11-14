@@ -16,7 +16,7 @@ import 'package:miki_miki/services/shortcut_catalog.dart';
 import 'package:miki_miki/services/ui_theme_service.dart';
 import 'package:miki_miki/widgets/side_panel.dart';
 
-/// Справжні шрифти для скриншотів: Arial → Roboto, іконки Material Symbols.
+/// Real fonts for screenshots: Arial → Roboto, Material Symbols icons.
 Future<void> loadTestFonts() async {
   Future<ByteData> bytes(String path) async => ByteData.sublistView(Uint8List.fromList(await File(path).readAsBytes()));
 
@@ -67,7 +67,7 @@ class FakePlayer extends Fake implements Player {
     playing: false,
   );
 
-  /// Імітація тіку mpv `time-pos`: оновлює state і шле подію в потік
+  /// Emulates an mpv `time-pos` tick: updates the state and sends an event to the stream
   void tickPosition(Duration p) {
     current = current.copyWith(position: p);
     s.pos.add(p);
@@ -116,7 +116,7 @@ class FakePlayer extends Fake implements Player {
   }
 }
 
-/// Контролер-імітація: записує команди mpv і сповіщення, без справжнього рушія.
+/// A controller fake: records mpv commands and notifications, without a real engine.
 class FakeController extends Fake implements PlayerStateController {
   FakeController({KeyScheme scheme = KeyScheme.standard}) : keyScheme = scheme {
     _anime4k = Anime4kController(
@@ -215,12 +215,12 @@ class FakeController extends Fake implements PlayerStateController {
   }
 }
 
-/// Скидає тему до стандартної (темна), щоб тести не залежали одне від одного
+/// Resets the theme to the default (dark) so tests do not depend on each other
 void resetTheme() {
   uiTheme.setThemeMode('dark');
 }
 
-/// Чекає на справжній ввід-вивід (файли, assets), який у FakeAsync сам не просувається
+/// Waits for real I/O (files, assets), which does not advance by itself in FakeAsync
 Future<void> settle(WidgetTester tester, bool Function() done, {int maxTries = 150}) async {
   for (var i = 0; i < maxTries && !done(); i++) {
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));

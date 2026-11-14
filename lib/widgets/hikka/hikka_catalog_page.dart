@@ -17,7 +17,7 @@ import 'hikka_common.dart';
 import 'hikka_filter_sheet.dart';
 import 'hikka_page_kit.dart';
 
-/// Розділ «Каталог» в «Огляді»: пошук, фільтри з панеллю та нескінченна сітка карток.
+/// The "Каталог" section in "Огляд": search, filters with a panel and an infinite grid of cards.
 class HikkaCatalogPage extends StatefulWidget {
   final double scale;
   final double bottomInset;
@@ -83,7 +83,7 @@ class _HikkaCatalogPageState extends State<HikkaCatalogPage> {
     super.dispose();
   }
 
-  /// Пошукова панель «Головної» просить курсор у полі пошуку: ставимо його, коли сторінка вже на екрані
+  /// The "Головна" search bar asks for the cursor in the search field: we place it once the page is on screen
   void _takeSearchFocus() {
     if (!HikkaNav.instance.takeFocusSearch()) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -91,11 +91,11 @@ class _HikkaCatalogPageState extends State<HikkaCatalogPage> {
     });
   }
 
-  /// Умови, передані з іншої сторінки (кнопка «Усі», жанр на сторінці аніме)
+  /// Conditions passed from another page (the "Усі" button, a genre on the anime page)
   void _takePending() {
     if (!mounted) return;
     final nav = HikkaNav.instance;
-    // Користувач пішов на іншу вкладку чи сторінку — панель фільтрів не лишається відкритою позаду
+    // The user went to another tab or page: the filter panel does not stay open behind
     if (_sheetOpen && (nav.main != MainTab.discover || nav.tab != HikkaTab.anime || nav.top != null)) setState(() => _sheetOpen = false);
     if (nav.hasPendingFilters) {
       final f = nav.takePendingFilters();
@@ -104,7 +104,7 @@ class _HikkaCatalogPageState extends State<HikkaCatalogPage> {
     if (nav.wantsSearchFocus) _takeSearchFocus();
   }
 
-  /// «Назад» спершу закриває відкриту панель фільтрів
+  /// "Back" first closes an open filter panel
   bool _backGuard() {
     if (!_sheetOpen) return false;
     setState(() => _sheetOpen = false);

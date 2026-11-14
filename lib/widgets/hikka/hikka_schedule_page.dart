@@ -12,9 +12,10 @@ import '../app_animation_kit.dart';
 import '../app_ui_kit.dart';
 import 'hikka_common.dart';
 import 'hikka_page_kit.dart';
+import '../../utils/app_clock.dart';
 
-/// Вкладка «Календар»: вкладки днів тижня (Пн–Нд), під ними серії вибраного дня. Відкривається на сьогоднішньому дні;
-/// дні гортаються свайпом. Показуються серії найближчих семи діб; решта розкладу підвантажується, поки не покриє тиждень.
+/// The "Календар" tab: weekday tabs (Mon–Sun) with the selected day's episodes below. Opens on today;
+/// days flip by swipe. Episodes of the next seven days are shown; the rest of the schedule loads until it covers a week.
 class HikkaSchedulePage extends StatefulWidget {
   final double scale;
   final double bottomInset;
@@ -34,8 +35,8 @@ class _HikkaSchedulePageState extends State<HikkaSchedulePage> {
   late bool _adult;
   late int _token;
 
-  /// Вибраний день тижня: 0 — понеділок
-  late int _day = DateTime.now().weekday - 1;
+  /// Selected weekday: 0 is Monday
+  late int _day = AppClock.now().weekday - 1;
 
   @override
   void initState() {
@@ -43,7 +44,7 @@ class _HikkaSchedulePageState extends State<HikkaSchedulePage> {
     _adult = HikkaPrefs.instance.allowAdult;
     _token = widget.refreshToken;
     _pager = HikkaPager<HikkaScheduleEntry>(
-      // Відповідь важка (≈3 КБ на серію: з описом аніме), тож береться порціями
+      // The response is heavy (≈3 KB per episode: with the anime description), so it is fetched in portions
       (page) => HikkaApi.instance.schedule(page: page, size: 50, allowAdult: HikkaPrefs.instance.allowAdult),
       keyOf: (e) => '${e.anime.slug}#${e.episode}',
     );
@@ -62,24 +63,27 @@ class _HikkaSchedulePageState extends State<HikkaSchedulePage> {
     }
   }
 
+  HikkaHeaderSlot? _slot;
+
   @override
   void dispose() {
+    _slot?.clear();
     _pager.removeListener(_onPager);
     _scroll.dispose();
     _pager.dispose();
     super.dispose();
   }
 
-  /// Початок сьогоднішньої доби
+  /// Start of today
   static DateTime _today() {
-    final n = DateTime.now();
+    final n = AppClock.now();
     return DateTime(n.year, n.month, n.day);
   }
 
   void _onPager() {
     if (!mounted) return;
     setState(() {});
-    // Докантажуємо розклад, поки він не покриє найближчі сім діб
+    // We load the schedule until it covers the next seven days
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_pager.hasMore || _pager.loading || _pager.error != null || _pager.items.isEmpty) return;
       final last = _pager.items.map((e) => e.time).reduce((a, b) => a.isAfter(b) ? a : b);
@@ -87,7 +91,7 @@ class _HikkaSchedulePageState extends State<HikkaSchedulePage> {
     });
   }
 
-  /// Серії вибраного дня тижня в межах найближчих семи діб, за часом
+  /// Episodes of the selected weekday within the next seven days, by time
   List<HikkaScheduleEntry> _entriesOf(int day) {
     final from = _today();
     final to = from.add(const Duration(days: 7));
@@ -100,7 +104,7 @@ class _HikkaSchedulePageState extends State<HikkaSchedulePage> {
 
   Widget _tabs(double pad) {
     final scale = widget.scale;
-    final today = DateTime.now().weekday - 1;
+    final today = AppClock.now().weekday - 1;
     return Padding(
       padding: EdgeInsets.fromLTRB(pad, 4 * scale, pad, 10 * scale),
       child: Align(
@@ -171,18 +175,22 @@ class _HikkaSchedulePageState extends State<HikkaSchedulePage> {
         text: _pager.loading ? 'Завантажую розклад…' : 'На цей день серій немає',
       );
     }
-    return AppScrollbar(
-      scale: scale,
-      controller: _scroll,
-      child: ListView.builder(
+    // Builder: the header inset is provided by `HikkaCollapsingHeader`, so it can be read only from a context below it
+    // (with the page's own context it was 0, and the first episode stayed under the day tabs)
+    return Builder(
+      builder: (context) => AppScrollbar(
+        scale: scale,
         controller: _scroll,
-        padding: EdgeInsets.fromLTRB(pad, 4 * scale + AppHeaderInset.of(context), pad, 24 * scale + widget.bottomInset),
-        itemCount: entries.length,
-        itemBuilder: (context, i) => Align(
-          alignment: Alignment.topLeft,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: 780 * (AppPlatform.isMobile ? 1 : scale)),
-            child: _EpisodeTile(entry: entries[i], scale: scale),
+        child: ListView.builder(
+          controller: _scroll,
+          padding: EdgeInsets.fromLTRB(pad, 4 * scale + AppHeaderInset.of(context), pad, 24 * scale + widget.bottomInset),
+          itemCount: entries.length,
+          itemBuilder: (context, i) => Align(
+            alignment: Alignment.topLeft,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: 780 * (AppPlatform.isMobile ? 1 : scale)),
+              child: _EpisodeTile(entry: entries[i], scale: scale),
+            ),
           ),
         ),
       ),
@@ -203,17 +211,23 @@ class _HikkaSchedulePageState extends State<HikkaSchedulePage> {
       }
       return _ScheduleSkeleton(scale: scale, pad: pad);
     }
-    return HikkaCollapsingHeader(
-      resetOn: _day,
-      header: _tabs(pad),
-      body: HikkaSwipeTabs(
-        swipe: false, // свайп убік — для вкладок «Огляду» вище, дні перемикаються тапом
-        index: _day,
-        count: _days.length,
-        onChanged: (i) => setState(() => _day = i),
-        child: _list(pad),
-      ),
+    final body = HikkaSwipeTabs(
+      swipe: false, // a sideways swipe belongs to the "Огляд" tabs above, days switch by tap
+      index: _day,
+      count: _days.length,
+      onChanged: (i) => setState(() => _day = i),
+      child: _list(pad),
     );
+    // The day tabs are a part of the page's header (the nearest collapsing header above): they hide and show with it as one block.
+    // Without such a header (the page on its own) it keeps its own.
+    final slot = hikkaHeaderSlot(context);
+    if (slot == null) return HikkaCollapsingHeader(resetOn: _day, header: _tabs(pad), body: body);
+    _slot = slot;
+    final tabs = KeyedSubtree(key: const ValueKey('schedule-tabs'), child: _tabs(pad));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) slot.put(tabs, resetOn: _day);
+    });
+    return body;
   }
 }
 
@@ -227,7 +241,7 @@ class _EpisodeTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final a = entry.anime;
     final title = a.title(HikkaPrefs.instance.titleLang);
-    final now = DateTime.now();
+    final now = AppClock.now();
     final muted = uiTheme.textMuted;
     Widget fact(IconData icon, String text, {bool accent = false}) => Row(
           mainAxisSize: MainAxisSize.min,
@@ -291,7 +305,7 @@ class _EpisodeTile extends StatelessWidget {
   }
 }
 
-/// Заглушка розкладу: заголовок дня й кілька рядків серій
+/// Schedule placeholder: a day heading and a few episode rows
 class _ScheduleSkeleton extends StatelessWidget {
   final double scale;
   final double pad;

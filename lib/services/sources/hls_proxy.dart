@@ -1,9 +1,9 @@
-/// Локальний HLS-проксі: потік тягне застосунок (`dart:io`), а плеєр бере його з `127.0.0.1`.
+/// Local HLS proxy: the app pulls the stream (`dart:io`) and the player takes it from `127.0.0.1`.
 ///
-/// Навіщо. Деякі CDN (Moon: `mooncdn.online`, за Cloudflare) не пускають TLS-клієнт libmpv на Android (mbedtls):
-/// у журналі `tls: mbedtls_ssl_handshake returned …` і `HTTP error 403`, хоч той самий запит із Dart дає 206.
-/// Проксі переписує адреси списків (`#EXT-X-STREAM-INF`, сегменти, `URI="…"`) на локальні й відповідає на них
-/// даними з оригінального сервера з потрібними заголовками (Referer, User-Agent). Сам плеєр про сайт нічого не знає.
+/// Why. Some CDNs (Moon: `mooncdn.online`, behind Cloudflare) do not let libmpv's TLS client on Android (mbedtls) through:
+/// the log shows `tls: mbedtls_ssl_handshake returned …` and `HTTP error 403`, though the same request from Dart gives 206.
+/// The proxy rewrites playlist addresses (`#EXT-X-STREAM-INF`, segments, `URI="…"`) to local ones and answers them
+/// with data from the original server with the needed headers (Referer, User-Agent). The player itself knows nothing about the site.
 library;
 
 import 'dart:async';
@@ -17,7 +17,7 @@ class HlsProxy {
 
   static final HlsProxy instance = HlsProxy._();
 
-  /// Чи пускати відео Moon через проксі. На Android — так (libmpv там не проходить CDN); на ПК плеєр ходить напряму.
+  /// Whether to route Moon video through the proxy. On Android yes (libmpv cannot get through the CDN); on PC the player goes directly.
   static bool enabled = Platform.isAndroid;
 
   static const int _maxSessions = 40;
@@ -32,17 +32,17 @@ class HlsProxy {
   int _blocked = 0;
   final StreamController<int> _blockedEvents = StreamController<int>.broadcast();
 
-  /// Скільки відповідей на сегменти були відмовою (4xx/5xx) за весь час. Плеєр повторює кожен сегмент по кілька разів,
-  /// тож драйвер серій за цим лічильником швидко переходить на інший плеєр, а не чекає 30 с.
+  /// How many segment responses were refusals (4xx/5xx) over all time. The player retries each segment several times,
+  /// so the episode driver uses this counter to switch quickly to another player rather than wait 30 s.
   int get blockedCount => _blocked;
 
-  /// Подія при кожній відмові сегмента (значення — новий лічильник)
+  /// An event on each segment refusal (the value is the new counter)
   Stream<int> get blocked => _blockedEvents.stream;
 
-  /// Порт, на якому слухає проксі (після першого `wrap`)
+  /// The port the proxy listens on (after the first `wrap`)
   int? get port => _server?.port;
 
-  /// Адреса списку відтворення [url], що веде через проксі. `headers` — заголовки до оригінального сервера.
+  /// Address of playlist [url] that goes through the proxy. `headers` are headers for the original server.
   Future<String> wrap(String url, Map<String, String> headers) async {
     await _ensureStarted();
     final id = (_next++).toString();
@@ -72,7 +72,7 @@ class HlsProxy {
     return 'http://127.0.0.1:${_server!.port}/$id/${isList ? 'm' : 's'}/${base64Url.encode(utf8.encode(target.toString()))}/$tail';
   }
 
-  /// Переписує адреси в тексті списку на локальні. Чиста функція: без мережі.
+  /// Rewrites addresses in the playlist text to local ones. A pure function: no network.
   static String rewritePlaylist(String text, Uri base, String Function(Uri target) local) {
     final uriAttr = RegExp(r'URI="([^"]+)"');
     final out = <String>[];
@@ -116,9 +116,9 @@ class HlsProxy {
     }
   }
 
-  /// Заголовки, без яких CDN Moon (Cloudflare) відповідає 403: і `Accept`, і `Accept-Language` мусять бути в запиті
-  /// (браузер їх шле завжди; ffmpeg шле лише `Accept`). Перевірено на живому сервері: без `Accept-Language` — 403,
-  /// з обома — 200/206, а `Referer` і `User-Agent` значення не мають.
+  /// Headers without which Moon's CDN (Cloudflare) answers 403: both `Accept` and `Accept-Language` must be in the request
+  /// (a browser always sends them; ffmpeg sends only `Accept`). Verified on a live server: without `Accept-Language` it is 403,
+  /// with both it is 200/206, and `Referer` and `User-Agent` values do not matter.
   static const Map<String, String> browserDefaults = {'Accept': '*/*', 'Accept-Language': 'uk,en;q=0.8'};
 
   Future<HttpClientResponse> _open(Uri target, Map<String, String> headers, {String? range}) async {
@@ -151,7 +151,7 @@ class HlsProxy {
     final res = await _open(target, headers, range: req.headers.value(HttpHeaders.rangeHeader));
     final ms = DateTime.now().difference(started).inMilliseconds;
     if (res.statusCode >= 400) {
-      // Тіло відмови (сторінка захисту) коротко пишемо в журнал: за ним видно, що саме відсікає сервер
+      // We briefly log the refusal body (a protection page): it shows what exactly the server cuts off
       final bytes = await res.fold<List<int>>(<int>[], (a, b) => a.length < 4096 ? (a..addAll(b)) : a).timeout(const Duration(seconds: 15));
       _blocked++;
       if (_errorLogs++ < 3) {

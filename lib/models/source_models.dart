@@ -1,27 +1,27 @@
-/// Моделі джерел перегляду — Dart-версія `animesource.model` з Aniyomi: аніме, серії, відео, доріжки, таймкоди.
-/// Чиста Dart-логіка без Flutter: ними користуються парсери сайтів, сховища й плеєр.
+/// Watch-source models: a Dart version of Aniyomi's `animesource.model`: anime, episodes, videos, tracks, timestamps.
+/// Pure Dart logic without Flutter: used by site parsers, stores and the player.
 library;
 
 enum SAnimeStatus { unknown, ongoing, completed, licensed, cancelled, onHiatus }
 
-/// Аніме зі сторінки сайту-джерела (у списку — лише назва, обкладинка й адреса; решта — після `details`).
+/// An anime from a source site page (in a list: only title, cover and address; the rest after `details`).
 class SAnime {
-  /// Адреса сторінки: відносна до `baseUrl` джерела або повна — як її віддав сайт.
+  /// Page address: relative to the source's `baseUrl` or absolute, as the site returned it.
   final String url;
   final String title;
 
-  /// Оригінальна (латиницею / японською) назва, якщо сайт її показує — потрібна для зіставлення з Hikka.
+  /// Original (Latin / Japanese) title, if the site shows it; needed for matching with Hikka.
   final String? originalTitle;
   final String? thumbnailUrl;
   final String? description;
 
-  /// Студія
+  /// Studio
   final String? author;
   final List<String> genres;
   final SAnimeStatus status;
   final int? year;
 
-  /// Скільки серій вийшло / заплановано всього (якщо сайт повідомляє)
+  /// How many episodes have aired / are planned in total (if the site reports it)
   final int? episodesAired;
   final int? episodesTotal;
 
@@ -39,10 +39,10 @@ class SAnime {
     this.episodesTotal,
   });
 
-  /// Усі назви для зіставлення (українська + оригінальна)
+  /// All titles for matching (Ukrainian + original)
   List<String> get allTitles => [title, if (originalTitle != null && originalTitle!.isNotEmpty) originalTitle!];
 
-  /// Дописує поля зі сторінки докладно поверх даних зі списку (порожнє не затирає наявне).
+  /// Fills in fields from the detailed page on top of the list data (empty values do not overwrite existing ones).
   SAnime mergedWith(SAnime d) => SAnime(
         url: url,
         title: d.title.isNotEmpty ? d.title : title,
@@ -91,7 +91,7 @@ class SAnime {
   String toString() => 'SAnime($title, $url)';
 }
 
-/// Сторінка видачі (популярне / нове / пошук)
+/// Results page (popular / new / search)
 class SAnimePage {
   final List<SAnime> animes;
   final bool hasNextPage;
@@ -101,23 +101,23 @@ class SAnimePage {
   static const empty = SAnimePage([], false);
 }
 
-/// Серія (з конкретною озвучкою — у сайтів з кількома озвучками серія повторюється для кожної)
+/// Episode (with a specific dub; on sites with several dubs the episode repeats for each one)
 class SEpisode {
-  /// Адреса сторінки / плеєра / плейлиста серії — що саме, знає лише джерело
+  /// Address of the episode page / player / playlist; only the source knows which
   final String url;
 
-  /// Назва для показу: «Серія 3», «Сезон 2 · Серія 5», «Фільм»
+  /// Display name: "Серія 3", "Сезон 2 · Серія 5", "Фільм"
   final String name;
 
-  /// Номер серії в межах сезону (або наскрізний); `null` — невідомо
+  /// Episode number within the season (or continuous); `null` means unknown
   final double? number;
   final int? season;
 
-  /// Озвучка / команда (у Aniyomi — `scanlator`)
+  /// Dub / team (`scanlator` in Aniyomi)
   final String? voice;
   final DateTime? date;
 
-  /// Службові дані джерела (наприклад, адреса окремої звукової доріжки) — плеєр їх не чіпає
+  /// Source-internal data (e.g. the address of a separate audio track); the player does not touch it
   final String? data;
 
   const SEpisode({required this.url, required this.name, this.number, this.season, this.voice, this.date, this.data});
@@ -146,7 +146,7 @@ class SEpisode {
   String toString() => 'SEpisode($name${voice == null ? '' : ' · $voice'}, $url)';
 }
 
-/// Зовнішня доріжка (субтитри або звук)
+/// External track (subtitles or audio)
 class Track {
   final String url;
   final String lang;
@@ -156,7 +156,7 @@ class Track {
 
 enum ChapterType { opening, ending, recap, mixedOp, other }
 
-/// Таймкод опенінґу / ендінґу тощо (секунди)
+/// Timestamp of an opening / ending etc. (seconds)
 class TimeStamp {
   final double start;
   final double end;
@@ -166,28 +166,28 @@ class TimeStamp {
   const TimeStamp(this.start, this.end, this.name, [this.type = ChapterType.other]);
 }
 
-/// Готове до відтворення відео: пряме посилання + все, що потрібно плеєру.
+/// A video ready for playback: a direct link + everything the player needs.
 class Video {
-  /// Пряме посилання (mp4 / m3u8)
+  /// Direct link (mp4 / m3u8)
   final String url;
 
-  /// Підпис для вибору якості: «1080p», «Авто»
+  /// Label for quality selection: "1080p", "Авто"
   final String title;
 
-  /// Висота кадру, якщо відома
+  /// Frame height, if known
   final int? resolution;
   final int? bitrate;
 
-  /// Заголовки запиту (Referer, User-Agent, Cookie …)
+  /// Request headers (Referer, User-Agent, Cookie …)
   final Map<String, String> headers;
   final List<Track> subtitleTracks;
   final List<Track> audioTracks;
   final List<TimeStamp> timestamps;
 
-  /// Джерело радить саме це відео (у Aniyomi — `preferred`)
+  /// The source recommends this exact video (`preferred` in Aniyomi)
   final bool preferred;
 
-  /// Додаткові опції mpv «ключ → значення»
+  /// Extra mpv options "key → value"
   final Map<String, String> mpvOptions;
 
   const Video({
@@ -220,22 +220,22 @@ class Video {
   String toString() => 'Video($title, $url)';
 }
 
-/// Хостинг відео (у Aniyomi — `Hoster`): група відео з одного плеєра. Відео можуть бути вже відомі
-/// (`videos`) або завантажуватися окремо (`videos == null`, тоді їх дістає `AnimeSource.hosterVideos`).
+/// Video host (`Hoster` in Aniyomi): a group of videos from one player. The videos may already be known
+/// (`videos`) or loaded separately (`videos == null`; then `AnimeSource.hosterVideos` fetches them).
 class Hoster {
   final String name;
   final String url;
   final List<Video>? videos;
 
-  /// Службові дані джерела (для відкладеного завантаження відео)
+  /// Source-internal data (for deferred video loading)
   final String internalData;
 
   const Hoster({required this.name, this.url = '', this.videos, this.internalData = ''});
 }
 
-/// Вибір відео за побажанням користувача: `preferred` джерела має пріоритет, далі — найближча до
-/// бажаної висоти якість (не вища за неї, а якщо таких немає — найнижча з вищих).
-/// `maxHeight == 0` — найвища доступна.
+/// Picks a video by the user's preference: the source's `preferred` has priority, then the quality closest to
+/// the desired height (not higher; if there is none, the lowest of the higher ones).
+/// `maxHeight == 0` means the highest available.
 Video? pickVideo(List<Video> videos, {int maxHeight = 0}) {
   final usable = videos.where((v) => v.url.isNotEmpty).toList();
   if (usable.isEmpty) return null;

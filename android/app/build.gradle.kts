@@ -79,6 +79,17 @@ kotlin {
     }
 }
 
+// Push notifications (Firebase Cloud Messaging). Without android/app/google-services.json (downloaded from the Firebase console)
+// the app builds and works, only push stays off: the plugin is applied only when the file is present.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
+dependencies {
+    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
+    implementation("com.google.firebase:firebase-messaging")
+}
+
 flutter {
     source = "../.."
 }

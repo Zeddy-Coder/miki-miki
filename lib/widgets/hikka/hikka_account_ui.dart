@@ -7,6 +7,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import '../../constants/app_identity.dart';
 import '../../utils/platform_info.dart';
 import '../../services/hikka_auth.dart';
+import '../../services/settings_sync.dart';
 import '../../services/system_controls.dart';
 import '../../services/ui_theme_service.dart';
 import '../app_animation_kit.dart';
@@ -16,14 +17,14 @@ import 'hikka_watch_dialogs.dart';
 
 const Color _errorColor = Color(0xFFE57373);
 
-/// Вікно входу в Hikka: відкриває сторінку дозволу в браузері й чекає відповідь. Якщо автоматично не вийшло
-/// (порт зайнятий, застосунок вбило в фоні) — можна вставити адресу, на яку перекинув сайт.
+/// Hikka sign-in window: opens the consent page in a browser and waits for the response. If that did not work automatically
+/// (the port is busy, the app was killed in the background), you can paste the address the site redirected to.
 class HikkaLoginDialog extends StatefulWidget {
   final double scale;
 
   const HikkaLoginDialog({super.key, required this.scale});
 
-  /// Відкриває вікно й одразу починає вхід; `true`, якщо людина ввійшла
+  /// Opens the window and starts sign-in at once; `true` if the person signed in
   static Future<bool> show(BuildContext context, {required double scale}) async {
     final ok = await AppDialogs.show<bool>(context, builder: (_) => HikkaLoginDialog(scale: scale));
     return ok == true;
@@ -156,7 +157,7 @@ class _HikkaLoginDialogState extends State<HikkaLoginDialog> {
                 label: 'Відкрити знову',
                 onTap: () => unawaited(SystemControls.openUrl(_auth.authorizeUrl)),
               ),
-            // Браузер за замовчуванням може бути не тим, де людина ввійшла на hikka.io: вибір програми або посилання вручну
+            // The default browser may not be the one where the person is signed in on hikka.io: an app picker or a manual link
             if (waiting && AppPlatform.isAndroid)
               AppSecondaryButton(
                 scale: scale,
@@ -191,11 +192,71 @@ class _HikkaLoginDialogState extends State<HikkaLoginDialog> {
   }
 }
 
-/// Картка акаунта Hikka: гість із кнопкою входу або профіль із виходом і перемикачем синхронізації.
+/// The "Акаунт" window (the icon in the profile header): progress sync switch and sign-out
+class HikkaAccountDialog extends StatelessWidget {
+  final double scale;
+
+  const HikkaAccountDialog({super.key, required this.scale});
+
+  static Future<void> show(BuildContext context, {required double scale}) =>
+      AppDialogs.show<void>(context, builder: (_) => HikkaAccountDialog(scale: scale));
+
+  @override
+  Widget build(BuildContext context) {
+    final auth = HikkaAuth.instance;
+    final sync = SettingsSync.instance;
+    return ListenableBuilder(
+      listenable: Listenable.merge([auth, sync]),
+      builder: (context, _) => WatchDialogFrame(
+        scale: scale,
+        title: 'Акаунт',
+        icon: Symbols.manage_accounts_rounded,
+        body: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            HikkaToggleRow(
+              scale: scale,
+              title: 'Синхронізувати налаштування й теми',
+              subtitle: 'Вигляд, тема, мови, субтитри й місце зупинки в серіях однакові на телефоні та ПК.',
+              value: sync.enabled,
+              onChanged: (v) => sync.enabled = v,
+            ),
+            SizedBox(height: 10 * scale),
+            HikkaToggleRow(
+              scale: scale,
+              title: 'Передавати прогрес у списки',
+              subtitle: 'Переглянута серія додається в «Дивлюсь» і збільшує лічильник серій на Hikka.',
+              value: auth.syncProgress,
+              onChanged: (v) => auth.syncProgress = v,
+            ),
+            SizedBox(height: 14 * scale),
+            AppSecondaryButton(
+              scale: scale,
+              expand: true,
+              icon: Symbols.logout_rounded,
+              label: 'Вийти з акаунта',
+              onTap: () {
+                Navigator.of(context).maybePop();
+                unawaited(auth.signOut());
+              },
+            ),
+            SizedBox(height: 14 * scale),
+            Center(child: Text('Дані: Hikka · зображення: AniList', style: hikkaStyle(11 * scale, color: uiTheme.textDarkMuted))),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Hikka account card: a guest with a sign-in button or a profile with sign-out and the sync switch.
 class HikkaAccountCard extends StatelessWidget {
   final double scale;
 
-  const HikkaAccountCard({super.key, required this.scale});
+  /// Avatar and name at the top of the card; in "Профіль" after sign-in the profile header already shows them
+  final bool showIdentity;
+
+  const HikkaAccountCard({super.key, required this.scale, this.showIdentity = true});
 
   Widget _avatar(String? url) {
     final size = 56 * scale;
@@ -214,8 +275,9 @@ class HikkaAccountCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final auth = HikkaAuth.instance;
+    final sync = SettingsSync.instance;
     return ListenableBuilder(
-      listenable: auth,
+      listenable: Listenable.merge([auth, sync]),
       builder: (context, _) {
         final me = auth.me;
         final signedIn = auth.signedIn;
@@ -226,6 +288,7 @@ class HikkaAccountCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (showIdentity || !signedIn) ...[
               Row(
                 children: [
                   _avatar(signedIn ? me?.avatar : null),
@@ -244,7 +307,16 @@ class HikkaAccountCard extends StatelessWidget {
                 ],
               ),
               SizedBox(height: 14 * scale),
+              ],
               if (signedIn) ...[
+                HikkaToggleRow(
+                  scale: scale,
+                  title: 'Синхронізувати налаштування й теми',
+                  subtitle: 'Вигляд, тема, мови, субтитри й місце зупинки в серіях однакові на телефоні та ПК.',
+                  value: sync.enabled,
+                  onChanged: (v) => sync.enabled = v,
+                ),
+                SizedBox(height: 10 * scale),
                 HikkaToggleRow(
                   scale: scale,
                   title: 'Передавати прогрес у списки',

@@ -1,6 +1,6 @@
-/// Постери з AniList. Hikka віддає постери з MAL, часто малі й зі шматками тексту, а AniList має великі обкладинки
-/// (`coverImage.extraLarge`). Адреса шукається за MAL-id одним запитом на кілька тайтлів, результат (і «там немає»)
-/// кешується на диску, тож повторні запуски нічого не питають.
+/// Posters from AniList. Hikka serves posters from MAL, often small and with chunks of text, while AniList has large covers
+/// (`coverImage.extraLarge`). The address is looked up by MAL id in one request for several titles; the result (and "none there")
+/// is cached on disk, so repeated launches ask nothing.
 library;
 
 import 'dart:async';
@@ -27,7 +27,7 @@ class AniListPosters extends ChangeNotifier {
       : _fetch = fetch ?? ioJsonFetch,
         enabled = enabled ?? !Platform.environment.containsKey('FLUTTER_TEST');
 
-  /// MAL-id → адреса ('' — AniList постера не має або запит не вдався)
+  /// MAL id → address ('' means AniList has no poster or the request failed)
   final Map<int, String> _mem = {};
   final Set<int> _queued = {};
   final Set<int> _inFlight = {};
@@ -43,7 +43,7 @@ class AniListPosters extends ChangeNotifier {
     });
   }
 
-  /// Адреса постера: рядок (порожній — немає, лишається постер Hikka) або `null`, якщо ще шукається
+  /// Poster address: a string (empty means none, the Hikka poster stays) or `null` while still being looked up
   String? lookup(int malId) {
     if (!enabled || malId <= 0) return '';
     _loadDisk();
@@ -51,7 +51,7 @@ class AniListPosters extends ChangeNotifier {
     if (known != null) return known;
     if (!_inFlight.contains(malId) && _queued.add(malId) && !_scheduled) {
       _scheduled = true;
-      // Усі постери одного кадру збираються в один запит
+      // All posters of one frame are gathered into one request
       scheduleMicrotask(_flush);
     }
     return null;
@@ -74,7 +74,7 @@ class AniListPosters extends ChangeNotifier {
       for (final id in chunk) {
         _inFlight.remove(id);
         if (found == null) {
-          // Запит не вдався: у цьому запуску лишається постер Hikka, на диск не пишемо, щоб спробувати знову пізніше
+          // The request failed: this run keeps the Hikka poster and nothing is written to disk so we can try again later
           _mem[id] = '';
         } else {
           _mem[id] = found[id] ?? '';

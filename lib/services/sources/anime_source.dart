@@ -1,5 +1,5 @@
-/// Контракт джерела перегляду (аналог `AnimeSource` / `AnimeHttpSource` з Aniyomi, але на Dart):
-/// популярне / нове / пошук → сторінка аніме → серії → відео. Реалізації — у `lib/services/sources/ua/`.
+/// Watch-source contract (analogous to Aniyomi's `AnimeSource` / `AnimeHttpSource`, but in Dart):
+/// popular / new / search → anime page → episodes → video. Implementations are in `lib/services/sources/ua/`.
 library;
 
 import 'package:html/dom.dart';
@@ -9,42 +9,42 @@ import 'html_select.dart';
 import 'source_http.dart';
 
 abstract class AnimeSource {
-  /// Стабільний ідентифікатор (зберігається в посиланнях, прогресі й налаштуваннях)
+  /// Stable identifier (stored in links, progress and settings)
   String get id;
   String get name;
 
-  /// Мова озвучки: `uk`, `en` …
+  /// Dub language: `uk`, `en` …
   String get lang;
   String get baseUrl;
   bool get supportsLatest => true;
   bool get nsfw => false;
 
-  /// Один рядок для сторінки «Джерела»
+  /// One line for the "Джерела" page
   String get about => '';
 
   Future<SAnimePage> popular(int page);
   Future<SAnimePage> latest(int page);
   Future<SAnimePage> search(int page, String query);
 
-  /// Докладні дані зі сторінки аніме (повертає доповнену копію)
+  /// Detailed data from the anime page (returns a completed copy)
   Future<SAnime> details(SAnime anime);
 
-  /// Серії в порядку зростання (для сайтів з кількома озвучками — окремий запис на кожну озвучку)
+  /// Episodes in ascending order (for sites with several dubs, a separate entry per dub)
   Future<List<SEpisode>> episodes(SAnime anime);
 
-  /// Відтворювані відео серії (різна якість), найкраща першою
+  /// Playable videos of the episode (different quality), best first
   Future<List<Video>> videos(SEpisode episode);
 
-  /// Хостинги серії. Типово — один, з усіма відео (старий шлях Aniyomi `getVideoList`)
+  /// Episode hosters. By default one, with all videos (the old Aniyomi `getVideoList` path)
   Future<List<Hoster>> hosters(SEpisode episode) async => [Hoster(name: name, videos: await videos(episode))];
 
   Future<List<Video>> hosterVideos(Hoster hoster) async => hoster.videos ?? const [];
 
-  /// Повна адреса сторінки аніме (для «відкрити в браузері»)
+  /// Full address of the anime page (for "open in browser")
   String animeWebUrl(SAnime anime);
 }
 
-/// Джерело, що ходить на сайт через `SourceHttp`: спільні дрібниці (адреси, документи).
+/// A source that goes to the site through `SourceHttp`: shared small things (addresses, documents).
 abstract class HttpAnimeSource extends AnimeSource {
   final SourceHttp http;
 
@@ -52,14 +52,14 @@ abstract class HttpAnimeSource extends AnimeSource {
 
   Uri get _base => Uri.parse(baseUrl);
 
-  /// Відносну адресу робить повною (`/anime/1.html` → `https://site/anime/1.html`); `//cdn…` теж.
+  /// Makes a relative address full (`/anime/1.html` → `https://site/anime/1.html`); `//cdn…` too.
   String absoluteUrl(String url) {
     final u = url.trim();
     if (u.isEmpty) return '';
     return SourceHttp.parseUrl(u, _base).toString();
   }
 
-  /// Те саме, що `setUrlWithoutDomain` в Aniyomi: зберігаємо шлях без домену, щоб зміна дзеркала не ламала посилань.
+  /// The same as Aniyomi's `setUrlWithoutDomain`: we store the path without the domain so a mirror change does not break links.
   String urlWithoutDomain(String url) {
     final u = url.trim();
     if (u.isEmpty) return '';
@@ -79,7 +79,7 @@ abstract class HttpAnimeSource extends AnimeSource {
     return parseHtml(res.text);
   }
 
-  /// Розбір списку на сторінці видачі за селекторами (як `ParsedAnimeHttpSource`).
+  /// Parsing a list on a results page by selectors (like `ParsedAnimeHttpSource`).
   SAnimePage parseList(Document doc, {required String selector, required SAnime Function(Element) fromElement, String? nextSelector}) {
     final seen = <String>{};
     final animes = <SAnime>[];

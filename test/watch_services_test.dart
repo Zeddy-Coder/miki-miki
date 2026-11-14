@@ -110,7 +110,7 @@ void main() {
       expect(c.level, EpisodeCheckLevel.match);
     });
 
-    // ── Кілька частин сезону в одній купі ───────────────────────────────────────
+    // ── Several parts of a season in one pile ───────────────────────────────────────
 
     test('дві частини злито: «24 з 12» — розбіжність із підказкою про об’єднання', () {
       final c = checkEpisodes(eps(List.generate(24, (i) => i + 1)), finished);
@@ -142,7 +142,7 @@ void main() {
       expect(c.summary, '0 з 12');
       expect(c.note, contains('немає жодної серії'));
       expect(c.note, contains('іншої частини'));
-      expect(c.syncSafe, isTrue); // синхронізувати нічого — плутанини не буде
+      expect(c.syncSafe, isTrue); // nothing to sync, so there will be no confusion
     });
 
     test('порожній варіант для тайтлу, що виходить, — «поки немає»', () {
@@ -172,7 +172,7 @@ void main() {
       expect(c.note, contains('1–12'));
     });
 
-    // ── OVA / спешл ──────────────────────────────────────────────────────────────
+    // ── OVA / special ──────────────────────────────────────────────────────────────
 
     SEpisode named(num n, String name) => SEpisode(url: 'u$n$name', name: name, number: n.toDouble());
 
@@ -396,9 +396,9 @@ void main() {
         final counts = [for (final g in part) g.episodes.length];
         expect(counts, [...counts]..sort((a, b) => b.compareTo(a)));
       }
-      // у фікстурі нумерація 1..N і N ≤ 5: розбіжності нумерації бути не повинно
+      // the fixture has numbering 1..N and N ≤ 5: there must be no numbering mismatch
       expect(groups.every((g) => load.checkOf(g).syncSafe), isTrue);
-      // у кожної групи є команди для аватарок / опису
+      // each group has teams for avatars / description
       expect(groups.first.teams, isNotEmpty);
     });
 
@@ -524,7 +524,7 @@ void main() {
     final master = fixture('moon_master.m3u8');
 
     test('Moon першим, і якість за налаштуванням', () async {
-      // сторінка плеєра Moon (шаблон PlayerJS) + майстер-плейлист
+      // Moon player page (the PlayerJS template) + master playlist
       final site = FakeSite({
         'moonanime.art/iframe/': fixture('moon_playerjs.html'),
         'hls:manifest.m3u8': master,

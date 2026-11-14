@@ -10,7 +10,7 @@ import 'support/fakes.dart';
 
 void main() {
   const view = Size(800, 360);
-  final fit = VideoZoomMath.fitSize(view, 16 / 9); // 640×360, по боках чорні смуги
+  final fit = VideoZoomMath.fitSize(view, 16 / 9); // 640×360, black bars at the sides
 
   group('VideoZoomMath', () {
     test('fitSize вписує відео, coverScale заповнює екран', () {
@@ -28,7 +28,7 @@ void main() {
     });
 
     test('зображення не виходить за краї, а поблизу краю прилипає', () {
-      // 2×: 1280×720 у вікні 800×360 → запас ±240 по x і ±180 по y
+      // 2×: 1280×720 in an 800×360 window → margin ±240 on x and ±180 on y
       expect(VideoZoomMath.clampOffset(const Offset(500, 500), 2, view, fit), const Offset(240, 180));
       expect(VideoZoomMath.clampOffset(const Offset(-500, -500), 2, view, fit), const Offset(-240, -180));
       expect(VideoZoomMath.clampOffset(const Offset(230, 0), 2, view, fit).dx, 240, reason: 'прилипло до правого краю');
@@ -37,7 +37,7 @@ void main() {
     });
 
     test('якщо відео вужче за екран, воно лишається по центру', () {
-      // 1.1×: 704 < 800 по x
+      // 1.1×: 704 < 800 on x
       expect(VideoZoomMath.clampOffset(const Offset(60, 0), 1.1, view, fit).dx, 0);
     });
 
@@ -141,7 +141,7 @@ void main() {
       final c = Offset(view.width / 2, view.height / 2);
       final a = await tester.startGesture(c + const Offset(-100, 40), pointer: 1);
       final b = await tester.startGesture(c + const Offset(100, 40), pointer: 2);
-      // 200 → 250 пікселів між пальцями = ×1.25 (рівно «на весь екран» для 16:9 у 800×360)
+      // 200 → 250 pixels between fingers = ×1.25 (exactly "fill the screen" for 16:9 in 800×360)
       await a.moveTo(c + const Offset(-125, 40));
       await b.moveTo(c + const Offset(125, 40));
       await tester.pump(const Duration(milliseconds: 16));
@@ -150,7 +150,7 @@ void main() {
       expect(msgs.last.detail, 'На весь екран');
       expect(msgs.last.title, startsWith('×1.25'));
       expect(haptics, isNotEmpty, reason: 'клацання при примагнічуванні');
-      // рух пальців убік не зсуває зображення
+      // a sideways finger move does not shift the image
       await a.moveTo(c + const Offset(-125, 140));
       await b.moveTo(c + const Offset(125, 140));
       await tester.pump(const Duration(milliseconds: 16));

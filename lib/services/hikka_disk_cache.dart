@@ -1,5 +1,5 @@
-/// Кеш відповідей Hikka на диску: застосунок стартує зі збережених даних (каталог, колекції, статті, розклад),
-/// а не з порожніх скелетів, і працює без мережі. Один файл на запит; при збої запису все працює й без кешу.
+/// On-disk cache of Hikka responses: the app starts from stored data (catalog, collections, articles, schedule)
+/// rather than empty skeletons, and works offline. One file per request; if writing fails everything works without a cache.
 library;
 
 import 'dart:convert';
@@ -15,7 +15,7 @@ class DiskHit {
 }
 
 class HikkaDiskCache {
-  /// Скільки файлів тримаємо й як довго: старіше — видаляється при чищенні
+  /// How many files we keep and for how long: older ones are deleted on cleanup
   static const int maxFiles = 600;
   static const Duration maxAge = Duration(days: 14);
 
@@ -38,7 +38,7 @@ class HikkaDiskCache {
     }
   }
 
-  /// Назва файлу з ключа запиту (FNV-1a 64 біт; ключ зберігається всередині файлу й перевіряється)
+  /// File name from the request key (FNV-1a 64-bit; the key is stored inside the file and verified)
   static String fileName(String key) {
     var h = BigInt.parse('cbf29ce484222325', radix: 16);
     final prime = BigInt.parse('100000001b3', radix: 16);
@@ -63,13 +63,13 @@ class HikkaDiskCache {
     }
   }
 
-  /// Записує у фоні; помилка запису не заважає роботі
+  /// Writes in the background; a write error does not interfere
   Future<void> write(String key, Object? json, DateTime at) async {
     final dir = await _ensureDir();
     if (dir == null) return;
     try {
       final f = File('${dir.path}/${fileName(key)}');
-      // Однакові запити йдуть паралельно: у кожного свій тимчасовий файл, інакше другий rename падає
+      // Identical requests run in parallel: each has its own temporary file, otherwise the second rename fails
       final tmp = File('${f.path}.${DateTime.now().microsecondsSinceEpoch}.${_seq++}.tmp');
       if (!await dir.exists()) await dir.create(recursive: true);
       await tmp.writeAsString(jsonEncode({'k': key, 'at': at.millisecondsSinceEpoch, 'j': json}), flush: false);
@@ -93,7 +93,7 @@ class HikkaDiskCache {
     } catch (_) {}
   }
 
-  /// Раз за запуск: прибирає застарілі файли й лишає найновіші [maxFiles]
+  /// Once per launch: removes stale files and keeps the newest [maxFiles]
   void _prune(Directory dir) {
     Future(() async {
       try {

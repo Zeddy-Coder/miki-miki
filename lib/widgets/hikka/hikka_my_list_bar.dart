@@ -19,29 +19,29 @@ import 'hikka_watch_dialogs.dart';
 
 const Color _errorColor = Color(0xFFE57373);
 
-/// Значок статусу у списках (спільний для сторінки аніме й вкладки «Списки»)
+/// Status badge in lists (shared by the anime page and the "Списки" tab)
 IconData hikkaStatusIcon(HikkaWatchStatus s) => switch (s) {
-      HikkaWatchStatus.watching => Symbols.play_circle_rounded,
-      HikkaWatchStatus.planned => Symbols.bookmark_rounded,
-      HikkaWatchStatus.completed => Symbols.check_circle_rounded,
-      HikkaWatchStatus.onHold => Symbols.pause_circle_rounded,
-      HikkaWatchStatus.dropped => Symbols.cancel_rounded,
-    };
+  HikkaWatchStatus.watching => Symbols.play_circle_rounded,
+  HikkaWatchStatus.planned => Symbols.bookmark_rounded,
+  HikkaWatchStatus.completed => Symbols.check_circle_rounded,
+  HikkaWatchStatus.onHold => Symbols.pause_circle_rounded,
+  HikkaWatchStatus.dropped => Symbols.cancel_rounded,
+};
 
-/// Колір статусу: дивлюсь — блакитний, у планах — фіолетовий, переглянуто — зелений, відкладено — жовтий, кинуто — червоний
+/// Status color: watching is blue, planned is purple, completed is green, on hold is yellow, dropped is red
 Color hikkaStatusColor(HikkaWatchStatus s) => switch (s) {
-      HikkaWatchStatus.watching => const Color(0xFF4FA8F5),
-      HikkaWatchStatus.planned => const Color(0xFFA98BF0),
-      HikkaWatchStatus.completed => const Color(0xFF5CC27A),
-      HikkaWatchStatus.onHold => const Color(0xFFF2C94C),
-      HikkaWatchStatus.dropped => const Color(0xFFE5645F),
-    };
+  HikkaWatchStatus.watching => const Color(0xFF4FA8F5),
+  HikkaWatchStatus.planned => const Color(0xFFA98BF0),
+  HikkaWatchStatus.completed => const Color(0xFF5CC27A),
+  HikkaWatchStatus.onHold => const Color(0xFFF2C94C),
+  HikkaWatchStatus.dropped => const Color(0xFFE5645F),
+};
 
-/// Колір вкладки «Улюблене»
+/// Color of the "Улюблене" tab
 const Color hikkaFavouriteColor = Color(0xFFF06292);
 
-/// Блок «Мій список» на сторінці аніме: поточний статус із прогресом і оцінкою (натиснути — змінити), або
-/// «Додати в список», або запрошення увійти. Збоку — кнопка «в улюблене».
+/// The "Мій список" block on the anime page: the current status with progress and score (tap to change), or
+/// "Додати в список", or an invitation to sign in. On the side, a "to favorites" button.
 class HikkaMyListBar extends StatefulWidget {
   final HikkaAnime anime;
   final double scale;
@@ -112,54 +112,108 @@ class _HikkaMyListBarState extends State<HikkaMyListBar> {
   Future<void> _edit() async {
     await AppDialogs.show<void>(
       context,
-      builder: (_) => HikkaListEditDialog(anime: widget.anime, scale: _scale, entry: _list.cached(_slug)),
+      builder:
+          (_) => HikkaListEditDialog(
+            anime: widget.anime,
+            scale: _scale,
+            entry: _list.cached(_slug),
+          ),
     );
   }
 
   final GlobalKey _anchor = GlobalKey();
+  final GlobalKey _statusAnchor = GlobalKey();
 
-  /// Випадне меню під кнопкою: статуси, «Серії та оцінка…», «Видалити зі списку»
+  /// A drop-down menu under the button: statuses, "Серії та оцінка…", "Видалити зі списку"
   Future<void> _menu() async {
     final scale = _scale;
-    final box = _anchor.currentContext?.findRenderObject();
+    final box =
+        (_statusAnchor.currentContext ?? _anchor.currentContext)
+            ?.findRenderObject();
     final overlay = Overlay.of(context).context.findRenderObject();
     if (box is! RenderBox || overlay is! RenderBox) return;
-    final origin = box.localToGlobal(Offset(0, box.size.height + 4 * scale), ancestor: overlay);
+    final origin = box.localToGlobal(
+      Offset(0, box.size.height + 4 * scale),
+      ancestor: overlay,
+    );
     final entry = _list.cached(_slug);
     const edit = 'edit';
     const remove = 'remove';
-    // Як кнопки у «Списках»: контурний значок кольору статусу, назва нейтральна; вибраний — виділена назва й пташка
-    PopupMenuItem<Object> row(Object v, IconData icon, String text, {Color? iconColor, Color? color, bool checked = false}) => PopupMenuItem<Object>(
-          value: v,
-          height: 44 * scale,
-          child: Row(
-            children: [
-              Icon(icon, size: 20 * scale, color: iconColor ?? color ?? uiTheme.colors.textMuted, weight: 300, fill: 0),
-              SizedBox(width: 12 * scale),
-              Expanded(
-                child: Text(
-                  text,
-                  style: hikkaStyle(13.5 * scale, color: color ?? uiTheme.colors.textPrimary, weight: checked ? FontWeight.bold : FontWeight.normal),
-                ),
-              ),
-              if (checked) Icon(Symbols.check_rounded, size: 18 * scale, color: uiTheme.colors.textMuted),
-            ],
+    // Like the buttons in "Списки": an outlined icon in the status color, a neutral name; the selected one has a highlighted name and a check mark
+    PopupMenuItem<Object> row(
+      Object v,
+      IconData icon,
+      String text, {
+      Color? iconColor,
+      Color? color,
+      bool checked = false,
+    }) => PopupMenuItem<Object>(
+      value: v,
+      height: 44 * scale,
+      child: Row(
+        children: [
+          Icon(
+            icon,
+            size: 20 * scale,
+            color: iconColor ?? color ?? uiTheme.colors.textMuted,
+            weight: 300,
+            fill: 0,
           ),
-        );
+          SizedBox(width: 12 * scale),
+          Expanded(
+            child: Text(
+              text,
+              style: hikkaStyle(
+                13.5 * scale,
+                color: color ?? uiTheme.colors.textPrimary,
+                weight: checked ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          ),
+          if (checked)
+            Icon(
+              Symbols.check_rounded,
+              size: 18 * scale,
+              color: uiTheme.colors.textMuted,
+            ),
+        ],
+      ),
+    );
     final picked = await showMenu<Object>(
       context: context,
       color: uiTheme.colors.drawerBg,
-      constraints: BoxConstraints(minWidth: box.size.width, maxWidth: math.max(box.size.width, 260 * scale)),
+      constraints: BoxConstraints(
+        minWidth: box.size.width,
+        maxWidth: math.max(box.size.width, 260 * scale),
+      ),
       shape: RoundedRectangleBorder(
         borderRadius: uiTheme.borderRadius(12 * scale),
         side: BorderSide(color: uiTheme.colors.drawerBorder),
       ),
-      position: RelativeRect.fromLTRB(origin.dx, origin.dy, overlay.size.width - origin.dx - box.size.width, 0),
+      position: RelativeRect.fromLTRB(
+        origin.dx,
+        origin.dy,
+        overlay.size.width - origin.dx - box.size.width,
+        0,
+      ),
       items: [
-        for (final st in HikkaWatchStatus.values) row(st, hikkaStatusIcon(st), st.label, iconColor: hikkaStatusColor(st), checked: entry?.status == st),
+        for (final st in HikkaWatchStatus.values)
+          row(
+            st,
+            hikkaStatusIcon(st),
+            st.label,
+            iconColor: hikkaStatusColor(st),
+            checked: entry?.status == st,
+          ),
         const PopupMenuDivider(),
-        row(edit, Symbols.tune_rounded, 'Серії та оцінка…'),
-        if (entry != null) row(remove, Symbols.delete_rounded, 'Видалити зі списку', iconColor: _errorColor),
+        row(edit, Symbols.tune_rounded, 'Серії…'),
+        if (entry != null)
+          row(
+            remove,
+            Symbols.delete_rounded,
+            'Видалити зі списку',
+            iconColor: _errorColor,
+          ),
       ],
     );
     if (!mounted || picked == null) return;
@@ -168,9 +222,113 @@ class _HikkaMyListBarState extends State<HikkaMyListBar> {
       if (picked == remove) {
         await _list.remove(_slug);
       } else if (picked is HikkaWatchStatus) {
-        final total = (widget.anime.episodesTotal ?? 0) > 0 ? widget.anime.episodesTotal : null;
-        await _list.save(_slug, status: picked, total: total, anime: widget.anime);
+        final total =
+            (widget.anime.episodesTotal ?? 0) > 0
+                ? widget.anime.episodesTotal
+                : null;
+        await _list.save(
+          _slug,
+          status: picked,
+          total: total,
+          anime: widget.anime,
+        );
       }
+    } on HikkaException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    }
+  }
+
+  final GlobalKey _scoreAnchor = GlobalKey();
+
+  /// A separate drop-down under the score badge: one horizontal row 1–10 (the status menu does not touch the score);
+  /// tapping the current score again clears it
+  Future<void> _scoreMenu() async {
+    final scale = _scale;
+    final box = _scoreAnchor.currentContext?.findRenderObject();
+    final overlay = Overlay.of(context).context.findRenderObject();
+    if (box is! RenderBox || overlay is! RenderBox) return;
+    final origin = box.localToGlobal(
+      Offset(0, box.size.height + 4 * scale),
+      ancestor: overlay,
+    );
+    final current = _list.cached(_slug)?.score ?? 0;
+    const gold = Color(0xFFFFC23D);
+    final cell = (AppPlatform.isMobile ? 31.0 : 30.0) * scale;
+    final picked = await showMenu<int>(
+      context: context,
+      color: uiTheme.colors.drawerBg,
+      constraints: BoxConstraints(
+        minWidth: 0,
+        maxWidth: overlay.size.width - 16 * scale,
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: uiTheme.borderRadius(12 * scale),
+        side: BorderSide(color: uiTheme.colors.drawerBorder),
+      ),
+      position: RelativeRect.fromLTRB(
+        origin.dx,
+        origin.dy,
+        overlay.size.width - origin.dx - box.size.width,
+        0,
+      ),
+      items: [
+        PopupMenuItem<int>(
+          enabled: false,
+          padding: EdgeInsets.symmetric(
+            horizontal: 8 * scale,
+            vertical: 8 * scale,
+          ),
+          child: Builder(
+            builder:
+                (ctx) => Wrap(
+                  spacing: 4 * scale,
+                  runSpacing: 4 * scale,
+                  children: [
+                    for (var n = 1; n <= 10; n++)
+                      InkWell(
+                        onTap:
+                            () => Navigator.of(ctx).pop(n == current ? 0 : n),
+                        borderRadius: BorderRadius.circular(cell / 2),
+                        child: Container(
+                          width: cell,
+                          height: cell,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color:
+                                n == current
+                                    ? gold
+                                    : gold.withValues(alpha: 0.10),
+                            border: Border.all(
+                              color: gold.withValues(
+                                alpha: n == current ? 1 : 0.4,
+                              ),
+                            ),
+                          ),
+                          child: Text(
+                            '$n',
+                            style: hikkaStyle(
+                              13 * scale,
+                              weight: FontWeight.bold,
+                              color:
+                                  n == current ? const Color(0xFF1A1A1A) : null,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+          ),
+        ),
+      ],
+    );
+    if (!mounted || picked == null || picked == current) return;
+    try {
+      final total =
+          (widget.anime.episodesTotal ?? 0) > 0
+              ? widget.anime.episodesTotal
+              : null;
+      await _list.save(_slug, score: picked, total: total, anime: widget.anime);
     } on HikkaException catch (e) {
       if (mounted) setState(() => _error = e.message);
     }
@@ -185,64 +343,109 @@ class _HikkaMyListBarState extends State<HikkaMyListBar> {
     }
   }
 
-  /// Коротка кнопка статусу: лише значок, назва й стрілка випадного меню (без кількості серій); оцінка окремою плашкою поруч
+  /// A short status button: only the icon, name and drop-down arrow (no episode count); the score as a separate badge next to it
   Widget _entryTile(HikkaWatchEntry e) {
     final scale = _scale;
     final color = hikkaStatusColor(e.status);
-    Widget tappable({required Widget child, required Color fill, required Color line}) => InkWell(
-          onTap: () => unawaited(_menu()),
+    Widget tappable({
+      required Widget child,
+      required Color fill,
+      required Color line,
+      required VoidCallback onTap,
+    }) => InkWell(
+      onTap: onTap,
+      borderRadius: uiTheme.borderRadius(12 * scale),
+      splashColor: Colors.transparent,
+      highlightColor: uiTheme.touchHighlight,
+      hoverColor: uiTheme.hoverOverlay,
+      child: Container(
+        constraints: BoxConstraints(
+          minHeight:
+              AppPlatform.isMobile ? AppPlatform.touchTarget : 44 * scale,
+        ),
+        padding: EdgeInsets.symmetric(
+          horizontal: 12 * scale,
+          vertical: 8 * scale,
+        ),
+        decoration: BoxDecoration(
+          color: fill,
           borderRadius: uiTheme.borderRadius(12 * scale),
-          splashColor: Colors.transparent,
-          highlightColor: uiTheme.touchHighlight,
-          hoverColor: uiTheme.hoverOverlay,
-          child: Container(
-            constraints: BoxConstraints(minHeight: AppPlatform.isMobile ? AppPlatform.touchTarget : 44 * scale),
-            padding: EdgeInsets.symmetric(horizontal: 12 * scale, vertical: 8 * scale),
-            decoration: BoxDecoration(
-              color: fill,
-              borderRadius: uiTheme.borderRadius(12 * scale),
-              border: Border.all(color: line),
-            ),
-            child: child,
-          ),
-        );
+          border: Border.all(color: line),
+        ),
+        child: child,
+      ),
+    );
 
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Flexible(
+          child: KeyedSubtree(
+            key: _statusAnchor,
+            child: tappable(
+              onTap: () => unawaited(_menu()),
+              fill: color.withValues(alpha: 0.14),
+              line: color.withValues(alpha: 0.55),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    hikkaStatusIcon(e.status),
+                    color: color,
+                    size: 20 * scale,
+                    weight: 300,
+                    fill: 1,
+                  ),
+                  SizedBox(width: 8 * scale),
+                  Flexible(
+                    child: Text(
+                      e.status.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: hikkaStyle(13.5 * scale, weight: FontWeight.bold),
+                    ),
+                  ),
+                  SizedBox(width: 10 * scale),
+                  Icon(
+                    Symbols.expand_more_rounded,
+                    color: uiTheme.textDarkMuted,
+                    size: 20 * scale,
+                    weight: 300,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        SizedBox(width: 8 * scale),
+        KeyedSubtree(
+          key: _scoreAnchor,
           child: tappable(
-            fill: color.withValues(alpha: 0.14),
-            line: color.withValues(alpha: 0.55),
+            onTap: () => unawaited(_scoreMenu()),
+            fill: const Color(
+              0xFFFFC23D,
+            ).withValues(alpha: e.score > 0 ? 0.12 : 0.05),
+            line: const Color(
+              0xFFFFC23D,
+            ).withValues(alpha: e.score > 0 ? 0.5 : 0.3),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(hikkaStatusIcon(e.status), color: color, size: 20 * scale, weight: 300, fill: 1),
-                SizedBox(width: 8 * scale),
-                Flexible(
-                  child: Text(e.status.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: hikkaStyle(13.5 * scale, weight: FontWeight.bold)),
+                Icon(
+                  Symbols.star_rounded,
+                  color: const Color(0xFFFFC23D),
+                  size: 18 * scale,
+                  fill: e.score > 0 ? 1 : 0,
                 ),
-                SizedBox(width: 10 * scale),
-                Icon(Symbols.expand_more_rounded, color: uiTheme.textDarkMuted, size: 20 * scale, weight: 300),
+                SizedBox(width: 4 * scale),
+                Text(
+                  e.score > 0 ? '${e.score}' : 'Оцінити',
+                  style: hikkaStyle(13.5 * scale, weight: FontWeight.bold),
+                ),
               ],
             ),
           ),
         ),
-        if (e.score > 0) ...[
-          SizedBox(width: 8 * scale),
-          tappable(
-            fill: const Color(0xFFFFC23D).withValues(alpha: 0.12),
-            line: const Color(0xFFFFC23D).withValues(alpha: 0.5),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Symbols.star_rounded, color: const Color(0xFFFFC23D), size: 18 * scale, fill: 1),
-                SizedBox(width: 4 * scale),
-                Text('${e.score}', style: hikkaStyle(13.5 * scale, weight: FontWeight.bold)),
-              ],
-            ),
-          ),
-        ],
       ],
     );
   }
@@ -259,14 +462,34 @@ class _HikkaMyListBarState extends State<HikkaMyListBar> {
 
         final Widget main;
         if (!signedIn) {
-          main = AppSecondaryButton(scale: scale, expand: false, icon: Symbols.bookmark_add_rounded, label: 'Додати в список', onTap: () => unawaited(_login()));
+          main = AppSecondaryButton(
+            scale: scale,
+            expand: false,
+            icon: Symbols.bookmark_add_rounded,
+            label: 'Додати в список',
+            onTap: () => unawaited(_login()),
+          );
         } else if (_loading) {
           main = Opacity(
             opacity: 0.6,
-            child: IgnorePointer(child: AppSecondaryButton(scale: scale, expand: false, icon: Symbols.bookmark_rounded, label: 'Завантажую список…', onTap: () {})),
+            child: IgnorePointer(
+              child: AppSecondaryButton(
+                scale: scale,
+                expand: false,
+                icon: Symbols.bookmark_rounded,
+                label: 'Завантажую список…',
+                onTap: () {},
+              ),
+            ),
           );
         } else if (entry == null) {
-          main = AppSecondaryButton(scale: scale, expand: false, icon: Symbols.bookmark_add_rounded, label: 'Додати в список', onTap: () => unawaited(_menu()));
+          main = AppSecondaryButton(
+            scale: scale,
+            expand: false,
+            icon: Symbols.bookmark_add_rounded,
+            label: 'Додати в список',
+            onTap: () => unawaited(_menu()),
+          );
         } else {
           main = _entryTile(entry);
         }
@@ -294,7 +517,10 @@ class _HikkaMyListBarState extends State<HikkaMyListBar> {
               if (_error != null)
                 Padding(
                   padding: EdgeInsets.only(top: 6 * scale),
-                  child: Text(_error!, style: hikkaStyle(11.5 * scale, color: _errorColor)),
+                  child: Text(
+                    _error!,
+                    style: hikkaStyle(11.5 * scale, color: _errorColor),
+                  ),
                 ),
             ],
           ),
@@ -304,32 +530,39 @@ class _HikkaMyListBarState extends State<HikkaMyListBar> {
   }
 }
 
-/// Вікно зміни запису: статус, кількість серій, оцінка; видалення зі списків
+/// Entry edit window: status, episode count, score; removal from lists
 class HikkaListEditDialog extends StatefulWidget {
   final HikkaAnime anime;
   final double scale;
   final HikkaWatchEntry? entry;
 
-  const HikkaListEditDialog({super.key, required this.anime, required this.scale, this.entry});
+  const HikkaListEditDialog({
+    super.key,
+    required this.anime,
+    required this.scale,
+    this.entry,
+  });
 
   @override
   State<HikkaListEditDialog> createState() => _HikkaListEditDialogState();
 }
 
 class _HikkaListEditDialogState extends State<HikkaListEditDialog> {
-  late HikkaWatchStatus _status = widget.entry?.status ?? HikkaWatchStatus.planned;
+  late HikkaWatchStatus _status =
+      widget.entry?.status ?? HikkaWatchStatus.planned;
   late int _episodes = widget.entry?.episodes ?? 0;
   late int _score = widget.entry?.score ?? 0;
   bool _saving = false;
   String? _error;
 
   double get _scale => widget.scale;
-  int? get _total => (widget.anime.episodesTotal ?? 0) > 0 ? widget.anime.episodesTotal : null;
+  int? get _total =>
+      (widget.anime.episodesTotal ?? 0) > 0 ? widget.anime.episodesTotal : null;
 
   void _pickStatus(HikkaWatchStatus s) {
     setState(() {
       _status = s;
-      // Як на сайті: «Переглянуто» означає, що пройдено всі серії
+      // As on the site: "Переглянуто" means all episodes have been watched
       final t = _total;
       if (s == HikkaWatchStatus.completed && t != null) _episodes = t;
     });
@@ -358,21 +591,31 @@ class _HikkaListEditDialogState extends State<HikkaListEditDialog> {
     }
   }
 
-  Future<void> _save() => _run(() => HikkaMyList.instance.save(
-        widget.anime.slug,
-        status: _status,
-        episodes: _episodes,
-        score: _score,
-        total: _total,
-        anime: widget.anime,
-      ));
+  Future<void> _save() => _run(
+    () => HikkaMyList.instance.save(
+      widget.anime.slug,
+      status: _status,
+      episodes: _episodes,
+      score: _score,
+      total: _total,
+      anime: widget.anime,
+    ),
+  );
 
-  Future<void> _remove() => _run(() => HikkaMyList.instance.remove(widget.anime.slug));
+  Future<void> _remove() =>
+      _run(() => HikkaMyList.instance.remove(widget.anime.slug));
 
   Widget _label(String text) => Padding(
-        padding: EdgeInsets.only(bottom: 8 * _scale),
-        child: Text(text, style: hikkaStyle(12.5 * _scale, weight: FontWeight.bold, color: uiTheme.textMuted)),
-      );
+    padding: EdgeInsets.only(bottom: 8 * _scale),
+    child: Text(
+      text,
+      style: hikkaStyle(
+        12.5 * _scale,
+        weight: FontWeight.bold,
+        color: uiTheme.textMuted,
+      ),
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -391,14 +634,26 @@ class _HikkaListEditDialogState extends State<HikkaListEditDialog> {
             runSpacing: 8 * scale,
             children: [
               for (final s in HikkaWatchStatus.values)
-                HikkaChip(label: s.label, scale: scale, icon: hikkaStatusIcon(s), color: hikkaStatusColor(s), selected: _status == s, onTap: () => _pickStatus(s)),
+                HikkaChip(
+                  label: s.label,
+                  scale: scale,
+                  icon: hikkaStatusIcon(s),
+                  color: hikkaStatusColor(s),
+                  selected: _status == s,
+                  onTap: () => _pickStatus(s),
+                ),
             ],
           ),
           SizedBox(height: 18 * scale),
           _label('Переглянуто серій'),
           Row(
             children: [
-              AppRowIconButton(scale: scale, icon: Symbols.remove_rounded, size: 22, onTap: _episodes > 0 ? () => _step(-1) : null),
+              AppRowIconButton(
+                scale: scale,
+                icon: Symbols.remove_rounded,
+                size: 22,
+                onTap: _episodes > 0 ? () => _step(-1) : null,
+              ),
               SizedBox(
                 width: 84 * scale,
                 child: Text(
@@ -407,7 +662,15 @@ class _HikkaListEditDialogState extends State<HikkaListEditDialog> {
                   style: hikkaStyle(16 * scale, weight: FontWeight.bold),
                 ),
               ),
-              AppRowIconButton(scale: scale, icon: Symbols.add_rounded, size: 22, onTap: (total == null || _episodes < total) ? () => _step(1) : null),
+              AppRowIconButton(
+                scale: scale,
+                icon: Symbols.add_rounded,
+                size: 22,
+                onTap:
+                    (total == null || _episodes < total)
+                        ? () => _step(1)
+                        : null,
+              ),
             ],
           ),
           SizedBox(height: 18 * scale),
@@ -417,18 +680,37 @@ class _HikkaListEditDialogState extends State<HikkaListEditDialog> {
             runSpacing: 6 * scale,
             children: [
               for (int n = 1; n <= 10; n++)
-                HikkaChip(label: '$n', scale: scale, selected: _score == n, onTap: () => setState(() => _score = _score == n ? 0 : n)),
+                HikkaChip(
+                  label: '$n',
+                  scale: scale,
+                  selected: _score == n,
+                  onTap: () => setState(() => _score = _score == n ? 0 : n),
+                ),
             ],
           ),
           if (_error != null) ...[
             SizedBox(height: 14 * scale),
-            Text(_error!, style: hikkaStyle(12 * scale, color: _errorColor, height: 1.4)),
+            Text(
+              _error!,
+              style: hikkaStyle(12 * scale, color: _errorColor, height: 1.4),
+            ),
           ],
         ],
       ),
       actions: [
-        if (widget.entry != null) QuietAction(label: 'Видалити зі списку', scale: scale, onTap: _saving ? () {} : () => unawaited(_remove())),
-        AppAccentButton(scale: scale, solid: true, icon: Symbols.check_rounded, label: _saving ? 'Зберігаю…' : 'Зберегти', onTap: _saving ? () {} : () => unawaited(_save())),
+        if (widget.entry != null)
+          QuietAction(
+            label: 'Видалити зі списку',
+            scale: scale,
+            onTap: _saving ? () {} : () => unawaited(_remove()),
+          ),
+        AppAccentButton(
+          scale: scale,
+          solid: true,
+          icon: Symbols.check_rounded,
+          label: _saving ? 'Зберігаю…' : 'Зберегти',
+          onTap: _saving ? () {} : () => unawaited(_save()),
+        ),
       ],
     );
   }

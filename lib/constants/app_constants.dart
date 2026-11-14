@@ -4,7 +4,7 @@ import '../widgets/app_ui_kit.dart';
 class AppConstants {
   static const List<double> speeds = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5];
 
-  // Словники декодерів
+  // Decoder dictionaries
   static final Map<String, String> hwdecOptions = AppPlatform.isMobile
       ? {
           "mediacodec-copy": "MediaCodec (Універсальний)",
@@ -28,7 +28,7 @@ class AppConstants {
     "no": "Вимкнено",
   };
 
-  // Словник мов
+  // Language dictionary
   static const Map<String, String> langMap = {
     "en": "Англійська", "eng": "Англійська",
     "uk": "Українська", "ukr": "Українська",
@@ -105,4 +105,4 @@ class AppConstants {
     }
     return result;
   }
-}
+}

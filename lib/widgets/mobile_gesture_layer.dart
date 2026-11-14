@@ -12,22 +12,22 @@ import '../services/touch_gestures.dart';
 import '../services/video_zoom.dart';
 import '../utils/formatters.dart';
 
-/// Жести на відео для телефона (шар між відео та кнопками):
-/// - вертикально по лівій половині — яскравість екрана;
-/// - вертикально по правій половині — системна гучність;
-/// - двома пальцями — збільшення зображення (щипок) із прилипанням до країв екрана;
-/// - горизонтально — перемотка (застосовується, коли палець відпущено; під час жесту видно цільовий час).
+/// Gestures on the video for a phone (a layer between the video and the buttons):
+/// - vertically on the left half: screen brightness;
+/// - vertically on the right half: system volume;
+/// - with two fingers: image zoom (pinch) snapping to the screen edges;
+/// - horizontally: seek (applied when the finger is released; the target time is visible during the gesture).
 ///
-/// Тапи, подвійний тап і утримання (2×) обробляє нижній шар відео; цей шар реагує лише на перетягування,
-/// тому з ними не конфліктує. Кнопки лежать вище й перехоплюють дотики до себе.
+/// Taps, double tap and hold (2×) are handled by the video's lower layer; this layer reacts only to dragging,
+/// so it does not conflict with them. The buttons lie above and catch touches themselves.
 class MobileGestureLayer extends StatefulWidget {
   final Player player;
 
-  /// Екранне сповіщення з поточним значенням (контролер плеєра: `showOsd`)
+  /// An on-screen notification with the current value (player controller: `showOsd`)
   final OsdSink osd;
   final bool enabled;
 
-  /// Збільшення відео щипком; null — вимкнено
+  /// Pinch zoom of the video; null means off
   final VideoZoomController? zoom;
 
   final Future<double?> Function() readBrightness;
@@ -58,7 +58,7 @@ class _MobileGestureLayerState extends State<MobileGestureLayer> with SingleTick
 
   Size _size = Size.zero;
 
-  /// Зони системних жестів Android (назад — з країв, «додому» — знизу): з них жести на відео не починаємо
+  /// Android system gesture zones (back from the edges, "home" from the bottom): we do not start video gestures from them
   EdgeInsets _systemInsets = EdgeInsets.zero;
 
   bool _inSystemEdge(Offset p) => TouchGestureMath.inSystemEdge(
@@ -70,29 +70,29 @@ class _MobileGestureLayerState extends State<MobileGestureLayer> with SingleTick
       );
   _Kind _kind = _Kind.none;
 
-  /// Номер поточного жесту: відповіді від попередніх жестів відкидаються
+  /// Number of the current gesture: responses from earlier gestures are discarded
   int _id = 0;
 
-  // яскравість / гучність
-  double? _base; // значення на початку жесту (null — ще читається з системи)
+  // brightness / volume
+  double? _base; // value at the gesture start (null means still being read from the system)
   double _dy = 0;
   double? _pending;
   Future<void> Function(double)? _pendingWriter;
   Timer? _writeTimer;
 
-  // перемотка
+  // seek
   Duration _startPos = Duration.zero;
   Duration _total = Duration.zero;
   Duration _target = Duration.zero;
   double _dx = 0;
 
-  // збільшення щипком
+  // pinch zoom
   final Map<int, Offset> _pointers = {};
   double _pinchStartDist = 1;
   double _pinchStartScale = 1;
   Offset _pinchStartFocal = Offset.zero;
   Offset _pinchStartOffset = Offset.zero;
-  int _magnet = 0; // 0 — вільно, 1 — прилипло до 1×, 2 — до «на весь екран»
+  int _magnet = 0; // 0 is free, 1 is snapped to 1×, 2 to "fill the screen"
   late final AnimationController _settle = AnimationController(vsync: this, duration: const Duration(milliseconds: 200));
 
   Size _fit() {
@@ -117,7 +117,7 @@ class _MobileGestureLayerState extends State<MobileGestureLayer> with SingleTick
       _pinchStartFocal = _fromCenter((pts[0] + pts[1]) / 2);
       _magnet = 0;
       z.pinching = true;
-      // Однопалцеві жести (яскравість / гучність / перемотка) на час щипка скасовано
+      // One-finger gestures (brightness / volume / seek) are cancelled for the duration of the pinch
       _reset();
     }
   }
@@ -129,9 +129,9 @@ class _MobileGestureLayerState extends State<MobileGestureLayer> with SingleTick
     if (_pointers.length < 2 || !z.pinching) return;
     final pts = _pointers.values.toList();
     final dist = (pts[0] - pts[1]).distance;
-    // Збільшення завжди від центру екрана; менше за 1× (звичайний розмір) не буває
+    // Zoom is always from the screen center; below 1× (normal size) is not possible
     var s = (_pinchStartScale * dist / _pinchStartDist).clamp(VideoZoomMath.minScale, VideoZoomMath.maxScale).toDouble();
-    // Примагнічування до 1× і «на весь екран»: відчутне клацання й підпис
+    // Snapping to 1× and "fill the screen": a noticeable click and a label
     final cover = VideoZoomMath.coverScale(_size, _fit());
     final magnet = VideoZoomMath.magnetOf(s, cover: cover);
     if (magnet != 0) s = magnet == 1 ? 1.0 : cover;
@@ -155,7 +155,7 @@ class _MobileGestureLayerState extends State<MobileGestureLayer> with SingleTick
     final z = widget.zoom;
     if (z == null || _pointers.remove(e.pointer) == null) return;
     if (!z.pinching || _pointers.length >= 2) return;
-    // Щипок закінчено: масштаб прилипає до 1× чи «на весь екран», зображення — до країв
+    // Pinch finished: the scale snaps to 1× or "fill the screen", the image to the edges
     final fit = _fit();
     final cover = VideoZoomMath.coverScale(_size, fit);
     final target = VideoZoomMath.snapScale(z.scale, cover: cover);
@@ -195,7 +195,7 @@ class _MobileGestureLayerState extends State<MobileGestureLayer> with SingleTick
     _id++;
   }
 
-  // ── Вертикальні жести ──────────────────────────────────────────────────────
+  // ── Vertical gestures ──────────────────────────────────────────────────────
 
   void _onVerticalStart(DragStartDetails d) {
     _id++;
@@ -208,7 +208,7 @@ class _MobileGestureLayerState extends State<MobileGestureLayer> with SingleTick
     _base = null;
     _dy = 0;
     final id = _id;
-    // Початкове значення беремо в системи: його могли змінити кнопки гучності чи шторка
+    // We take the initial value from the system: it could have been changed by the volume buttons or the shade
     (brightness ? widget.readBrightness() : widget.readVolume()).then((v) {
       if (!mounted || id != _id) return;
       _base = (v ?? 0.5).clamp(0.0, 1.0);
@@ -242,7 +242,7 @@ class _MobileGestureLayerState extends State<MobileGestureLayer> with SingleTick
     _queue(level, brightness ? widget.writeBrightness : widget.writeVolume);
   }
 
-  /// Запис у систему не частіше ~25 разів на секунду (останнє значення завжди доходить)
+  /// Writes to the system at most ~25 times per second (the last value always arrives)
   void _queue(double value, Future<void> Function(double) writer) {
     _pending = value;
     _pendingWriter = writer;
@@ -260,7 +260,7 @@ class _MobileGestureLayerState extends State<MobileGestureLayer> with SingleTick
     if (v != null && w != null) w(v);
   }
 
-  // ── Горизонтальна перемотка ────────────────────────────────────────────────
+  // ── Horizontal seek ────────────────────────────────────────────────────────
 
   void _onHorizontalStart(DragStartDetails d) {
     _id++;
@@ -310,10 +310,10 @@ class _MobileGestureLayerState extends State<MobileGestureLayer> with SingleTick
           onPointerUp: _pointerUp,
           onPointerCancel: _pointerUp,
           child: GestureDetector(
-          // translucent: дотик бачать і цей шар (перетягування), і відео під ним (тап, подвійний тап)
+          // translucent: both this layer (dragging) and the video under it (tap, double tap) see the touch
           behavior: HitTestBehavior.translucent,
-          // Початок жесту = місце, куди торкнувся палець (а не точка після «порога» ~18 px): так правильно
-          // визначаються половина екрана (яскравість / гучність) і системні краї, а рух відчувається одразу
+          // The gesture start = where the finger touched (not the point after the ~18 px "threshold"): this way
+          // the screen half (brightness / volume) and the system edges are determined correctly, and the motion feels immediate
           dragStartBehavior: DragStartBehavior.down,
           onVerticalDragStart: _onVerticalStart,
           onVerticalDragUpdate: _onVerticalUpdate,

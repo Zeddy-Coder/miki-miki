@@ -1,8 +1,8 @@
 part of 'hikka_models.dart';
 
-// ── Спільнота: автори, колекції, статті ─────────────────────────────────────
+// ── Community: authors, collections, articles ─────────────────────────────
 
-/// Автор колекції чи статті
+/// Author of a collection or article
 class HikkaAuthor {
   final String username;
   final String? avatar;
@@ -17,7 +17,7 @@ class HikkaAuthor {
   static const HikkaAuthor unknown = HikkaAuthor(username: '');
 }
 
-/// Один запис колекції: тайтл із необовʼязковим коментарем автора й міткою-розділом
+/// One collection entry: a title with an optional author comment and a section label
 class HikkaCollectionEntry {
   final HikkaAnime anime;
   final String? comment;
@@ -27,8 +27,8 @@ class HikkaCollectionEntry {
   const HikkaCollectionEntry({required this.anime, this.comment, this.label, this.order = 0});
 }
 
-/// Колекція аніме від користувача. У списку приходить лише кілька перших записів ([items]), на сторінці
-/// колекції — усі; [entries] — скільки їх усього.
+/// An anime collection from a user. The list carries only the first few entries ([items]); the collection
+/// page has all of them; [entries] is the total count.
 class HikkaCollection {
   final String reference;
   final String title;
@@ -42,7 +42,7 @@ class HikkaCollection {
   final List<String> labelsOrder;
   final bool spoiler;
   final bool nsfw;
-  final int created; // unix, секунди
+  final int created; // unix, seconds
   final int updated;
   final List<HikkaCollectionEntry> items;
 
@@ -100,11 +100,11 @@ class HikkaCollection {
   DateTime get createdAt => DateTime.fromMillisecondsSinceEpoch(created * 1000);
   DateTime get updatedAt => DateTime.fromMillisecondsSinceEpoch(updated * 1000);
 
-  /// Записи без хентаю, якщо його показ вимкнено
+  /// Entries without hentai if showing it is turned off
   List<HikkaCollectionEntry> visibleItems({required bool allowAdult}) =>
       allowAdult ? items : [for (final e in items) if (!e.anime.isAdult) e];
 
-  /// Записи, згруповані за мітками-розділами автора (порядок розділів — як у `labels_order`); записи без мітки — на початку
+  /// Entries grouped by the author's section labels (section order follows `labels_order`); unlabeled entries come first
   List<(String? label, List<HikkaCollectionEntry> items)> grouped({required bool allowAdult}) {
     final list = visibleItems(allowAdult: allowAdult);
     if (labelsOrder.isEmpty || !list.any((e) => e.label != null)) return [(null, list)];
@@ -121,9 +121,9 @@ class HikkaCollection {
   }
 }
 
-/// Вузол документа статті (редактор Slate): блок (`p`, `h3`, `image`…) або текстовий листок із розміткою
+/// Article document node (Slate editor): a block (`p`, `h3`, `image`…) or a text leaf with markup
 class SlateNode {
-  /// Тип блоку; порожній — текстовий листок
+  /// Block type; empty means a text leaf
   final String type;
   final String text;
   final bool bold;
@@ -153,7 +153,7 @@ class SlateNode {
     final kids = j['children'];
     return SlateNode(
       type: type ?? '',
-      // Порожній листок (`{"text": ""}`) теж лишається листком
+      // An empty leaf (`{"text": ""}`) is still a leaf
       text: j['text'] is String ? j['text'] as String : '',
       bold: _bool(j['bold']),
       italic: _bool(j['italic']),
@@ -168,13 +168,13 @@ class SlateNode {
   static List<SlateNode> parseList(Object? json) =>
       json is List ? [for (final e in json) if (e is Map<String, dynamic>) SlateNode.fromJson(e)] : const [];
 
-  /// Увесь текст вузла без розмітки
+  /// All text of the node without markup
   String get plainText {
     if (isText) return text;
     return children.map((c) => c.plainText).join();
   }
 
-  /// Перша картинка в піддереві (для обкладинки статті у списку)
+  /// First image in the subtree (for the article cover in the list)
   String? get firstImage {
     if (type == 'image' && url != null) return url;
     for (final c in children) {
@@ -185,13 +185,13 @@ class SlateNode {
   }
 }
 
-/// Стаття спільноти. У списку приходить лише початок ([preview]), на сторінці статті — весь текст ([document]).
+/// A community article. The list carries only the beginning ([preview]); the article page has the full text ([document]).
 class HikkaArticle {
   final String slug;
   final String title;
   final HikkaAuthor author;
   final String category;
-  final int created; // unix, секунди
+  final int created; // unix, seconds
   final int updated;
   final int views;
   final int voteScore;
@@ -240,7 +240,7 @@ class HikkaArticle {
   String get categoryLabel => categories[category] ?? category;
   DateTime get createdAt => DateTime.fromMillisecondsSinceEpoch(created * 1000);
 
-  /// Початок тексту для картки у списку: перші абзаци без розмітки, не довше [maxChars]
+  /// Beginning of the text for a list card: the first paragraphs without markup, no longer than [maxChars]
   String snippet({int maxChars = 220}) {
     final b = StringBuffer();
     for (final n in preview.isNotEmpty ? preview : document) {
@@ -255,7 +255,7 @@ class HikkaArticle {
     return s.length <= maxChars ? s : '${s.substring(0, maxChars).trimRight()}…';
   }
 
-  /// Перша картинка статті (обкладинка картки)
+  /// First image of the article (card cover)
   String? get coverImage {
     for (final n in preview.isNotEmpty ? preview : document) {
       final f = n.firstImage;

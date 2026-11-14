@@ -94,7 +94,7 @@ void main() {
       expect(r.store.isWatched('hikka:test', '1'), isTrue);
       expect(r.driver.index, 1);
       expect(r.messages, ['Наступна серія']);
-      // збережену позицію скинуто: серію можна дивитись спочатку
+      // the saved position is reset: the episode can be watched from the start
       expect(r.saved.last.key, 'hikka:test#1');
       expect(r.saved.last.pos, r.saved.last.dur);
     });
@@ -122,7 +122,7 @@ void main() {
       final r = Rig(positions: {'hikka:test#1': 600000});
       await r.driver.start(r.launch());
       expect(r.engine.opens.single.start, const Duration(minutes: 10));
-      r.started(dur: const Duration(minutes: 8)); // в іншій озвучці серія коротша за збережене місце
+      r.started(dur: const Duration(minutes: 8)); // in another dub the episode is shorter than the saved place
       await r.driver.onCompleted();
       expect(r.driver.index, 0);
       expect(r.engine.opens, hasLength(2));
@@ -181,7 +181,7 @@ void main() {
       final r = Rig();
       await r.driver.start(r.launch());
       expect(r.driver.hoster, 'Moon');
-      await r.wait(150); // Moon мовчить 100 мс → Sibnet, у якого ще є час запуститися
+      await r.wait(150); // Moon is silent for 100 ms → Sibnet, which still has time to start
       expect(r.engine.opens, hasLength(2));
       expect(r.engine.lastUrl, 'https://sibnet/e1.m3u8');
       expect(r.driver.hoster, 'Sibnet');
@@ -243,7 +243,7 @@ void main() {
       r.engine.failOpen = StateError('boom');
       await r.driver.start(r.launch());
       await r.wait(120);
-      // обидва плеєри не відкрилися: друга спроба теж кинула виняток → помилка
+      // neither player opened: the second attempt also threw an exception → an error
       expect(r.driver.phase, RemotePhase.failed);
     });
 
@@ -420,7 +420,7 @@ void main() {
       r.driver.toggleWatched(2);
       expect(r.store.isWatched('hikka:test', '3'), isFalse);
       expect(r.messages.last, 'Позначку знято');
-      // поточну серію після зняття позначки не позначає знову сама
+      // the current episode after clearing the mark is not marked again on its own
       r.driver.toggleWatched(0);
       r.driver.toggleWatched(0);
       r.engine.position = const Duration(minutes: 23);
@@ -431,7 +431,7 @@ void main() {
     test('запуск — не вибір: улюбленою команда стає лише після перемикання в плеєрі', () async {
       final r = Rig();
       await r.driver.start(r.launch());
-      expect(r.store.preferredGroup('hikka:test'), 'g1'); // для цього тайтлу — остання озвучка
+      expect(r.store.preferredGroup('hikka:test'), 'g1'); // for this title, the last dub
       expect(r.store.favoriteChoices, isEmpty);
     });
 
@@ -450,7 +450,7 @@ void main() {
       r.started();
       expect(r.store.favoriteChoices, [choiceKeyOf(b)]);
 
-      // Назад і вдруге: список не росте, найновіший вибір першим
+      // Back and again: the list does not grow, the newest choice first
       await r.driver.switchGroup(r.group);
       r.started();
       await r.driver.switchGroup(b);
@@ -458,7 +458,7 @@ void main() {
       expect(r.store.favoriteChoices, [choiceKeyOf(b), choiceKeyOf(r.group)]);
       expect(r.store.preferredGroup('hikka:test'), 'g2');
 
-      // Інший тайтл тієї ж озвучки: «Дивитись» відкриє знайому команду, хоч би яка була першою
+      // Another title of the same dub: "Дивитись" will open the familiar team, whichever was first
       final other = [
         WatchGroup(id: 'x1', sourceId: 'src', label: 'Команда А', episodes: [ep(1), ep(2)]),
         WatchGroup(id: 'x2', sourceId: 'src', label: 'Команда Б', episodes: [ep(1), ep(2)]),
@@ -505,7 +505,7 @@ void main() {
       );
       await r.driver.start(RemoteLaunch(title: title, group: r.group, animeTitle: 'Аніме', epKey: '3'));
       await r.driver.switchGroup(short);
-      expect(r.driver.index, 1); // 3-ї серії немає й далі нічого — остання серія черги
+      expect(r.driver.index, 1); // there is no 3rd episode and nothing beyond: the queue's last episode
       expect(r.driver.entry!.epKey, '2');
     });
 
@@ -532,7 +532,7 @@ void main() {
       expect(r.engine.lastUrl, 'https://moon/e1/720.m3u8');
       expect(r.engine.opens.last.start, const Duration(minutes: 4));
       expect(r.driver.phase, RemotePhase.opening);
-      // наступна серія теж не вище 720p
+      // the next episode is also no higher than 720p
       r.started();
       await r.driver.next();
       expect(r.engine.lastUrl, 'https://moon/e2/720.m3u8');
@@ -620,7 +620,7 @@ void main() {
 
     test('субтитри (суб.): з кількох доріжок вмикається та, що вища за мовою в налаштуваннях, а не перша', () async {
       final r = await subRig([en, uk]);
-      expect(r.engine.subs.map((s) => s.select), [false, true]); // українська попереду англійської
+      expect(r.engine.subs.map((s) => s.select), [false, true]); // Ukrainian ahead of English
     });
 
     test('інший пріоритет — інша доріжка; підпис може бути й міткою мови', () async {
@@ -668,7 +668,7 @@ void main() {
 
     test('alternativeHoster: наступний плеєр по колу; без вибору — null', () async {
       final r = Rig();
-      expect(r.driver.alternativeHoster, isNull); // ще нічого не відкрито
+      expect(r.driver.alternativeHoster, isNull); // nothing has been opened yet
       await r.driver.start(r.launch());
       expect(r.driver.hoster, 'Moon');
       expect(r.driver.alternativeHoster, 'Sibnet');
@@ -703,11 +703,11 @@ void main() {
       r.driver.addListener(() => calls++);
       r.engine.position = const Duration(minutes: 5);
       r.driver.tick();
-      expect(calls, 0); // ще не переглянуто
+      expect(calls, 0); // not watched yet
       r.engine.position = const Duration(minutes: 21);
       r.driver.tick();
       expect(calls, 1);
-      r.driver.tick(); // вдруге вже позначено — зайвих сповіщень немає
+      r.driver.tick(); // the second time it is already marked: no extra notifications
       expect(calls, 1);
     });
   });

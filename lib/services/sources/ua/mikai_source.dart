@@ -1,6 +1,6 @@
-/// Mikai (mikai.me) — українська база аніме з озвучками й субтитрами від команд. Працює через публічний API
-/// (api.mikai.me/public/v1), а не через розбір сторінок: каталог, команди (з аватарами й посиланнями),
-/// серії та готові адреси плеєрів. Приймає `hikka:<slug>` — тож аніме з Hikka зіставляється без вгадування назв.
+/// Mikai (mikai.me) is a Ukrainian anime database with dubs and subtitles by teams. It works through the public API
+/// (api.mikai.me/public/v1) rather than page parsing: catalog, teams (with avatars and links),
+/// episodes and ready player addresses. It accepts `hikka:<slug>`, so Hikka anime are matched without guessing titles.
 library;
 
 import 'dart:convert';
@@ -21,13 +21,13 @@ class MikaiTeam {
   const MikaiTeam(this.id, this.slug, this.name, [this.avatarUrl]);
 }
 
-/// Подробиці про команду озвучення / субтитрів
+/// Details about a dub / subtitle team
 class MikaiTeamInfo {
   final MikaiTeam team;
   final String? description;
   final DateTime? birthday;
 
-  /// Посилання на соцмережі команди: `telegram`, `youtube`, `instagram` …
+  /// Links to the team's social networks: `telegram`, `youtube`, `instagram` …
   final Map<String, String> links;
   final bool hasVoice;
   final bool hasSubs;
@@ -67,7 +67,7 @@ class MikaiEpisode {
   const MikaiEpisode(this.number, this.label, this.kind, this.addedAt, this.embeds);
 }
 
-/// Один реліз = команда (або колаборація) + доріжка: озвучення чи субтитри
+/// One release = a team (or collaboration) + a track: dub or subtitles
 class MikaiRelease {
   final String id;
   final bool isSub;
@@ -91,11 +91,11 @@ class MikaiRelease {
 
   String get teamsName => teams.map((t) => t.name).join(' + ');
 
-  /// Підпис для вибору: «FanVoxUA» або «Inari (суб.)»
+  /// Label for selection: "FanVoxUA" or "Inari (суб.)"
   String get label => isSub ? '$teamsName (суб.)' : teamsName;
 }
 
-/// Ліцензований в Україні тайтл: джерел немає, лише куди дивитися легально
+/// A title licensed in Ukraine: no sources, only where to watch legally
 class MikaiLicense {
   final String? holder;
   final List<({String title, String url})> links;
@@ -120,7 +120,7 @@ class _Cached<T> {
 class MikaiSource extends HttpAnimeSource {
   MikaiSource({super.http, this.apiKey, DateTime Function()? now}) : _now = now ?? DateTime.now;
 
-  /// Необовʼязковий ключ API (300 запитів/хв замість 60); можна змінити під час роботи
+  /// Optional API key (300 requests/min instead of 60); can be changed at runtime
   String? apiKey;
   final DateTime Function() _now;
 
@@ -138,12 +138,12 @@ class MikaiSource extends HttpAnimeSource {
   @override
   String get about => 'Каталог українських озвучок і субтитрів від команд — серії одразу зіставляються з Hikka';
 
-  // ── Запити до API ───────────────────────────────────────────────────────────────
+  // ── API requests ───────────────────────────────────────────────────────────────
 
   final Map<String, _Cached<Map<String, dynamic>>> _cache = {};
   final Map<String, Future<Map<String, dynamic>>> _inflight = {};
 
-  /// Скинути кеш відповідей
+  /// Reset the response cache
   void clearCache() => _cache.clear();
 
   Future<Map<String, dynamic>> api(String path, {Map<String, String>? query, Duration ttl = const Duration(minutes: 3)}) {
@@ -194,7 +194,7 @@ class MikaiSource extends HttpAnimeSource {
     return body;
   }
 
-  // ── Розбір карток ───────────────────────────────────────────────────────────────
+  // ── Card parsing ───────────────────────────────────────────────────────────────
 
   static String? _image(Object? images, String slot, String size) {
     final m = images is Map ? images[slot] : null;
@@ -222,7 +222,7 @@ class MikaiSource extends HttpAnimeSource {
         _ => SAnimeStatus.unknown,
       };
 
-  /// Картка зі списку (`/anime`) або повний запис (`/anime/{ref}`) → `SAnime`
+  /// A card from the list (`/anime`) or a full record (`/anime/{ref}`) → `SAnime`
   static SAnime animeFromJson(Map<dynamic, dynamic> j, {String posterSize = 'small'}) {
     final ids = (j['ids'] as Map?) ?? const {};
     final titles = (j['titles'] as Map?) ?? const {};
@@ -299,7 +299,7 @@ class MikaiSource extends HttpAnimeSource {
     return MikaiPlayer(r['licensed'] == true, _licenseFrom(r['license']), releases);
   }
 
-  /// Блок ліцензії (формат у документації не описано) — беремо назву власника й усі посилання, що знайдемо
+  /// License block (the format is not described in the docs): we take the owner's name and all links we can find
   static MikaiLicense? _licenseFrom(Object? raw) {
     if (raw == null) return null;
     String? holder;
@@ -333,7 +333,7 @@ class MikaiSource extends HttpAnimeSource {
     return MikaiLicense(holder, links);
   }
 
-  // ── Каталог ─────────────────────────────────────────────────────────────────────
+  // ── Catalog ─────────────────────────────────────────────────────────────────────
 
   Future<SAnimePage> _catalog(int page, Map<String, String> extra) async {
     final body = await api('/anime', query: {'page': '$page', 'limit': '$pageSize', ...extra}, ttl: const Duration(minutes: 3));
@@ -359,7 +359,7 @@ class MikaiSource extends HttpAnimeSource {
     return anime.mergedWith(animeFromJson(r, posterSize: 'medium'));
   }
 
-  /// Аніме з Hikka → запис Mikai; `null`, якщо Mikai такого не знає
+  /// Hikka anime → Mikai record; `null` if Mikai does not know it
   Future<SAnime?> byHikka(String hikkaSlug) async {
     try {
       final body = await api('/anime/hikka:${Uri.encodeComponent(hikkaSlug)}', ttl: const Duration(minutes: 10));
@@ -372,7 +372,7 @@ class MikaiSource extends HttpAnimeSource {
     }
   }
 
-  /// Те саме за MAL-id (запасний шлях, якщо slug Hikka ще не потрапив у Mikai)
+  /// The same by MAL id (a fallback if the Hikka slug has not reached Mikai yet)
   Future<SAnime?> byMal(int malId) async {
     try {
       final body = await api('/anime/mal:$malId', ttl: const Duration(minutes: 10));
@@ -387,10 +387,10 @@ class MikaiSource extends HttpAnimeSource {
   @override
   String animeWebUrl(SAnime anime) => '$baseUrl/anime/${anime.url}';
 
-  // ── Команди ─────────────────────────────────────────────────────────────────────
+  // ── Teams ─────────────────────────────────────────────────────────────────────
 
-  /// Одна сторінка команд озвучення (`GET /teams`, без ключа), найпопулярніші (за кількістю тайтлів) першими.
-  /// Повертає й ознаку «далі є ще»
+  /// One page of dub teams (`GET /teams`, no key), the most popular (by number of titles) first.
+  /// Also returns the "there is more" flag
   Future<(List<MikaiTeam>, bool)> teamsPage({int page = 1, int limit = 50, String search = ''}) async {
     final q = search.trim();
     final body = await api(
@@ -405,14 +405,14 @@ class MikaiSource extends HttpAnimeSource {
     return (list, more);
   }
 
-  /// Перша сторінка команд (для коротких запитів і тестів)
+  /// The first page of teams (for short queries and tests)
   Future<List<MikaiTeam>> teams({String search = '', int limit = 50}) async => (await teamsPage(limit: limit, search: search)).$1;
 
   static const String teamsSection = 'mikai_teams';
   static const Duration teamsMaxAge = Duration(hours: 24);
 
-  /// Усі команди озвучення Mikai: зі збереженого списку на диску, а коли він застарів (доба) — перезавантажує всі сторінки
-  /// й зберігає. Без мережі повертає застарілий список, якщо він є. Аватарки кешує віджет зображень.
+  /// All Mikai dub teams: from the saved list on disk, and when it is stale (a day) it reloads all pages
+  /// and saves. Without a network it returns the stale list if there is one. Avatars are cached by the image widget.
   Future<List<MikaiTeam>> allTeams({bool refresh = false}) async {
     final cached = _readTeams();
     if (!refresh && cached != null && _now().difference(cached.$1) < teamsMaxAge) return cached.$2;
@@ -483,9 +483,9 @@ class MikaiSource extends HttpAnimeSource {
     );
   }
 
-  // ── Серії ───────────────────────────────────────────────────────────────────────
+  // ── Episodes ───────────────────────────────────────────────────────────────────
 
-  /// Релізи й серії тайтлу (кеш на кілька хвилин)
+  /// A title's releases and episodes (cached for a few minutes)
   Future<MikaiPlayer> player(SAnime anime) async {
     final body = await api('/anime/${anime.url}/player', ttl: const Duration(minutes: 3));
     return playerFromJson(body);
@@ -500,14 +500,14 @@ class MikaiSource extends HttpAnimeSource {
 
   static String _num(double n) => n == n.roundToDouble() ? '${n.toInt()}' : '$n';
 
-  /// Серії одного релізу, які є чим відтворити (серії лише з Fenix / Tortuga пропускаються).
-  /// `voice` — підпис релізу, `data` — JSON з усіма плеєрами серії.
+  /// Episodes of one release that have something to play them with (episodes with only Fenix / Tortuga are skipped).
+  /// `voice` is the release label, `data` is JSON with all of the episode's players.
   List<SEpisode> episodesOfRelease(MikaiRelease rel) {
     final out = <SEpisode>[];
     for (final e in rel.episodes) {
       final embeds = [for (final m in e.embeds) EmbedLink(m.provider, m.url)];
       final playable = [for (final m in embeds) if (VideoExtractors.forUrl(m.url) != null) m];
-      if (playable.isEmpty) continue; // лише Fenix / Tortuga — відтворити нічим
+      if (playable.isEmpty) continue; // only Fenix / Tortuga: nothing to play with
       out.add(SEpisode(
         url: playable.first.url,
         name: _episodeName(e),
@@ -521,7 +521,7 @@ class MikaiSource extends HttpAnimeSource {
     return out;
   }
 
-  /// Плаский перелік серій за всіма релізами
+  /// A flat list of episodes across all releases
   List<SEpisode> flatten(MikaiPlayer p) => [for (final rel in p.releases) ...episodesOfRelease(rel)];
 
   @override
@@ -541,7 +541,7 @@ class MikaiSource extends HttpAnimeSource {
   @override
   Future<List<Video>> hosterVideos(Hoster hoster) => hosterVideosOf(http, hoster, referer: '$baseUrl/');
 
-  /// Відео серії: пробуємо плеєри за порядком, перший, що дав відео, виграє
+  /// Episode video: we try the players in order, the first to give a video wins
   @override
   Future<List<Video>> videos(SEpisode episode) => videosOfEpisode(http, episode, referer: '$baseUrl/');
 }

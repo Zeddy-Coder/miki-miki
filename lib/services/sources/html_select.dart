@@ -1,6 +1,6 @@
-/// Jsoup-подібні вибірки поверх `package:html`: CSS-селектори з `:contains` / `:containsOwn`,
-/// непозначені значення атрибутів (`input[value*=https://x]`) і «людський» текст елемента.
-/// Парсери сайтів пишуться майже один в один із Kotlin-коду розширень Aniyomi.
+/// Jsoup-like selections on top of `package:html`: CSS selectors with `:contains` / `:containsOwn`,
+/// unquoted attribute values (`input[value*=https://x]`) and the element's "human" text.
+/// Site parsers are written almost one to one from the Kotlin code of Aniyomi extensions.
 library;
 
 import 'package:html/dom.dart';
@@ -11,7 +11,7 @@ Document parseHtml(String text) => html_parser.parse(text);
 final RegExp _unquotedAttr = RegExp(r'''\[\s*([\w:.-]+)\s*([~|^$*!]?=)\s*([^\]"'\s][^\]]*?)\s*\]''');
 final RegExp _containsTail = RegExp(r'^(.*?):(contains|containsOwn)\((.*)\)\s*$', dotAll: true);
 
-/// Розділяє перелік через кому, не чіпаючи коми в дужках, лапках та квадратних дужках.
+/// Splits a comma-separated list without touching commas in parentheses, quotes and square brackets.
 List<String> _splitTopLevel(String css) {
   final parts = <String>[];
   var depth = 0;
@@ -46,7 +46,7 @@ bool _matchesText(Element e, String kind, String needle) {
   return hay.toLowerCase().contains(needle.toLowerCase());
 }
 
-/// `root.select(css)` як у Jsoup: усі збіги у порядку документа.
+/// `root.select(css)` as in Jsoup: all matches in document order.
 List<Element> select(Node root, String css) {
   final parts = _splitTopLevel(css);
   final found = <Element>[];
@@ -76,7 +76,7 @@ List<Element> select(Node root, String css) {
     }
   }
   if (parts.length > 1) {
-    // порядок документа: впорядкувати за позицією в дереві
+    // document order: sort by position in the tree
     final order = <Element, int>{};
     var i = 0;
     void walk(Node n) {
@@ -106,7 +106,7 @@ Element? selectFirst(Node root, String css) {
   return r.isEmpty ? null : r.first;
 }
 
-/// Значення атрибута першого збігу, що його має; порожній рядок, якщо нема (як `Elements.attr` у Jsoup).
+/// The attribute value of the first match that has it; an empty string if none (like `Elements.attr` in Jsoup).
 String attrOf(Node root, String css, String name) {
   for (final e in select(root, css)) {
     final v = e.attributes[name];
@@ -115,10 +115,10 @@ String attrOf(Node root, String css, String name) {
   return '';
 }
 
-/// Зведений текст усіх збігів, розділений пропуском (як `Elements.text` у Jsoup).
+/// Combined text of all matches, separated by a space (like `Elements.text` in Jsoup).
 String textOf(Node root, String css) => select(root, css).map(elementText).where((s) => s.isNotEmpty).join(' ');
 
-/// Код усіх `<script>` документа, склеєний через новий рядок (як `select("script").html()`).
+/// Code of all `<script>` tags of the document joined with a newline (like `select("script").html()`).
 String scriptsOf(Node root) => select(root, 'script').map((s) => s.innerHtml).join('\n');
 
 const Set<String> _blockTags = {
@@ -129,7 +129,7 @@ const Set<String> _blockTags = {
 
 final RegExp _ws = RegExp(r'\s+');
 
-/// «Читабельний» текст елемента, як `Element.text()` у Jsoup: без скриптів, пробіли зведені.
+/// The "readable" text of an element, like `Element.text()` in Jsoup: without scripts, whitespace collapsed.
 String elementText(Node n) {
   final sb = StringBuffer();
   void walk(Node x) {
@@ -151,7 +151,7 @@ String elementText(Node n) {
   return sb.toString().replaceAll(_ws, ' ').trim();
 }
 
-/// Власний текст елемента без тексту вкладених тегів (`Element.ownText()`)
+/// The element's own text without the text of nested tags (`Element.ownText()`)
 String ownText(Element e) {
   final sb = StringBuffer();
   for (final c in e.nodes) {
@@ -163,7 +163,7 @@ String ownText(Element e) {
 extension JsoupElement on Element {
   String attr(String name) => attributes[name] ?? '';
 
-  /// Читабельний текст (як `text()` у Jsoup)
+  /// Readable text (like `text()` in Jsoup)
   String get jsoupText => elementText(this);
 
   List<Element> select(String css) => _select(this, css);

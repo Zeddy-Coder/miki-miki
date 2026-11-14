@@ -3,13 +3,13 @@ import 'package:flutter/foundation.dart';
 import '../models/hikka_models.dart';
 import 'hikka_api.dart';
 
-/// Постраничне завантаження списку (каталог, персонажі, календар): накопичує елементи, підвантажує
-/// наступну сторінку на вимогу й відкидає відповіді, що спізнилися після зміни умов пошуку.
+/// Paged list loading (catalog, characters, calendar): accumulates items, loads
+/// the next page on demand and discards responses that arrive late after the search conditions change.
 class HikkaPager<T> extends ChangeNotifier {
   final Future<HikkaPage<T>> Function(int page) _fetch;
 
-  /// Не вважати елементи однаковими, якщо в різних сторінках трапився один і той самий (зсув при вставці
-  /// нових записів на сервері): ключ елемента
+  /// Do not treat items as identical if the same one appeared on different pages (a shift when
+  /// new records are inserted on the server): the item key
   final Object Function(T item)? keyOf;
 
   List<T> _items = const [];
@@ -27,20 +27,20 @@ class HikkaPager<T> extends ChangeNotifier {
   bool get hasMore => _hasMore;
   bool get loading => _loading;
 
-  /// Помилка останнього завантаження (null — усе гаразд)
+  /// Error of the last load (null means all is well)
   Object? get error => _error;
   int get total => _total;
 
-  /// Сторінок ще не завантажували
+  /// No pages loaded yet
   bool get isFresh => _page == 0 && !_loading && _error == null;
 
-  /// Перше завантаження ще триває й нічого не показано
+  /// The first load is still in progress and nothing is shown
   bool get isInitialLoading => _loading && _items.isEmpty;
 
-  /// Завантаження закінчилось, але нічого немає
+  /// Loading finished but there is nothing
   bool get isEmpty => !_loading && _error == null && _items.isEmpty && _page > 0;
 
-  /// Скидає список і вантажить першу сторінку
+  /// Resets the list and loads the first page
   Future<void> reload() {
     _generation++;
     _items = const [];
@@ -52,7 +52,7 @@ class HikkaPager<T> extends ChangeNotifier {
     return loadMore();
   }
 
-  /// Підвантажує наступну сторінку; нічого не робить, якщо вона вже вантажиться або сторінки скінчились
+  /// Loads the next page; does nothing if it is already loading or the pages have ended
   Future<void> loadMore() async {
     if (_loading || !_hasMore || _disposed) return;
     final gen = _generation;
@@ -86,13 +86,13 @@ class HikkaPager<T> extends ChangeNotifier {
     }
   }
 
-  /// Повторити після помилки
+  /// Retry after an error
   Future<void> retry() {
     _error = null;
     return loadMore();
   }
 
-  /// Текст помилки для користувача
+  /// Error text for the user
   String? get errorMessage {
     final e = _error;
     if (e == null) return null;

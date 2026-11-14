@@ -4,7 +4,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:media_kit/media_kit.dart';
 import 'app_animation_kit.dart';
 
-/// Коротка велика іконка пауза/пуск посередині відео (замість постійних центральних кнопок)
+/// A short large pause/play icon in the middle of the video (instead of permanent central buttons)
 class CenterFlash extends StatefulWidget {
   final double scale;
   final Player player;

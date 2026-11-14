@@ -14,7 +14,7 @@ import 'hikka_common.dart';
 import 'hikka_markdown_view.dart';
 import 'hikka_page_kit.dart';
 
-/// Сторінка персонажа: портрет, імена, опис (зі спойлерами), озвучення й аніме, де він з'являється.
+/// Character page: portrait, names, description (with spoilers), voice acting and the anime where they appear.
 class HikkaCharacterPage extends StatefulWidget {
   final HikkaRoute route;
   final double scale;
@@ -92,7 +92,7 @@ class _HikkaCharacterPageState extends State<HikkaCharacterPage> {
     _load();
   }
 
-  // ── Шапка ──────────────────────────────────────────────────────────────────
+  // ── Header ──────────────────────────────────────────────────────────────────
 
   Widget _names(HikkaCharacter c, {required bool wide}) {
     final scale = _scale;
@@ -163,7 +163,7 @@ class _HikkaCharacterPageState extends State<HikkaCharacterPage> {
     );
   }
 
-  /// Озвучення за мовами: японська, українська, англійська, далі за абеткою; люди без повторів
+  /// Voice acting by language: Japanese, Ukrainian, English, then alphabetically; people without repeats
   Widget _voices(double pad) {
     final scale = _scale;
     return HikkaAsync<HikkaPage<HikkaCharacterVoice>>(

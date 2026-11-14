@@ -12,7 +12,7 @@ import 'package:miki_miki/widgets/skip_button.dart';
 
 import 'fakes.dart';
 
-/// Рахує перебудови елементів (build) за типом віджета — через відладочний хук Flutter.
+/// Counts element rebuilds (build) by widget type, through Flutter's debug hook.
 class RebuildCounter {
   final Map<String, int> byType = {};
   int total = 0;
@@ -78,7 +78,7 @@ class PerfResult {
       'мс/кадр(debug)=${msPerFrame.toStringAsFixed(2)}  топ=${top.take(5).map((e) => '${e.key}×${e.value}').join(', ')}';
 }
 
-/// Програє «шторм» подій позиції (як mpv time-pos) і вимірює навантаження на інтерфейс.
+/// Plays a "storm" of position events (like mpv time-pos) and measures the UI load.
 Future<PerfResult> runPositionStorm(
   WidgetTester tester,
   FakePlayer player, {
@@ -92,7 +92,7 @@ Future<PerfResult> runPositionStorm(
   var pos = from ?? player.state.position;
   final n = (seconds * hz).round();
 
-  // Прогрів: один кадр, щоб не міряти початкову побудову
+  // Warm-up: one frame so the initial build is not measured
   await tester.pump(dt);
 
   counter.start();
@@ -120,13 +120,13 @@ Future<PerfResult> runPositionStorm(
   );
 }
 
-/// Зберігає результати у JSON (для порівняння «до/після»)
+/// Saves results to JSON (for before / after comparison)
 void saveResults(String tag, List<PerfResult> results) {
   final f = File('/tmp/proj/perf_$tag.json');
   f.writeAsStringSync(const JsonEncoder.withIndent('  ').convert([for (final r in results) r.toJson()]));
 }
 
-/// Розділи для тестів: опенінґ і ендінґ — «пропускні»
+/// Chapters for tests: opening and ending are "skippable"
 List<VideoChapter> sampleChapters() => const [
       VideoChapter(title: 'Prologue', startTime: Duration.zero),
       VideoChapter(title: 'Opening', startTime: Duration(minutes: 1, seconds: 30)),
@@ -136,7 +136,7 @@ List<VideoChapter> sampleChapters() => const [
       VideoChapter(title: 'Preview', startTime: Duration(minutes: 22)),
     ];
 
-/// Склад екрана плеєра без самого відео: кнопка пропуску + оверлей керування.
+/// The player screen composition without the video itself: the skip button + the control overlay.
 Widget playerOverlayHarness({
   required FakePlayer player,
   required ValueListenable<bool> showControls,

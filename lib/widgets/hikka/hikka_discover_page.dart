@@ -14,14 +14,14 @@ import 'hikka_overview_page.dart';
 import 'hikka_page_kit.dart';
 import 'hikka_schedule_page.dart';
 
-/// Вкладка «Огляд»: розділи для відкриттів — колекції, статті, каталог з пошуком і фільтрами, персонажі та календар.
-/// Відкриті розділи не руйнуються (пошук і прокрутка лишаються на місці, поки не закрито застосунок).
+/// The "Огляд" tab: sections for discovery: collections, articles, a catalog with search and filters, characters and the calendar.
+/// Opened sections are not destroyed (search and scroll stay in place until the app is closed).
 class HikkaDiscoverPage extends StatefulWidget {
   final double scale;
   final double bottomInset;
   final int refreshToken;
 
-  /// Кнопка «Оновити» в заголовку
+  /// The "Оновити" button in the heading
   final VoidCallback onRefresh;
 
   const HikkaDiscoverPage({super.key, required this.scale, required this.onRefresh, this.bottomInset = 0, this.refreshToken = 0});
@@ -42,7 +42,7 @@ class HikkaDiscoverPage extends StatefulWidget {
 class _HikkaDiscoverPageState extends State<HikkaDiscoverPage> {
   final HikkaNav _nav = HikkaNav.instance;
 
-  /// Розділи, які вже відкривали: їх не руйнуємо, щоб пошук і прокрутка лишались на місці
+  /// Sections already opened: we do not destroy them so search and scroll stay in place
   final Set<HikkaTab> _mounted = {};
 
   @override
@@ -83,7 +83,7 @@ class _HikkaDiscoverPageState extends State<HikkaDiscoverPage> {
       children: [
         for (final tab in HikkaTab.values)
           if (_mounted.contains(tab))
-            // Ключі потрібні, щоб при появі нового розділу вже відкриті не втрачали стан
+            // Keys are needed so that when a new section appears the already opened ones do not lose state
             Offstage(
               key: ValueKey('discover-${tab.name}'),
               offstage: current != tab,
@@ -93,7 +93,7 @@ class _HikkaDiscoverPageState extends State<HikkaDiscoverPage> {
     );
   }
 
-  /// На телефоні розділ оновлюється потягом вниз (на ПК є кнопка в заголовку)
+  /// On a phone the section refreshes by pulling down (on PC there is a button in the heading)
   Widget _withRefresh(Widget child) {
     if (!AppPlatform.isMobile) return child;
     return AppPullToRefresh(
@@ -118,7 +118,7 @@ class _HikkaDiscoverPageState extends State<HikkaDiscoverPage> {
             scale: scale,
             title: 'Огляд',
             subtitle: 'Знайдіть, що подивитися',
-            // На телефоні розділ оновлюється потягом вниз
+            // On a phone the section refreshes by pulling down
             actions: [if (!AppPlatform.isMobile) HikkaIconButton(icon: Symbols.refresh_rounded, tooltip: 'Оновити', scale: scale, onTap: widget.onRefresh)],
           ),
           HikkaChipRow(

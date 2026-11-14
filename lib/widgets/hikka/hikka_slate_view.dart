@@ -11,14 +11,14 @@ import '../app_animation_kit.dart';
 import '../app_ui_kit.dart';
 import 'hikka_markdown_view.dart' show HikkaSpoilerBox;
 
-/// Текст статті Hikka (документ редактора Slate): абзаци, заголовки, списки, цитати, спойлери, картинки,
-/// групи картинок, відео та посилання (на аніме, персонажів, колекції й статті — усередині застосунку).
+/// Hikka article text (a Slate editor document): paragraphs, headings, lists, quotes, spoilers, images,
+/// image groups, videos and links (to anime, characters, collections and articles, inside the app).
 class HikkaSlateView extends StatefulWidget {
   final List<SlateNode> nodes;
   final double scale;
   final double fontSize;
 
-  /// Куди вести посилання; за замовчуванням — навігація застосунку
+  /// Where to send a link; by default the app navigation
   final void Function(String url)? onLink;
 
   const HikkaSlateView({super.key, required this.nodes, required this.scale, this.fontSize = 14.5, this.onLink});
@@ -63,7 +63,7 @@ class _HikkaSlateViewState extends State<HikkaSlateView> {
 
   static bool _isInline(SlateNode n) => n.isText || n.type == 'a';
 
-  // ── Рядки ──────────────────────────────────────────────────────────────────
+  // ── Lines ──────────────────────────────────────────────────────────────────
 
   List<InlineSpan> _inline(List<SlateNode> kids, {String? link}) {
     final out = <InlineSpan>[];
@@ -72,7 +72,7 @@ class _HikkaSlateViewState extends State<HikkaSlateView> {
         if (n.text.isEmpty) continue;
         out.add(_leaf(n, link: link));
       } else if (n.type == 'a' && n.url != null) {
-        // Розпізнавач натискання діє лише на власний текст проміжку, тож його дістає кожен листок усередині посилання
+        // The tap recognizer acts only on the span's own text, so every leaf inside a link obtains it
         out.addAll(_inline(n.children, link: n.url));
       } else {
         out.addAll(_inline(n.children, link: link));
@@ -115,9 +115,9 @@ class _HikkaSlateViewState extends State<HikkaSlateView> {
     return Text.rich(TextSpan(style: style, children: spans));
   }
 
-  // ── Блоки ──────────────────────────────────────────────────────────────────
+  // ── Blocks ──────────────────────────────────────────────────────────────────
 
-  /// Діти вузла: підряд інлайнові листки йдуть одним абзацом, блоки — кожен сам
+  /// Node children: consecutive inline leaves form one paragraph, blocks stand on their own
   List<Widget> _children(List<SlateNode> kids, {int depth = 0}) {
     final out = <Widget>[];
     var run = <SlateNode>[];
@@ -158,7 +158,7 @@ class _HikkaSlateViewState extends State<HikkaSlateView> {
           return Column(crossAxisAlignment: CrossAxisAlignment.start, children: _children(n.children, depth: depth));
         }
         final w = _text(inline);
-        // Порожній абзац — відступ між блоками, як у редакторі
+        // An empty paragraph is a gap between blocks, as in the editor
         return Padding(padding: EdgeInsets.only(bottom: 10 * scale), child: w is SizedBox ? SizedBox(height: 6 * scale) : w);
       case 'h1' || 'h2' || 'h3' || 'h4' || 'h5' || 'h6':
         final w = _text(
@@ -211,14 +211,14 @@ class _HikkaSlateViewState extends State<HikkaSlateView> {
         if (url == null) return const SizedBox.shrink();
         return Padding(padding: EdgeInsets.only(bottom: 12 * scale), child: _videoLink(url));
       default:
-        // Невідомий блок: показуємо його вміст, а не губимо текст
+        // Unknown block: we show its content rather than lose the text
         return Column(crossAxisAlignment: CrossAxisAlignment.start, children: _children(n.children, depth: depth));
     }
   }
 
   Widget _listItem(SlateNode li, String marker, int depth) {
     final scale = _scale;
-    // Вміст пункту: `lic` (текст) і вкладені списки
+    // List item content: `lic` (text) and nested lists
     final content = li.type == 'li' ? li.children : [li];
     return Padding(
       padding: EdgeInsets.only(left: (4 + depth * 14) * scale, bottom: 5 * scale),
@@ -298,7 +298,7 @@ class _HikkaSlateViewState extends State<HikkaSlateView> {
 
   @override
   Widget build(BuildContext context) {
-    // Розпізнавачі попереднього кадру знищуємо після побудови нового
+    // Recognizers of the previous frame are destroyed after the new one is built
     final old = List<TapGestureRecognizer>.of(_recognizers);
     _recognizers.clear();
     if (old.isNotEmpty) {
@@ -313,14 +313,14 @@ class _HikkaSlateViewState extends State<HikkaSlateView> {
   }
 }
 
-/// Картинка зі статті: плавно проявляється, під час завантаження — заглушка; натискання відкриває перегляд
-/// з масштабуванням. [aspect] — фіксоване співвідношення сторін (плитки груп), інакше висота за картинкою.
+/// An article image: fades in smoothly, a placeholder while loading; a tap opens a zoomable
+/// view. [aspect] is a fixed aspect ratio (group tiles), otherwise the height follows the image.
 class HikkaSlateImage extends StatelessWidget {
   final String url;
   final double scale;
   final double? aspect;
 
-  /// Усі картинки групи: у перегляді їх можна гортати
+  /// All images of the group: they can be flipped through in the viewer
   final List<String>? gallery;
 
   const HikkaSlateImage({super.key, required this.url, required this.scale, this.aspect, this.gallery});
@@ -374,7 +374,7 @@ class HikkaSlateImage extends StatelessWidget {
   }
 }
 
-/// Перегляд картинок на весь екран: масштабування щипком чи колесом, гортання між картинками групи
+/// Full-screen image viewer: pinch or wheel zoom, flipping between the group's images
 class HikkaImageViewer extends StatefulWidget {
   final List<String> urls;
   final int initial;

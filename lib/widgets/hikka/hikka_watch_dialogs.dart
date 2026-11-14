@@ -11,35 +11,35 @@ import '../app_animation_kit.dart';
 import '../app_ui_kit.dart';
 import 'hikka_common.dart';
 
-/// Діалоги блоку «Дивитись»: застереження про ліцензію та відомості про команду озвучення.
+/// Dialogs of the "Дивитись" block: a license warning and details about a dub team.
 class WatchDialogs {
   const WatchDialogs._();
 
-  /// «Тричі подумайте»: `true` — людина все одно хоче дивитись на неофіційних джерелах.
-  /// Головна кнопка веде до легального перегляду, а «все одно» — тиха.
+  /// "Think three times": `true` means the person still wants to watch on unofficial sources.
+  /// The main button leads to legal viewing, while "все одно" is quiet.
   static Future<bool> confirmLicensed(BuildContext context, {required double scale, MikaiLicense? license}) async {
     final r = await AppDialogs.show<bool>(context, builder: (ctx) => _LicenseDialog(scale: scale, license: license));
     return r == true;
   }
 
-  /// Усі джерела перегляду вимкнено: `true` — людина хоче відкрити налаштування джерел
+  /// All watch sources are off: `true` means the person wants to open the source settings
   static Future<bool> noSources(BuildContext context, {required double scale}) async {
     final r = await AppDialogs.show<bool>(context, builder: (ctx) => _NoSourcesDialog(scale: scale));
     return r == true;
   }
 
-  /// В обраній вами озвучці немає наступної серії. Повертає озвучку, на яку перейти (обране скидається, щоб знову
-  /// працював автоматичний вибір), або `null`, якщо людина скасувала
+  /// The dub you chose has no next episode. Returns the dub to switch to (the choice is reset so automatic selection
+  /// works again), or `null` if the person cancelled
   static Future<WatchGroup?> missingNext(BuildContext context, {required double scale, required MissingNext plan, required int next}) {
     return AppDialogs.show<WatchGroup>(context, builder: (ctx) => _MissingNextDialog(scale: scale, plan: plan, next: next));
   }
 
-  /// Відомості про команди: опис, кількість тайтлів, посилання на соцмережі
+  /// Team details: a description, the number of titles, social network links
   static Future<void> teams(BuildContext context, {required double scale, required List<MikaiTeam> teams, MikaiSource? source}) {
     return AppDialogs.show<void>(context, builder: (ctx) => _TeamsDialog(scale: scale, teams: teams, source: source));
   }
 
-  /// Підпис посилання команди за ключем з API
+  /// Label of a team link by the API key
   static String linkLabel(String key) {
     switch (key.toLowerCase()) {
       case 'telegram':
@@ -69,7 +69,7 @@ class WatchDialogs {
   }
 }
 
-/// Спільна оболонка діалогів перегляду: заголовок із закриттям, прокручуваний вміст, ряд кнопок
+/// Shared shell of the watch dialogs: a heading with close, scrollable content, a row of buttons
 class WatchDialogFrame extends StatefulWidget {
   final double scale;
   final String title;
@@ -108,7 +108,7 @@ class _WatchDialogFrameState extends State<WatchDialogFrame> {
           width: width,
           constraints: BoxConstraints(maxHeight: maxHeight),
           decoration: BoxDecoration(
-            // Як вікно в плеєрі: поверхня панелі, великий радіус, без розділювачів
+            // Like a window in the player: panel surface, a large radius, no dividers
             color: uiTheme.colors.drawerBg,
             borderRadius: uiTheme.borderRadius(22 * scale),
             border: Border.all(color: uiTheme.colors.drawerBorder),
@@ -163,7 +163,7 @@ class _WatchDialogFrameState extends State<WatchDialogFrame> {
   }
 }
 
-/// Тиха текстова дія (не кнопка): для вибору, який ми не заохочуємо
+/// A quiet text action (not a button): for a choice we do not encourage
 class QuietAction extends StatelessWidget {
   final String label;
   final double scale;
@@ -323,7 +323,7 @@ class _TeamBlockState extends State<_TeamBlock> {
     try {
       return await s.teamInfo(widget.team);
     } catch (_) {
-      return null; // без подробиць лишається назва й посилання на сторінку команди
+      return null; // without details the name and a link to the team page remain
     }
   }
 

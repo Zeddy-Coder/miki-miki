@@ -8,15 +8,15 @@ import '../app_animation_kit.dart';
 import '../app_ui_kit.dart';
 import 'hikka_common.dart';
 
-/// Каркас сторінки з прокруткою: вміст по центру до [HikkaLayout.maxContentWidth], тонкий скролбар,
-/// відступ знизу під згорнутий плеєр. Діти самі відповідають за бічні відступи (полиці йдуть до краю екрана).
+/// A scrolling page frame: content centered up to [HikkaLayout.maxContentWidth], a thin scrollbar,
+/// bottom padding for the collapsed player. Children handle the side padding themselves (shelves go to the screen edge).
 class HikkaPageFrame extends StatelessWidget {
   final double scale;
   final ScrollController controller;
   final double bottomInset;
   final List<Widget> children;
 
-  /// Оновлення потягом вниз (лише на телефоні; на ПК є кнопка «Оновити»)
+  /// Pull-down refresh (phone only; on PC there is an "Оновити" button)
   final Future<void> Function()? onRefresh;
 
   const HikkaPageFrame({
@@ -54,7 +54,7 @@ class HikkaPageFrame extends StatelessWidget {
   }
 }
 
-/// Секція сторінки: заголовок (з підзаголовком і діями справа) і вміст
+/// A page section: a heading (with a subtitle and actions on the right) and content
 class HikkaSection extends StatelessWidget {
   final double scale;
   final double pad;
@@ -91,20 +91,20 @@ class HikkaSection extends StatelessWidget {
   }
 }
 
-/// Ширина постера / портрета в шапці сторінки
+/// Width of the poster / portrait in the page header
 double hikkaHeaderPosterWidth(double scale, {required bool wide}) {
   if (AppPlatform.isMobile) return wide ? 190.0 : 112.0;
   return (wide ? 250 : 130) * scale;
 }
 
-/// Вміст ширший за цю межу розкладається у два стовпці (постер ліворуч)
+/// Content wider than this limit lays out in two columns (the poster on the left)
 const double hikkaWideBreakpoint = 760;
 
-/// Найбільша ширина списків «рядок на тайтл» і текстових блоків (на широких вікнах решта порожня)
+/// Maximum width of "one row per title" lists and text blocks (on wide windows the rest is empty)
 double hikkaReadableWidth(double scale) => 780 * (AppPlatform.isMobile ? 1.0 : scale);
 
-/// Заголовок головної вкладки (Огляд, Списки, Профіль): назва з підписом і дії справа. На телефоні — компактний
-/// рядок з відступами сторінки, на ПК — як шапки панелей застосунку.
+/// Heading of a main tab (Огляд, Списки, Профіль): a title with a label and actions on the right. On a phone a compact
+/// row with the page padding, on PC like the app's panel headers.
 class HikkaTabHeader extends StatelessWidget {
   final double scale;
   final String title;
@@ -141,19 +141,19 @@ class HikkaTabHeader extends StatelessWidget {
   }
 }
 
-/// Перегортання вкладок свайпом убік: різкий рух ліворуч — наступна вкладка, праворуч — попередня. Зміну вкладки
-/// (свайпом чи тапом по мітці) супроводжує коротка анімація: вміст виїжджає з того боку, куди йде перехід.
-/// Внутрішні горизонтальні списки (полиці) мають пріоритет, тож не заважають.
+/// Flipping tabs by a sideways swipe: a sharp move left is the next tab, right is the previous. A tab change
+/// (by swipe or tapping a label) comes with a short animation: the content slides in from the side the transition goes to.
+/// Inner horizontal lists (shelves) take priority, so they do not interfere.
 class HikkaSwipeTabs extends StatefulWidget {
   final int index;
   final int count;
   final ValueChanged<int> onChanged;
   final Widget child;
 
-  /// Вимкнути жест (внутрішні вкладки, щоб свайп лишався зовнішнім вкладкам); анімація зміни лишається
+  /// Disable the gesture (inner tabs, so the swipe stays with the outer tabs); the change animation remains
   final bool swipe;
 
-  /// Вимкнути власну анімацію зміни вкладки (коли вміст уже сам анімує перехід, як у налаштуваннях)
+  /// Disable the own tab change animation (when the content already animates the transition itself, as in settings)
   final bool animate;
 
   const HikkaSwipeTabs({super.key, required this.index, required this.count, required this.onChanged, required this.child, this.swipe = true, this.animate = true});
@@ -207,14 +207,14 @@ class _HikkaSwipeTabsState extends State<HikkaSwipeTabs> with SingleTickerProvid
   }
 }
 
-/// Поява вкладки: коли [active] стає true, вміст коротко виїжджає з боку [direction] (1 — справа, -1 — зліва) і
-/// проявляється. Решту часу нічого не змінює, тож перше відображення вкладки й закриття сторінки поверх неї без анімації.
+/// Tab appearance: when [active] becomes true, the content briefly slides in from side [direction] (1 is right, -1 is left) and
+/// fades in. At other times it changes nothing, so a tab's first display and closing a page over it have no animation.
 class HikkaTabEnter extends StatefulWidget {
   final bool active;
   final double direction;
   final Widget child;
 
-  /// Анімувати й саме створення (вкладка вперше відкрита вже активною); для першої вкладки застосунку — false
+  /// Animate creation too (a tab opened for the first time already active); false for the app's first tab
   final bool animateOnMount;
 
   const HikkaTabEnter({super.key, required this.active, required this.direction, required this.child, this.animateOnMount = false});
@@ -259,7 +259,7 @@ class _HikkaTabEnterState extends State<HikkaTabEnter> with SingleTickerProvider
       animation: _curve,
       child: widget.child,
       builder: (context, child) {
-        // Структура дерева стала, щоб не губити стан вкладки, коли анімація закінчується
+        // The tree structure is constant so as not to lose tab state when the animation ends
         final t = _curve.value;
         return Opacity(
           opacity: t >= 1 ? 1 : 0.2 + 0.8 * t,
@@ -270,14 +270,57 @@ class _HikkaTabEnterState extends State<HikkaTabEnter> with SingleTickerProvider
   }
 }
 
-/// Шапка «пливе» разом із прокруткою (як плаваюча панель): при прокрутці вниз її зсув дорівнює зсуву вмісту й вона
-/// їде вгору, а при русі вгору — на стільки ж виїжджає назад, у будь-якому місці сторінки, і прилипає до верху.
-/// Коли жест закінчено, шапка докочується до повністю видимої чи повністю схованої. [header] лежить ПОВЕРХ [body]
-/// і лише зсувається: розмір і позиція прокрутки вмісту не змінюються. Зверху вміст лишає відступ
-/// `AppHeaderInset.of(context)` (див. `HikkaPageFrame`, `HikkaPagedList`); поки вміст не прокручено повз цей відступ,
-/// шапка не може бути схованою глибше за прокрутку, тож порожнього місця на її позиції не з'являється.
-/// Вкладені шапки (дні календаря в «Огляді») сидять під зовнішньою й ховаються разом із нею.
-/// [resetOn] — значення, зміна якого знову показує шапку.
+/// A place in the nearest [HikkaCollapsingHeader] where a page below it can put its own header part (e.g. the calendar's
+/// weekday tabs): that part is drawn under the outer header's content, is measured together with it and hides and shows
+/// with it as one block, so the two never go out of step (a separate nested header did).
+class HikkaHeaderSlot extends ChangeNotifier {
+  Widget? _widget;
+  Object? _resetOn;
+  Object? _seenReset;
+
+  Widget? get widget => _widget;
+
+  /// Puts [w] into the slot; a change of [resetOn] shows the header again
+  void put(Widget? w, {Object? resetOn}) {
+    _widget = w;
+    _resetOn = resetOn;
+    notifyListeners();
+  }
+
+  void clear() {
+    if (_widget == null) return;
+    _widget = null;
+    notifyListeners();
+  }
+
+  /// true once if [resetOn] changed since the last call
+  bool takeReset() {
+    final changed = _seenReset != _resetOn;
+    _seenReset = _resetOn;
+    return changed;
+  }
+}
+
+class _HeaderSlotScope extends InheritedWidget {
+  final HikkaHeaderSlot slot;
+
+  const _HeaderSlotScope({required this.slot, required super.child});
+
+  @override
+  bool updateShouldNotify(_HeaderSlotScope old) => slot != old.slot;
+}
+
+/// The slot of the nearest [HikkaCollapsingHeader] above [context] (null if there is none)
+HikkaHeaderSlot? hikkaHeaderSlot(BuildContext context) => context.getInheritedWidgetOfExactType<_HeaderSlotScope>()?.slot;
+
+/// The header "floats" with scrolling (like a floating bar): on scrolling down its shift equals the content shift and it
+/// goes up, and on moving up it slides back by the same amount, anywhere on the page, and sticks to the top.
+/// When the gesture ends, the header rolls to fully visible or fully hidden. [header] lies OVER [body]
+/// and only shifts: the size and scroll position of the content do not change. The content leaves a top padding
+/// `AppHeaderInset.of(context)` (see `HikkaPageFrame`, `HikkaPagedList`); until the content is scrolled past that padding,
+/// the header cannot be hidden deeper than the scroll, so no empty space appears at its position.
+/// Nested headers (calendar days in "Огляд") sit under the outer one and hide with it.
+/// [resetOn] is a value whose change shows the header again.
 class HikkaCollapsingHeader extends StatefulWidget {
   final Widget header;
   final Widget body;
@@ -292,14 +335,23 @@ class HikkaCollapsingHeader extends StatefulWidget {
 class _HikkaCollapsingHeaderState extends State<HikkaCollapsingHeader> with SingleTickerProviderStateMixin {
   final GlobalKey _headerKey = GlobalKey();
 
-  /// Видимість шапки 0…1: значення виставляється вручну за прокруткою, а після жесту докочується анімацією
+  /// Header visibility 0…1: the value is set manually by scrolling, and after the gesture it rolls by animation
   late final AnimationController _c = AnimationController(vsync: this, duration: AppAnim.medium, value: 1);
   late final Animation<double> _factor = _c;
+  final HikkaHeaderSlot _slot = HikkaHeaderSlot();
   double _height = 0;
 
   @override
   void initState() {
     super.initState();
+    _slot.addListener(_onSlot);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _measure());
+  }
+
+  void _onSlot() {
+    if (!mounted) return;
+    if (_slot.takeReset() && _c.value < 1) _c.animateTo(1, curve: AppAnim.easeOut);
+    setState(() {});
     WidgetsBinding.instance.addPostFrameCallback((_) => _measure());
   }
 
@@ -312,6 +364,8 @@ class _HikkaCollapsingHeaderState extends State<HikkaCollapsingHeader> with Sing
 
   @override
   void dispose() {
+    _slot.removeListener(_onSlot);
+    _slot.dispose();
     _c.dispose();
     super.dispose();
   }
@@ -322,19 +376,19 @@ class _HikkaCollapsingHeaderState extends State<HikkaCollapsingHeader> with Sing
     if (h != null && (h - _height).abs() > 0.5) setState(() => _height = h);
   }
 
-  /// Найменша видимість, за якої шапка ще закриває відступ над вмістом (поки вміст не прокручено повз нього)
+  /// The smallest visibility at which the header still covers the padding above the content (until the content is scrolled past it)
   double _minFactor(ScrollMetrics m) => _height <= 0 ? 0 : (1 - m.pixels / _height).clamp(0.0, 1.0);
 
   bool _onScroll(ScrollNotification n) {
-    // Лише головна прокрутка сторінки: вкладений список (наприклад, команд у налаштуваннях) шапку не рухає
+    // Only the page's main scroll: a nested list (e.g. of teams in settings) does not move the header
     if (n.depth != 0 || n.metrics.axis != Axis.vertical || _height <= 0) return false;
     final m = n.metrics;
-    // Короткий вміст шапку не ховає: інакше її нічим було б повернути
+    // Short content does not hide the header: otherwise there would be nothing to bring it back
     if (m.maxScrollExtent <= _height) return false;
     if (n is ScrollUpdateNotification) {
       final delta = n.scrollDelta ?? 0;
       if (delta == 0) return false;
-      // Нове значення задаємо напряму, тож поточна анімація докочування (якщо була) зупиняється
+      // We set the new value directly, so the current rolling animation (if any) stops
       _c.value = (_c.value - delta / _height).clamp(_minFactor(m), 1.0);
     } else if (n is ScrollEndNotification) {
       final f = _c.value;
@@ -354,14 +408,14 @@ class _HikkaCollapsingHeaderState extends State<HikkaCollapsingHeader> with Sing
       animation: Listenable.merge([_factor, if (outer?.shown != null) outer!.shown!]),
       builder: (context, child) {
         final f = _factor.value.clamp(0.0, 1.0);
-        // Під зовнішньою шапкою: її видима частина, а власне приховування — зсув угору на висоту шапки
+        // Under the outer header: its visible part, and the hiding itself is a shift up by the header's height
         final base = outer == null ? 0.0 : outerInset * (outer.shown?.value.clamp(0.0, 1.0) ?? 1.0);
         return Transform.translate(
           offset: Offset(0, base - (1 - f) * _height),
           child: IgnorePointer(ignoring: f < 0.05, child: child),
         );
       },
-      // Фон лише малюється й не перехоплює дотики поза вмістом шапки
+      // The background is only painted and does not intercept touches outside the header's content
       child: CustomPaint(
         painter: _HeaderBg(bg),
         child: NotificationListener<SizeChangedLayoutNotification>(
@@ -369,12 +423,12 @@ class _HikkaCollapsingHeaderState extends State<HikkaCollapsingHeader> with Sing
             WidgetsBinding.instance.addPostFrameCallback((_) => _measure());
             return false;
           },
-          // Column(min) дає шапці необмежену висоту: інакше її Column(max) розтягнувся б на весь екран і ловив дотики
-          child: SizeChangedLayoutNotifier(child: Column(mainAxisSize: MainAxisSize.min, children: [KeyedSubtree(key: _headerKey, child: Padding(padding: const EdgeInsets.only(bottom: 8), child: widget.header))])),
+          // Column(min) gives the header unbounded height: otherwise its Column(max) would stretch across the whole screen and catch touches
+          child: SizeChangedLayoutNotifier(child: Column(mainAxisSize: MainAxisSize.min, children: [KeyedSubtree(key: _headerKey, child: Padding(padding: const EdgeInsets.only(bottom: 8), child: _slot.widget == null ? widget.header : Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [widget.header, _slot.widget!])))])),
         ),
       ),
     );
-    // ClipRect: прихована шапка не має виглядати з-під краю (наприклад, у зоні рядка стану)
+    // ClipRect: a hidden header must not peek out from under the edge (e.g. in the status bar zone)
     return ClipRect(
       child: Stack(
         children: [
@@ -382,7 +436,7 @@ class _HikkaCollapsingHeaderState extends State<HikkaCollapsingHeader> with Sing
             child: AppHeaderInset(
               inset: outerInset + _height,
               shown: _factor,
-              child: NotificationListener<ScrollNotification>(onNotification: _onScroll, child: widget.body),
+              child: _HeaderSlotScope(slot: _slot, child: NotificationListener<ScrollNotification>(onNotification: _onScroll, child: widget.body)),
             ),
           ),
           Positioned(top: 0, left: 0, right: 0, child: header),
@@ -392,13 +446,13 @@ class _HikkaCollapsingHeaderState extends State<HikkaCollapsingHeader> with Sing
   }
 }
 
-/// Будує [builder] (а отже й запускає його запити) лише тоді, коли місце секції наближається до видимої
-/// частини прокрутки. До того там порожня ділянка висотою [height]. Раз змонтована, секція лишається.
-/// Для довгих сторінок: нижні полиці не вантажаться, поки їх не прокрутили.
+/// Builds [builder] (and so starts its requests) only when the section's place nears the visible
+/// part of the scroll. Until then there is an empty area of height [height]. Once mounted, the section stays.
+/// For long pages: the lower shelves do not load until scrolled to.
 class HikkaLazy extends StatefulWidget {
   final double height;
 
-  /// За скільки пікселів до краю екрана починати завантаження
+  /// How many pixels before the screen edge to start loading
   final double lead;
   final WidgetBuilder builder;
 
@@ -450,7 +504,7 @@ class _HikkaLazyState extends State<HikkaLazy> {
   }
 }
 
-/// Суцільний фон шапки-накладки, прозорий для дотиків
+/// A solid background of the overlay header, transparent to touches
 class _HeaderBg extends CustomPainter {
   final Color color;
   const _HeaderBg(this.color);

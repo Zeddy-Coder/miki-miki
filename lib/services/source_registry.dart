@@ -1,5 +1,5 @@
-/// Реєстр джерел перегляду: які є, які ввімкнені. Усі джерела ходять в мережу через спільний `SourceHttp`
-/// (спільні куки — після проходження перевірки Cloudflare вона діє для всіх запитів до сайту).
+/// Watch-source registry: which exist, which are enabled. All sources go to the network through the shared `SourceHttp`
+/// (shared cookies: once the Cloudflare check is passed it applies to all requests to the site).
 library;
 
 import 'package:flutter/foundation.dart';
@@ -21,7 +21,7 @@ class SourceRegistry extends ChangeNotifier {
     this.prefs.addListener(_onPrefs);
   }
 
-  /// Стандартний набір: Mikai (UFDub і UAKino прибрано: не працюють)
+  /// Standard set: Mikai (UFDub and UAKino removed: they do not work)
   factory SourceRegistry.standard({SourcePrefs? prefs, SourceHttp? http}) {
     final p = prefs ?? SourcePrefs.instance;
     final h = http ?? SourceHttp();
@@ -61,7 +61,7 @@ class SourceRegistry extends ChangeNotifier {
 
   MikaiSource? get mikai => byId('mikai') is MikaiSource ? byId('mikai') as MikaiSource : null;
 
-  /// Єдине джерело (зараз Mikai) вимкнути не можна: перемикача сайтів тоді немає
+  /// The only source (currently Mikai) cannot be disabled: there is then no site switcher
   bool isEnabled(AnimeSource s) => all.length <= 1 || prefs.isEnabled(s.id);
 
   List<AnimeSource> get enabled => [for (final s in all) if (isEnabled(s)) s];

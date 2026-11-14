@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:miki_miki/services/backend_client.dart';
 import 'package:miki_miki/services/hikka_api.dart';
 
-/// Підставний сервер для акаунта Hikka: відповіді задаються за «МЕТОД /шлях», усі запити пишуться в журнал.
+/// A fake server for the Hikka account: responses are set by "METHOD /path", all requests are logged.
 class FakeAccountApi {
   final List<HikkaRequest> log = [];
   final Map<String, HikkaResponse Function(HikkaRequest r)> routes = {};
@@ -19,7 +19,7 @@ class FakeAccountApi {
 
   static HikkaResponse fail(int status, String code) => HikkaResponse(status, jsonEncode({'code': code, 'message': code}));
 
-  /// Запити за методом і шляхом
+  /// Requests by method and path
   List<HikkaRequest> of(String method, String path) => [
         for (final r in log)
           if (r.method == method && r.url.path == path) r,
@@ -41,7 +41,7 @@ const Map<String, dynamic> kMe = {
 
 const String kRequestRef = '3f9a4b1e-7c2d-4e55-9a10-0b6d8c2f1a77';
 
-/// Підроблений бекенд застосунку: сесія, обмін коду Hikka на токен і ключ Moon
+/// A fake app backend: a session, the exchange of a Hikka code for a token, and the Moon key
 class FakeBackend {
   final List<String> calls = [];
   final List<Map<String, dynamic>> exchanges = [];
@@ -54,7 +54,7 @@ class FakeBackend {
   int configStatus = 200;
   int sessionStatus = 200;
 
-  /// Що відповість бекенд на обмін коду (за замовчуванням — токен `tok-ui`)
+  /// What the backend answers to a code exchange (by default the `tok-ui` token)
   Future<(int, Map<String, dynamic>)> Function(String ref) onExchange =
       (ref) async => (200, <String, dynamic>{'secret': 'tok-ui', 'created': 1, 'expiration': 2});
 

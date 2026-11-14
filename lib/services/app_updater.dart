@@ -8,13 +8,13 @@ import '../constants/app_identity.dart';
 import 'app_log.dart';
 import 'storage_service.dart';
 
-/// Нова версія з GitHub Releases
+/// New version from GitHub Releases
 class UpdateInfo {
   final String version;
   final String notes;
   final String pageUrl;
 
-  /// Прямий файл для цієї платформи (APK на Android, zip/exe на Windows); порожньо — лише сторінка релізу
+  /// Direct file for this platform (APK on Android, zip/exe on Windows); empty means only the release page
   final String downloadUrl;
   final String assetName;
   final int size;
@@ -28,7 +28,7 @@ class UpdateInfo {
     this.size = 0,
   });
 
-  /// Що відкривати користувачу: файл або, якщо його немає, сторінку релізу
+  /// What to open for the user: the file or, if there is none, the release page
   String get target => downloadUrl.isNotEmpty ? downloadUrl : pageUrl;
 
   Map<String, dynamic> toJson() =>
@@ -76,20 +76,20 @@ class UpdateFailed extends UpdateState {
   const UpdateFailed(this.message);
 }
 
-/// `(статус, тіло)` для GET; у тестах підміняється
+/// `(status, body)` for GET; replaced in tests
 typedef UpdateTransport = Future<(int, String)> Function(String url);
 
-/// Перевіряє GitHub Releases на нову версію. Нічого не завантажує й не встановлює сам: показує, що є
-/// новіша, а файл відкривається в браузері (на Android далі встановлює система).
+/// Checks GitHub Releases for a new version. Downloads and installs nothing itself: it shows that a newer
+/// one exists, and the file opens in a browser (on Android the system installs it from there).
 class AppUpdater {
   static AppUpdater instance = AppUpdater();
 
-  /// Репозиторій із релізами
+  /// Repository with the releases
   static const String repo = 'Zeddy-Coder/miki-miki';
   static const String section = 'updates';
 
-  /// Не частіше, ніж раз на стільки, коли перевірка йде сама
-  static const Duration autoEvery = Duration(hours: 12);
+  /// At most once per this interval when the check runs by itself
+  static const Duration autoEvery = Duration(minutes: 30);
 
   final UpdateTransport _transport;
   final SectionLoader _load;
@@ -97,7 +97,7 @@ class AppUpdater {
   final String currentVersion;
   final bool Function() _isAndroid;
 
-  /// Поточний стан для інтерфейсу
+  /// Current state for the UI
   final ValueNotifier<UpdateState> state = ValueNotifier<UpdateState>(const UpdateIdle());
 
   late final Map<String, dynamic> _data = Map<String, dynamic>.of(_load());
@@ -114,7 +114,7 @@ class AppUpdater {
         _save = save ?? ((d) => StorageService.saveSection(section, d)),
         currentVersion = currentVersion ?? AppIdentity.version,
         _isAndroid = isAndroid ?? (() => Platform.isAndroid) {
-    // Знайдена раніше новіша версія видна одразу, ще до нової перевірки
+    // A newer version found earlier is visible immediately, before a new check
     final saved = UpdateInfo.fromJson(_data['latest']);
     if (saved != null && compareVersions(saved.version, this.currentVersion) > 0) {
       state.value = UpdateAvailable(saved);
@@ -135,8 +135,8 @@ class AppUpdater {
     }
   }
 
-  /// Порівняння версій виду `1.2.3` (з необов'язковим `v`, без урахування сніпетів після `-`/`+`):
-  /// додатне, якщо [a] новіша за [b]
+  /// Comparison of versions like `1.2.3` (optional `v`, ignoring suffixes after `-`/`+`):
+  /// positive if [a] is newer than [b]
   static int compareVersions(String a, String b) {
     List<int> parse(String s) {
       final core = s.trim().replaceFirst(RegExp(r'^[vV]'), '').split(RegExp(r'[-+]')).first;
@@ -152,7 +152,7 @@ class AppUpdater {
     return 0;
   }
 
-  /// Вибирає файл релізу для платформи: APK (arm64 бажано) на Android, zip/exe/msix на Windows
+  /// Picks the release file for the platform: APK (arm64 preferred) on Android, zip/exe/msix on Windows
   @visibleForTesting
   static Map<String, dynamic>? pickAsset(List<dynamic> assets, {required bool android}) {
     final list = assets.whereType<Map>().map((e) => e.cast<String, dynamic>()).where((a) => a['browser_download_url'] is String).toList();
@@ -168,7 +168,7 @@ class AppUpdater {
     return win.firstWhere((a) => has(a, 'win'), orElse: () => win.first);
   }
 
-  /// Версія, яку користувач попросив більше не пропонувати
+  /// The version the user asked not to offer any more
   String get skippedVersion => '${_data['skip'] ?? ''}';
 
   void skip(String version) {
@@ -178,10 +178,10 @@ class AppUpdater {
     } catch (_) {}
   }
 
-  /// Чи варто показати вікно «Доступне оновлення»: версія новіша й її не пропустили
+  /// Whether to show the "Доступне оновлення" dialog: the version is newer and was not skipped
   bool shouldPrompt(UpdateInfo info) => compareVersions(info.version, currentVersion) > 0 && skippedVersion != info.version;
 
-  /// Перевіряє оновлення. `auto: true` — тиха перевірка, не частіше [autoEvery] і без показу помилок
+  /// Checks for updates. `auto: true` is a silent check, at most once per [autoEvery] (the GitHub request stays within the limit) and without showing errors
   Future<void> check({bool auto = false}) {
     final running = _running;
     if (running != null) return running;
@@ -198,7 +198,7 @@ class AppUpdater {
     try {
       final (status, body) = await _transport('https://api.github.com/repos/$repo/releases/latest');
       if (status == 404) {
-        // Релізів ще немає: це не помилка
+        // There are no releases yet: this is not an error
         _done(null);
         return;
       }
@@ -219,7 +219,7 @@ class AppUpdater {
       _done(compareVersions(info.version, currentVersion) > 0 ? info : null);
     } catch (e) {
       AppLog.w('Updater', 'перевірка не вдалася: $e');
-      // Тиха перевірка нічого не показує; ручна — повідомляє
+      // A silent check shows nothing; a manual one reports
       state.value = auto ? before : UpdateFailed('Не вдалося перевірити: ${e is SocketException ? 'немає мережі' : e}');
     }
   }

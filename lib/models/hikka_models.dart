@@ -1,11 +1,11 @@
-/// Моделі каталогу Hikka (api.hikka.io). Розбір толерантний: відсутнє або несподіване поле
-/// не ламає екран, а лише лишається порожнім. Без залежності від Flutter — покрито тестами.
+/// Hikka catalog models (api.hikka.io). Parsing is tolerant: a missing or unexpected field
+/// does not break the screen, it just stays empty. No Flutter dependency; covered by tests.
 library;
 
-// Колекції та статті спільноти: лежать в окремому файлі, але користуються тими самими допоміжними функціями
+// Community collections and articles live in a separate file but share the same helper functions
 part 'hikka_community_models.dart';
 
-// ── Допоміжне розбирання JSON ────────────────────────────────────────────────
+// ── JSON parsing helpers ────────────────────────────────────────────────
 
 String? _str(Object? v) {
   if (v is! String) return null;
@@ -28,7 +28,7 @@ List<T> _list<T>(Object? v, T Function(Map<String, dynamic>) parse) {
 
 Map<String, dynamic> _map(Object? v) => v is Map<String, dynamic> ? v : const <String, dynamic>{};
 
-/// Мова назв у каталозі
+/// Language of titles in the catalog
 enum HikkaTitleLang {
   ua('Українська'),
   en('Англійська'),
@@ -41,7 +41,7 @@ enum HikkaTitleLang {
       HikkaTitleLang.values.firstWhere((l) => l.name == name, orElse: () => HikkaTitleLang.ua);
 }
 
-/// Підписи значень API українською (ті самі, що на hikka.io)
+/// API value labels in Ukrainian (the same as on hikka.io)
 class HikkaText {
   const HikkaText._();
 
@@ -135,7 +135,7 @@ class HikkaText {
   static String rating(String? v) => v == null ? '' : (ratings[v] ?? v.toUpperCase());
   static String source(String? v) => v == null ? '' : (sources[v] ?? v);
 
-  /// Сезон року за номером місяця (як на hikka.io): зима 1–3, весна 4–6, літо 7–9, осінь 10–12
+  /// Season of the year by month number (as on hikka.io): winter 1–3, spring 4–6, summer 7–9, autumn 10–12
   static String seasonOfMonth(int month) => month <= 3
       ? 'winter'
       : month <= 6
@@ -144,20 +144,20 @@ class HikkaText {
               ? 'summer'
               : 'fall';
 
-  /// Поточний сезон так, як його рахує hikka.io: день, що минув, ще належить попередньому сезону
+  /// Current season as hikka.io counts it: a day that has passed still belongs to the previous season
   static (String season, int year) currentSeason(DateTime now) {
     final d = now.subtract(const Duration(days: 1));
     return (seasonOfMonth(d.month), d.year);
   }
 
-  /// Наступний за [season] сезон: після осені — зима наступного року
+  /// The season after [season]: after autumn comes the next year's winter
   static (String season, int year) nextSeason(String season, int year) {
     const order = ['winter', 'spring', 'summer', 'fall'];
     final i = order.indexOf(season);
     return i == 3 ? ('winter', year + 1) : (order[(i + 1) % 4], year);
   }
 
-  /// Форма слова за числом: `plural(1, 'тайтл', 'тайтли', 'тайтлів')` → «тайтл», 2 → «тайтли», 5 → «тайтлів»
+  /// Word form by number: `plural(1, 'тайтл', 'тайтли', 'тайтлів')` → "тайтл", 2 → "тайтли", 5 → "тайтлів"
   static String plural(int n, String one, String few, String many) {
     final m100 = n.abs() % 100;
     final m10 = n.abs() % 10;
@@ -167,13 +167,13 @@ class HikkaText {
     return many;
   }
 
-  /// «5 листопада» / «5 листопада 2026»
+  /// "5 листопада" / "5 листопада 2026"
   static String dayMonth(DateTime d, {DateTime? now, bool withYear = false}) {
     final base = '${d.day} ${monthsGenitive[d.month - 1]}';
     return withYear || (now != null && now.year != d.year) ? '$base ${d.year}' : base;
   }
 
-  /// Число з пропусками між розрядами: 28720 → «28 720»
+  /// Number with thousands spacing: 28720 → "28 720"
   static String count(int n) {
     final s = n.abs().toString();
     final b = StringBuffer(n < 0 ? '-' : '');
@@ -184,7 +184,7 @@ class HikkaText {
     return b.toString();
   }
 
-  /// Коротко для лічильників на картках: 950 → «950», 1 250 → «1,3 тис.», 48 000 → «48 тис.», 2 400 000 → «2,4 млн»
+  /// Short form for card counters: 950 → "950", 1 250 → "1,3 тис.", 48 000 → "48 тис.", 2 400 000 → "2,4 млн"
   static String compact(int n) {
     final a = n.abs();
     final sign = n < 0 ? '-' : '';
@@ -202,7 +202,7 @@ class HikkaText {
   /// «18:05»
   static String hhmm(DateTime d) => '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
 
-  /// «Сьогодні» / «Завтра» / «Вчора» / «Середа» (протягом тижня) / «12 листопада»
+  /// "Сьогодні" / "Завтра" / "Вчора" / "Середа" (within the week) / "12 листопада"
   static String dayName(DateTime when, DateTime now) {
     final diff = DateTime.utc(when.year, when.month, when.day).difference(DateTime.utc(now.year, now.month, now.day)).inDays;
     if (diff == 0) return 'Сьогодні';
@@ -212,10 +212,10 @@ class HikkaText {
     return dayMonth(when, now: now);
   }
 
-  /// «Сьогодні, 18:05»
+  /// "Сьогодні, 18:05"
   static String airingLabel(DateTime when, DateTime now) => '${dayName(when, now)}, ${hhmm(when)}';
 
-  /// Заголовок дня в календарі: «Сьогодні · 3 листопада», «Середа · 5 листопада»
+  /// Day heading in the calendar: "Сьогодні · 3 листопада", "Середа · 5 листопада"
   static String dayHeader(DateTime when, DateTime now) {
     final name = dayName(when, now);
     final date = dayMonth(when, now: now);
@@ -223,7 +223,7 @@ class HikkaText {
   }
 }
 
-// ── Жанри, студії ────────────────────────────────────────────────────────────
+// ── Genres, studios ────────────────────────────────────────────────────────────
 
 class HikkaGenre {
   final String slug;
@@ -255,7 +255,7 @@ class HikkaCompany {
       HikkaCompany(slug: _str(j['slug']) ?? '', name: _str(j['name']) ?? '', image: _str(j['image']));
 }
 
-/// Компанія із роллю в аніме (студія або продюсер)
+/// A company with a role in an anime (studio or producer)
 class HikkaAnimeCompany {
   final HikkaCompany company;
   final String type; // studio | producer
@@ -268,7 +268,7 @@ class HikkaAnimeCompany {
       HikkaAnimeCompany(company: HikkaCompany.fromJson(_map(j['company'])), type: _str(j['type']) ?? 'producer');
 }
 
-// ── Службові блоки сторінки аніме ────────────────────────────────────────────
+// ── Auxiliary blocks of the anime page ─────────────────────────────────
 
 class HikkaLink {
   final String url;
@@ -312,10 +312,10 @@ class HikkaOst {
       );
 }
 
-/// Запланований вихід серії (поле `schedule` сторінки аніме)
+/// Scheduled episode release (the `schedule` field of the anime page)
 class HikkaEpisodeSlot {
   final int episode;
-  final int airingAt; // unix, секунди
+  final int airingAt; // unix, seconds
 
   const HikkaEpisodeSlot({required this.episode, required this.airingAt});
 
@@ -328,7 +328,7 @@ class HikkaEpisodeSlot {
 class HikkaAnimeStats {
   final int completed, watching, planned, dropped, onHold;
 
-  /// Кількість оцінок 1…10 (індекс 0 — оцінка 1)
+  /// Count of ratings 1…10 (index 0 is rating 1)
   final List<int> scores;
 
   const HikkaAnimeStats({
@@ -352,19 +352,19 @@ class HikkaAnimeStats {
       );
 }
 
-// ── Аніме ────────────────────────────────────────────────────────────────────
+// ── Anime ────────────────────────────────────────────────────────────────────
 
-/// Аніме: і елемент списку (каталог, календар, франшиза), і повна сторінка
-/// (поля сторінки — `duration`, `synonyms`, `external`… — у списках порожні).
+/// Anime: both a list item (catalog, calendar, franchise) and the full page
+/// (page fields such as `duration`, `synonyms`, `external` are empty in lists).
 class HikkaAnime {
   final String slug;
   final String? titleUa;
   final String? titleEn;
 
-  /// Ромаджі (поле API `title_ja`)
+  /// Romaji (API field `title_ja`)
   final String? titleJa;
 
-  /// Оригінальна назва японською (поле API `title_native`)
+  /// Original Japanese title (API field `title_native`)
   final String? titleNative;
   final String? mediaType;
   final String? status;
@@ -379,7 +379,7 @@ class HikkaAnime {
   final int scoredBy;
   final double nativeScore;
   final int nativeScoredBy;
-  final int? startDate; // unix, секунди
+  final int? startDate; // unix, seconds
   final int? endDate;
   final bool translatedUa;
   final int malId;
@@ -388,8 +388,8 @@ class HikkaAnime {
   final String? synopsisUa;
   final String? synopsisEn;
 
-  // Лише повна сторінка
-  final int? duration; // хвилини
+  // Full page only
+  final int? duration; // minutes
   final bool hasFranchise;
   final bool nsfw;
   final int commentsCount;
@@ -492,15 +492,15 @@ class HikkaAnime {
     );
   }
 
-  /// Хентай (`rating == rx`) або відмічене сайтом як 18+
+  /// Hentai (`rating == rx`) or flagged by the site as 18+
   bool get isAdult => rating == 'rx' || nsfw;
   bool get isOngoing => status == 'ongoing';
   bool get isAnnounced => status == 'announced';
 
-  /// Є сенс показувати оцінку (аніме без оцінок має 0)
+  /// Worth showing the score (an anime without scores has 0)
   bool get hasScore => score > 0 && scoredBy > 0;
 
-  /// Назва за вибраною мовою; якщо її немає — перша наявна за запасним порядком
+  /// Title in the chosen language; if missing, the first available one in fallback order
   String title(HikkaTitleLang lang) {
     final order = switch (lang) {
       HikkaTitleLang.ua => [titleUa, titleEn, titleJa, titleNative],
@@ -513,7 +513,7 @@ class HikkaAnime {
     return slug;
   }
 
-  /// Одна другорядна назва вибраною мовою; `null`, якщо її немає або вона збігається з основною
+  /// One secondary title in the chosen language; `null` if there is none or it equals the main one
   String? secondaryTitle(HikkaTitleLang main, HikkaTitleLang secondary) {
     final t = switch (secondary) {
       HikkaTitleLang.ua => titleUa,
@@ -524,7 +524,7 @@ class HikkaAnime {
     return t;
   }
 
-  /// Решта назв, відмінних від основної (для шапки сторінки): англійська, ромаджі, оригінал
+  /// The remaining titles that differ from the main one (for the page header): English, romaji, original
   List<String> otherTitles(HikkaTitleLang lang) {
     final main = title(lang);
     final seen = <String>{main.toLowerCase()};
@@ -538,14 +538,14 @@ class HikkaAnime {
   String get typeLabel => HikkaText.mediaType(mediaType);
   String get statusLabel => HikkaText.status(status);
 
-  /// «Осінь 2026» / «2023» / порожньо
+  /// "Осінь 2026" / "2023" / empty
   String get seasonLabel {
     final s = season == null ? '' : HikkaText.season(season);
     if (year == null) return s;
     return s.isEmpty ? '$year' : '$s $year';
   }
 
-  /// «28 еп.» або «4 / 25 еп.» для того, що виходить зараз; порожньо, якщо кількість невідома
+  /// "28 еп." or "4 / 25 еп." for something airing now; empty if the count is unknown
   String get episodesLabel {
     final total = episodesTotal;
     final released = episodesReleased;
@@ -559,7 +559,7 @@ class HikkaAnime {
 
   String get durationLabel => duration == null || duration! <= 0 ? '' : '$duration хв.';
 
-  /// Найближча ще не вийшла серія за розкладом
+  /// The nearest episode not yet released according to the schedule
   HikkaEpisodeSlot? nextEpisode(DateTime now) {
     final t = now.millisecondsSinceEpoch ~/ 1000;
     HikkaEpisodeSlot? best;
@@ -569,14 +569,14 @@ class HikkaAnime {
     return best;
   }
 
-  /// Студія (перша) — коротко для підпису
+  /// Studio (first one) in short form for a caption
   String get studioName => studios.isEmpty ? '' : studios.first.name;
 
-  /// Опис: український, якщо є, інакше англійський
+  /// Description: Ukrainian if available, otherwise English
   String? get synopsis => synopsisUa ?? synopsisEn;
 }
 
-// ── Сторінкові відповіді ─────────────────────────────────────────────────────
+// ── Page responses ─────────────────────────────────────────────────────
 
 class HikkaPage<T> {
   final List<T> items;
@@ -601,7 +601,7 @@ class HikkaPage<T> {
   }
 }
 
-// ── Персонажі, люди ──────────────────────────────────────────────────────────
+// ── Characters, people ──────────────────────────────────────────────────────────
 
 class HikkaCharacter {
   final String slug;
@@ -611,7 +611,7 @@ class HikkaCharacter {
   final String? image;
   final List<String> synonyms;
 
-  // Лише повна сторінка
+  // Full page only
   final String? descriptionUa;
   final int animeCount;
   final int voicesCount;
@@ -644,10 +644,10 @@ class HikkaCharacter {
         voicesCount: _intOr0(j['voices_count']),
       );
 
-  /// Ім'я: українське → англійське → японське
+  /// Name: Ukrainian → English → Japanese
   String get name => nameUa ?? nameEn ?? nameJa ?? slug;
 
-  /// Решта імен, відмінних від основного
+  /// The remaining names that differ from the main one
   List<String> get otherNames {
     final seen = <String>{name.toLowerCase()};
     return [
@@ -657,7 +657,7 @@ class HikkaCharacter {
   }
 }
 
-/// Персонаж у складі аніме: головний чи другорядний
+/// A character within an anime: main or supporting
 class HikkaCharacterRole {
   final bool main;
   final HikkaCharacter character;
@@ -668,7 +668,7 @@ class HikkaCharacterRole {
       HikkaCharacterRole(main: _bool(j['main']), character: HikkaCharacter.fromJson(_map(j['character'])));
 }
 
-/// Аніме, у якому з'являється персонаж
+/// The anime a character appears in
 class HikkaCharacterAnime {
   final bool main;
   final HikkaAnime anime;
@@ -685,8 +685,24 @@ class HikkaPerson {
   final String? nameUa;
   final String? nameEn;
   final String? image;
+  final String? descriptionUa;
+  final List<String> synonyms;
 
-  const HikkaPerson({required this.slug, this.nameNative, this.nameUa, this.nameEn, this.image});
+  /// Counters come only from the full card (`GET /people/{slug}`)
+  final int animeCount;
+  final int charactersCount;
+
+  const HikkaPerson({
+    required this.slug,
+    this.nameNative,
+    this.nameUa,
+    this.nameEn,
+    this.image,
+    this.descriptionUa,
+    this.synonyms = const [],
+    this.animeCount = 0,
+    this.charactersCount = 0,
+  });
 
   factory HikkaPerson.fromJson(Map<String, dynamic> j) => HikkaPerson(
         slug: _str(j['slug']) ?? '',
@@ -694,12 +710,56 @@ class HikkaPerson {
         nameUa: _str(j['name_ua']),
         nameEn: _str(j['name_en']),
         image: _str(j['image']),
+        descriptionUa: _str(j['description_ua']),
+        synonyms: [
+          if (j['synonyms'] is List)
+            for (final x in j['synonyms'] as List)
+              if (x is String && x.trim().isNotEmpty) x.trim(),
+        ],
+        animeCount: _intOr0(j['anime_count']),
+        charactersCount: _intOr0(j['characters_count']),
       );
 
   String get name => nameUa ?? nameEn ?? nameNative ?? slug;
+
+  /// Other spellings of the name (Latin, original), without repeating the main one
+  List<String> get otherNames {
+    final main = name.toLowerCase();
+    final seen = <String>{main};
+    return [
+      for (final n in [nameEn, nameNative])
+        if (n != null && seen.add(n.toLowerCase())) n,
+    ];
+  }
 }
 
-/// Озвучення: хто й якою мовою озвучив персонажа в якому аніме
+/// A person's work on an anime: roles in this title (`GET /people/{slug}/anime`)
+class HikkaPersonAnime {
+  final HikkaAnime anime;
+  final List<HikkaRole> roles;
+
+  const HikkaPersonAnime({required this.anime, required this.roles});
+
+  factory HikkaPersonAnime.fromJson(Map<String, dynamic> j) => HikkaPersonAnime(
+        anime: HikkaAnime.fromJson(_map(j['anime'])),
+        roles: _list(j['roles'], HikkaRole.fromJson),
+      );
+
+  String get rolesLabel => roles.map((r) => r.name).join(', ');
+}
+
+/// A character voiced by the person (`GET /people/{slug}/characters`)
+class HikkaPersonCharacter {
+  final HikkaCharacter character;
+  final HikkaAnime anime;
+
+  const HikkaPersonCharacter({required this.character, required this.anime});
+
+  factory HikkaPersonCharacter.fromJson(Map<String, dynamic> j) =>
+      HikkaPersonCharacter(character: HikkaCharacter.fromJson(_map(j['character'])), anime: HikkaAnime.fromJson(_map(j['anime'])));
+}
+
+/// Voice acting: who voiced the character in which anime, and in what language
 class HikkaCharacterVoice {
   final HikkaAnime anime;
   final HikkaPerson person;
@@ -713,7 +773,7 @@ class HikkaCharacterVoice {
         language: _str(j['language']) ?? '',
       );
 
-  /// Мови озвучення за кодом: сервер віддає двобуквені коди (`ja`, `en`)
+  /// Voice languages by code: the server returns two-letter codes (`ja`, `en`)
   static const Map<String, String> languages = {
     'ja': 'Японська',
     'en': 'Англійська',
@@ -732,7 +792,7 @@ class HikkaCharacterVoice {
     'pl': 'Польська',
   };
 
-  /// Інші написання тієї самої мови (повні назви, `ua`) зводяться до коду
+  /// Other spellings of the same language (full names, `ua`) are reduced to the code
   static const Map<String, String> _aliases = {
     'japanese': 'ja',
     'english': 'en',
@@ -754,7 +814,7 @@ class HikkaCharacterVoice {
     'polish': 'pl',
   };
 
-  /// Канонічний код мови: за ним озвучення групуються й упорядковуються
+  /// Canonical language code: voice actors are grouped and ordered by it
   String get languageKey {
     final l = language.trim().toLowerCase();
     return _aliases[l] ?? l;
@@ -766,7 +826,7 @@ class HikkaCharacterVoice {
     return languages[key] ?? key.toUpperCase();
   }
 
-  /// Озвучення за мовами: японська, українська, англійська, далі за назвою; люди без повторів
+  /// Voice acting by language: Japanese, Ukrainian, English, then by name; people without duplicates
   static List<(String label, List<String> people)> groupByLanguage(Iterable<HikkaCharacterVoice> voices) {
     final byKey = <String, List<String>>{};
     final labels = <String, String>{};
@@ -781,8 +841,8 @@ class HikkaCharacterVoice {
     int rank(String key) {
       final i = preferred.indexOf(key);
       if (i != -1) return i;
-      if (key.isEmpty) return 30; // мову не вказано — наприкінці
-      return languages.containsKey(key) ? 10 : 20; // невідомі коди — після відомих мов
+      if (key.isEmpty) return 30; // language not specified: goes last
+      return languages.containsKey(key) ? 10 : 20; // unknown codes come after known languages
     }
 
     final keys = byKey.keys.toList()
@@ -795,7 +855,7 @@ class HikkaCharacterVoice {
 
   static const String _alphabet = 'абвгґдеєжзиіїйклмнопрстуфхцчшщьюя';
 
-  /// Порівняння за українською абеткою (не за кодами символів: «І» інакше стояла б перед «Б»); латиниця — після кирилиці
+  /// Compared by the Ukrainian alphabet (not by code points: "І" would otherwise come before "Б"); Latin after Cyrillic
   static int _compareUk(String a, String b) {
     final x = a.toLowerCase();
     final y = b.toLowerCase();
@@ -828,7 +888,7 @@ class HikkaRole {
       );
 }
 
-/// Автор / учасник знімальної групи
+/// Author / crew member
 class HikkaStaff {
   final HikkaPerson person;
   final List<HikkaRole> roles;
@@ -845,12 +905,12 @@ class HikkaStaff {
   String get rolesLabel => roles.map((r) => r.name).join(', ');
 }
 
-// ── Календар ─────────────────────────────────────────────────────────────────
+// ── Calendar ─────────────────────────────────────────────────────────────────
 
 class HikkaScheduleEntry {
   final HikkaAnime anime;
   final int episode;
-  final int airingAt; // unix, секунди
+  final int airingAt; // unix, seconds
 
   const HikkaScheduleEntry({required this.anime, required this.episode, required this.airingAt});
 
@@ -863,10 +923,10 @@ class HikkaScheduleEntry {
       );
 }
 
-// ── Франшиза ─────────────────────────────────────────────────────────────────
+// ── Franchise ─────────────────────────────────────────────────────────────────
 
-/// Зв'язок між двома тайтлами: [slug] — «батьківський», [relatedSlug] — його сиквел / побічна історія /
-/// спіноф / рекап (для альтернативних версій напрям неважливий).
+/// A link between two titles: [slug] is the "parent", [relatedSlug] is its sequel / side story /
+/// spin-off / recap (for alternative versions the direction does not matter).
 class HikkaRelation {
   final String slug;
   final String relatedSlug;
@@ -891,8 +951,8 @@ class HikkaRelation {
       );
 }
 
-/// Відповідь `/related/anime/{slug}/franchise`: усі аніме франшизи й зв'язки між ними
-/// (манґа й ранобе з відповіді відкидаються — каталог лише аніме).
+/// Response of `/related/anime/{slug}/franchise`: all anime of the franchise and the links between them
+/// (manga and light novels in the response are dropped: the catalog is anime only).
 class HikkaFranchiseData {
   final List<HikkaAnime> anime;
   final List<HikkaRelation> relations;
@@ -908,13 +968,13 @@ class HikkaFranchiseData {
   }
 }
 
-// ── Пошук у каталозі ─────────────────────────────────────────────────────────
+// ── Catalog search ─────────────────────────────────────────────────────
 
 class HikkaSortOption {
   final String key;
   final String label;
 
-  /// Додаткові поля, що додаються до сортування (оцінка + кількість оцінок)
+  /// Extra fields appended to sorting (score + number of scores)
   final List<String> secondary;
 
   const HikkaSortOption(this.key, this.label, {this.secondary = const []});
@@ -922,7 +982,7 @@ class HikkaSortOption {
 
 const Object _unset = Object();
 
-/// Умови пошуку в каталозі. Порожнє значення = «без обмеження».
+/// Catalog search conditions. An empty value means "no restriction".
 class HikkaSearchFilters {
   static const List<HikkaSortOption> sorts = [
     HikkaSortOption('score', 'Оцінка MAL', secondary: ['scored_by']),
@@ -932,7 +992,7 @@ class HikkaSearchFilters {
     HikkaSortOption('created', 'Нещодавно додані'),
   ];
 
-  /// Сортування списків користувача (`POST /watch/{user}/list`): власні поля запису й поля тайтлу
+  /// Sorting of user lists (`POST /watch/{user}/list`): the entry's own fields and the title's fields
   static const String defaultListSort = 'watch_updated';
   static const List<HikkaSortOption> listSorts = [
     HikkaSortOption('watch_updated', 'Нещодавно оновлені'),
@@ -943,7 +1003,7 @@ class HikkaSearchFilters {
     HikkaSortOption('scored_by', 'Популярність'),
   ];
 
-  /// Усі вікові рейтинги, крім хентаю
+  /// All age ratings except hentai
   static const List<String> safeRatings = ['g', 'pg', 'pg_13', 'r', 'r_plus'];
 
   final String query;
@@ -952,6 +1012,10 @@ class HikkaSearchFilters {
   final Set<String> seasons;
   final Set<String> ratings;
   final Set<String> genres;
+
+  /// Studios (slug) and their names for the caption in the filter panel
+  final Set<String> studios;
+  final Map<String, String> studioNames;
   final int? yearFrom;
   final int? yearTo;
   final int? scoreFrom;
@@ -967,6 +1031,8 @@ class HikkaSearchFilters {
     this.seasons = const {},
     this.ratings = const {},
     this.genres = const {},
+    this.studios = const {},
+    this.studioNames = const {},
     this.yearFrom,
     this.yearTo,
     this.scoreFrom,
@@ -983,6 +1049,8 @@ class HikkaSearchFilters {
     Set<String>? seasons,
     Set<String>? ratings,
     Set<String>? genres,
+    Set<String>? studios,
+    Map<String, String>? studioNames,
     Object? yearFrom = _unset,
     Object? yearTo = _unset,
     Object? scoreFrom = _unset,
@@ -998,6 +1066,8 @@ class HikkaSearchFilters {
         seasons: seasons ?? this.seasons,
         ratings: ratings ?? this.ratings,
         genres: genres ?? this.genres,
+        studios: studios ?? this.studios,
+        studioNames: studioNames ?? this.studioNames,
         yearFrom: identical(yearFrom, _unset) ? this.yearFrom : yearFrom as int?,
         yearTo: identical(yearTo, _unset) ? this.yearTo : yearTo as int?,
         scoreFrom: identical(scoreFrom, _unset) ? this.scoreFrom : scoreFrom as int?,
@@ -1007,26 +1077,27 @@ class HikkaSearchFilters {
         ascending: ascending ?? this.ascending,
       );
 
-  /// Пошуковий запис має щонайменше 2 символи (обмеження API)
+  /// A search query has at least 2 characters (API limit)
   String? get effectiveQuery {
     final q = query.trim();
     return q.length >= 2 ? q : null;
   }
 
-  /// Скільки груп фільтрів задано (без рядка пошуку й сортування)
+  /// How many filter groups are set (excluding the search string and sorting)
   int get activeCount =>
       (mediaTypes.isNotEmpty ? 1 : 0) +
       (statuses.isNotEmpty ? 1 : 0) +
       (seasons.isNotEmpty ? 1 : 0) +
       (ratings.isNotEmpty ? 1 : 0) +
       (genres.isNotEmpty ? 1 : 0) +
+      (studios.isNotEmpty ? 1 : 0) +
       (yearFrom != null || yearTo != null ? 1 : 0) +
       (scoreFrom != null || scoreTo != null ? 1 : 0) +
       (onlyTranslated ? 1 : 0);
 
   bool get isDefault => activeCount == 0 && effectiveQuery == null && sort == 'score' && !ascending;
 
-  /// Тіло запиту `POST /anime`. Хентай прибирається, якщо [allowAdult] вимкнено.
+  /// Body of the `POST /anime` request. Hentai is removed if [allowAdult] is off.
   Map<String, dynamic> toBody({required bool allowAdult}) {
     List<String> sorted(Set<String> s) => (s.toList()..sort());
 
@@ -1048,6 +1119,7 @@ class HikkaSearchFilters {
     if (seasons.isNotEmpty) body['season'] = sorted(seasons);
     if (ratingList.isNotEmpty) body['rating'] = ratingList;
     if (genres.isNotEmpty) body['genres'] = sorted(genres);
+    if (studios.isNotEmpty) body['studios'] = sorted(studios);
     if (yearFrom != null || yearTo != null) body['years'] = [yearFrom, yearTo];
     if (scoreFrom != null || scoreTo != null) body['score'] = [scoreFrom, scoreTo];
     if (onlyTranslated) body['only_translated'] = true;

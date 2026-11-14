@@ -16,7 +16,7 @@ void main() {
       expect(c.map((x) => x.title), ['Episode', 'Opening', 'Episode', 'Ending', 'Episode']);
       expect(c.map((x) => x.startTime.inSeconds), [0, 90, 180, 1320, 1410]);
       expect(c.last.endTime, total);
-      // кожен розділ починається там, де закінчився попередній
+      // each chapter starts where the previous one ended
       for (int i = 1; i < c.length; i++) {
         expect(c[i].startTime, c[i - 1].endTime);
       }
@@ -76,7 +76,7 @@ void main() {
       ], total);
       final flags = ChapterMath.skippableFlags(c);
       expect([for (int i = 0; i < c.length; i++) '${c[i].title}:${flags[i]}'], ['Recap:true', 'Episode:false', 'Opening:true', 'Episode:false', 'Ending:true', 'Episode:false']);
-      // кнопка з'являється на початку опенінґа (перші 15 с розділу); посеред серії її немає
+      // the button appears at the start of the opening (the first 15 s of the chapter); mid-episode there is none
       expect(ChapterMath.skipIndexAt(c, flags, const Duration(seconds: 95), total), 2);
       expect(ChapterMath.skipIndexAt(c, flags, const Duration(seconds: 120), total), -1);
       expect(ChapterMath.skipIndexAt(c, flags, const Duration(seconds: 600), total), -1);

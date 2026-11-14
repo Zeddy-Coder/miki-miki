@@ -1,6 +1,6 @@
-// Блок «Дивитись» на сторінці аніме: одна дія «Дивитись / Продовжити» з миттєвим запуском плеєра, озвучка за замовчуванням,
-// застереження про ліцензію й розбіжність нумерації, вікно «Джерела». Мережі й диска немає: джерела — підроблений сайт
-// на справжніх зліпках відповідей Mikai.
+// The "Дивитись" block on the anime page: a single "Дивитись / Продовжити" action with an instant player start, a default dub,
+// license and numbering-mismatch warnings, the "Джерела" window. No network or disk: the sources are a fake site
+// built on real Mikai response snapshots.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -48,7 +48,7 @@ void setScreen(WidgetTester tester, Size size) {
   addTearDown(tester.view.reset);
 }
 
-/// Дає час підробленій мережі (вона на мікрозадачах), диску й декодеру зображень
+/// Gives time to the fake network (it runs on microtasks), the disk and the image decoder
 Future<void> load(WidgetTester tester, {int rounds = 12}) async {
   for (int i = 0; i < rounds; i++) {
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 25)));
@@ -56,14 +56,14 @@ Future<void> load(WidgetTester tester, {int rounds = 12}) async {
   }
 }
 
-/// Кадр, що застосовує зміну, і ще два з часом: поява діалогів та анімації завершуються
+/// The frame that applies the change and two more with time: dialogs and animations finish appearing
 Future<void> settle(WidgetTester tester) async {
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 400));
   await tester.pump(const Duration(milliseconds: 400));
 }
 
-/// Знімки для ручної перевірки вигляду (самі по собі нічого не перевіряють):
+/// Snapshots for manual visual checks (they verify nothing by themselves):
 /// `SHOTS=1 flutter test --update-goldens test/hikka_watch_ui_test.dart` → `test/shots/hikka_watch_*.png`
 final bool kShots = Platform.environment['SHOTS'] == '1';
 
@@ -84,7 +84,7 @@ HikkaAnime anime({int released = 5, int? total = 12, String status = 'ongoing'})
   malId: 59177,
 );
 
-/// Відповідь `/player` у Mikai зі зліпка, з можливістю підправити релізи
+/// A Mikai `/player` response from a snapshot, with the ability to tweak releases
 Map<String, dynamic> playerDoc({Map<String, dynamic>? license, void Function(List<Map<String, dynamic>> releases)? edit}) {
   final doc = jsonDecode(fixture('mikai_player.json')) as Map<String, dynamic>;
   final r = doc['result'] as Map<String, dynamic>;
@@ -96,7 +96,7 @@ Map<String, dynamic> playerDoc({Map<String, dynamic>? license, void Function(Lis
   return doc;
 }
 
-/// Задає серії релізу номерами [numbers]
+/// Sets the release's episodes with numbers [numbers]
 void setEpisodes(Map<String, dynamic> release, List<int> numbers) {
   release['episodes'] = [
     for (final n in numbers)
@@ -129,7 +129,7 @@ void main() {
     await loadTestFonts();
   });
 
-  /// Службу «Дивитись» збирають із підробленого сайту: Mikai (та за потреби UFDub)
+  /// The "Дивитись" service is assembled from the fake site: Mikai (and UFDub if needed)
   void useSite(FakeSite s, {bool ufdub = false}) {
     site = s;
     final reg = SourceRegistry(
@@ -183,7 +183,7 @@ void main() {
 
   HikkaRoute newRoute() => HikkaRoute(HikkaRouteKind.anime, slug);
 
-  /// Меню «⋮» праворуч від головної кнопки і пункт у ньому
+  /// The "⋮" menu to the right of the main button and an item in it
   Future<void> menuItem(WidgetTester tester, String label) async {
     await tester.tap(find.byTooltip('Ще'));
     await settle(tester);
@@ -191,7 +191,7 @@ void main() {
     await settle(tester);
   }
 
-  /// Список серій живе в модалці «Серії» (меню «⋮»); більшість перевірок серій її відкривають
+  /// The episode list lives in the "Серії" modal (the "⋮" menu); most episode checks open it
   Future<void> openEpisodes(WidgetTester tester) => menuItem(tester, 'Серії');
 
   Future<void> mount(WidgetTester tester, {HikkaAnime? a, HikkaRoute? route, Size size = kDesktop, double scale = 1.0, bool episodes = false}) async {
@@ -205,19 +205,19 @@ void main() {
 
   void phone() => AppPlatform.debugMobile = true;
 
-  /// Кнопка «Дивитись · серія N» / «Продовжити · серія N»
-  /// Підпис обраного чипа варіанта
+  /// The "Дивитись · серія N" / "Продовжити · серія N" button
+  /// Label of the selected variant chip
   String selectedChip(WidgetTester tester) => tester.widget<AppDropdown<String>>(find.byType(AppDropdown<String>)).options.firstWhere((o) => o.value == tester.widget<AppDropdown<String>>(find.byType(AppDropdown<String>)).value).label;
 
   Finder accent(String label) => find.widgetWithText(AppAccentButton, label);
 
-  /// Колір тексту, що містить [text] (рядок озвучки склеєно з кількох частин, тож точний збіг не годиться)
+  /// Color of text containing [text] (the dub line is glued from several parts, so an exact match will not do)
   Color? colorContaining(WidgetTester tester, String text) => tester.widget<Text>(find.textContaining(text).first).style?.color;
 
-  /// Налаштування реєстру джерел із тесту (його складає `useSite`)
+  /// Source registry settings from the test (assembled by `useSite`)
   SourcePrefs prefsOf() => WatchService.instance.registry.prefs;
 
-  /// Сайт із двома джерелами: Mikai (основне) і UFDub, що нічого не знаходить
+  /// A site with two sources: Mikai (main) and UFDub, which finds nothing
   FakeSite twoSources() => FakeSite({
     '/anime/hikka:$slug': fixture('mikai_detail.json'),
     '/anime/7601/player': jsonEncode(playerDoc()),
@@ -225,8 +225,8 @@ void main() {
     'POST https://ufdub.com/index.php?do=search': '<html><body><div id="dle-content"></div></body></html>',
   });
 
-  /// Кнопка «Джерела» в шапці блоку
-  Finder sourcesLink() => find.byTooltip('Ще'); // «Джерела» тепер у меню «⋮»
+  /// The "Джерела" button in the block header
+  Finder sourcesLink() => find.byTooltip('Ще'); // "Джерела" is now in the "⋮" menu
 
   Future<void> openSources(WidgetTester tester) async {
     await menuItem(tester, 'Джерела, якість і плеєр');
@@ -238,35 +238,35 @@ void main() {
     await settle(tester);
   }
 
-  /// Поточний пошук блоку: після повторного пошуку (`_restart`) це інший обʼєкт
+  /// The block's current search: after a repeated search (`_restart`) it is a different object
   Object? searchOf(HikkaRoute route) => route.memo['watch'];
 
-  // ── Одна дія замість вибору озвучки ─────────────────────────────────────────
+  // ── One action instead of choosing a dub ─────────────────────────────────────
 
   group('Одна дія замість вибору озвучки', () {
     testWidgets('кнопка «Дивитись», озвучка за замовчуванням і чипи вибору всіх варіантів перед стартом', (tester) async {
-      StorageService.saveWatchTeamPriority(['Inari']); // фікстури розраховані на Inari як озвучку за замовчуванням
+      StorageService.saveWatchTeamPriority(['Inari']); // fixtures assume Inari as the default dub
       await mount(tester);
 
-      expect(find.text('Дивитись'), findsOneWidget); // заголовок блоку
+      expect(find.text('Дивитись'), findsOneWidget); // block heading
       expect(find.text('Українські озвучки та субтитри'), findsOneWidget);
       expect(accent('Дивитись · серія 1'), findsOneWidget);
       expect(find.text('Inari'), findsWidgets);
       expect(find.textContaining('1–5 сер.'), findsWidgets);
-      // Усі 11 варіантів видно чипами одразу; обраний — підсвічений
+      // All 11 variants are visible as chips at once; the chosen one is highlighted
       expect(tester.widget<AppDropdown<String>>(find.byType(AppDropdown<String>)).options.length, 11);
       for (final name in ['TuTaZaSho', '4UA', 'FanVoxUA', 'Рідний Голос', 'Glass Moon', 'Amanogawa', 'Далі Буде']) {
         expect(find.textContaining(name), findsWidgets, reason: name);
       }
       expect(selectedChip(tester), 'Озвучення: Inari');
       expect(find.byType(AppCard), findsNothing);
-      // Серія ще виходить: озвучено не менше, ніж вийшло, жовтого прапорця нема
+      // The episode is still airing: at least as many are dubbed as have aired, no yellow flag
       expect(find.byIcon(Symbols.warning_rounded), findsNothing);
       await shot(tester, 'desktop_default');
     });
 
     testWidgets('«Дивитись» одразу відкриває плеєр: ні вікон, ні вибору озвучки; усі варіанти передано в плеєр', (tester) async {
-      StorageService.saveWatchTeamPriority(['Inari']); // фікстури розраховані на Inari як озвучку за замовчуванням
+      StorageService.saveWatchTeamPriority(['Inari']); // fixtures assume Inari as the default dub
       await mount(tester);
       await tester.tap(accent('Дивитись · серія 1'));
       await tester.pump();
@@ -281,7 +281,7 @@ void main() {
       expect(l.session.entries.length, 5);
       expect(l.startIndex, 0);
       expect(l.hikka, isNotNull);
-      // Решту варіантів людина перемикає в плеєрі, тому там мають бути всі
+      // The person switches the remaining variants in the player, so all of them must be there
       expect(l.title.groups, hasLength(11));
       await settle(tester);
       expect(find.text('Тричі подумайте'), findsNothing);
@@ -299,7 +299,7 @@ void main() {
     });
 
     testWidgets('улюблена команда з інших тайтлів підставляється сама, а вибір для цього тайтлу сильніший', (tester) async {
-      store.setFavoriteChoice('v:2'); // FanVoxUA (озвучення) обирали в іншому тайтлі
+      store.setFavoriteChoice('v:2'); // FanVoxUA (dub) was chosen in another title
       await mount(tester);
       expect(selectedChip(tester), 'Озвучення: FanVoxUA');
 
@@ -309,7 +309,7 @@ void main() {
     });
 
     testWidgets('улюблені субтитри відкриваються як субтитри, а не підмінюються озвученням тієї ж команди', (tester) async {
-      store.setFavoriteChoice('s:3'); // субтитри Glass Moon
+      store.setFavoriteChoice('s:3'); // Glass Moon subtitles
       await mount(tester);
 
       expect(find.text('Glass Moon'), findsWidgets);
@@ -326,7 +326,7 @@ void main() {
       expect(find.text('5'), findsOneWidget);
       await closeDialog(tester);
 
-      // Плеєр запамʼятовує вибір у сховищі; сторінка його слухає
+      // The player remembers the choice in the store; the page listens to it
       store.setPinnedGroup(animeKey, 'mikai|7601|t_102:voice');
       await tester.pump();
 
@@ -334,32 +334,32 @@ void main() {
       expect(find.textContaining('1–4 сер.'), findsWidgets);
       expect(find.textContaining('Озвучено 4 з 5 вийшлих серій'), findsNothing, reason: 'дисклеймер прибрано: кількість видно в рядку озвучки');
       await openEpisodes(tester);
-      expect(find.text('5'), findsNothing); // п’ятої серії в цьому варіанті ще нема
+      expect(find.text('5'), findsNothing); // the fifth episode is not in this variant yet
       expect(find.text('4'), findsOneWidget);
     });
 
     testWidgets('чипи варіантів узгоджуються з числом: жодного, два, п’ять; вибір чипа запамʼятовується', (tester) async {
-      // Один варіант — підказки нема
+      // One variant: no hint
       useSite(mikaiSite(playerDoc(edit: (r) => r.removeWhere((x) => x['id'] != 't_2:voice'))));
       await mount(tester);
       expect(find.text('FanVoxUA'), findsWidgets);
       expect(find.textContaining('1–5 сер.'), findsWidgets);
       expect(tester.widget<AppDropdown<String>>(find.byType(AppDropdown<String>)).options.length, 1);
 
-      // Озвучення й субтитри однієї команди — список із двох
+      // One team's dub and subtitles: a list of two
       useSite(mikaiSite(playerDoc(edit: (r) => r.removeWhere((x) => !(x['id'] as String).startsWith('t_121:')))));
       await mount(tester);
       expect(find.text('Inari'), findsWidgets);
       expect(find.textContaining('1–5 сер.'), findsWidgets);
       expect(tester.widget<AppDropdown<String>>(find.byType(AppDropdown<String>)).options.length, 2);
-      await tester.tap(find.text('Inari').first); // розкрити список
+      await tester.tap(find.text('Inari').first); // expand the list
       await settle(tester);
-      await tester.tap(find.text('Inari').last); // останній пункт — субтитри
+      await tester.tap(find.text('Inari').last); // the last item is subtitles
       await settle(tester);
       expect(store.preferredGroup(animeKey), contains('t_121:sub'));
       expect(accent('Дивитись · серія 1'), findsOneWidget);
 
-      // П’ять варіантів — п’ять пунктів
+      // Five variants, five items
       useSite(
         mikaiSite(
           playerDoc(edit: (r) => r.removeWhere((x) => !const {'t_121:voice', 't_121:sub', 't_2:voice', 't_3:voice', 't_3:sub'}.contains(x['id']))),
@@ -417,7 +417,7 @@ void main() {
     });
   });
 
-  // ── Розбіжності з Hikka ────────────────────────────────────────────────────
+  // ── Mismatches with Hikka ────────────────────────────────────────────────────
 
   group('Розбіжність кількості й нумерації з Hikka', () {
     testWidgets('«24 з 12» в усіх варіантах: жовте застереження, відмітки не синхронізуватимуться', (tester) async {
@@ -448,8 +448,8 @@ void main() {
         mikaiSite(
           playerDoc(
             edit: (r) {
-              setEpisodes(r[0], upTo(24)); // TuTaZaSho: склеєні дві частини, їх найбільше, тому вони першими в списку
-              setEpisodes(r[1], upTo(12)); // Inari: рівно 12
+              setEpisodes(r[0], upTo(24)); // TuTaZaSho: two parts merged, they have the most, so they come first in the list
+              setEpisodes(r[1], upTo(12)); // Inari: exactly 12
             },
           ),
         ),
@@ -495,7 +495,7 @@ void main() {
           playerDoc(
             edit: (r) {
               setEpisodes(r[0], upTo(13));
-              // 13-та серія названа «OVA»
+              // The 13th episode is named "OVA"
               ((r[0]['episodes'] as List).last as Map<String, dynamic>)['label'] = 'OVA 1';
               setEpisodes(r[1], upTo(12));
             },
@@ -504,13 +504,13 @@ void main() {
       );
       await mount(tester, a: anime(released: 12, total: 12, status: 'finished'));
 
-      // Тринадцята серія названа «OVA 1» і стоїть у кінці: основні 12 збігаються з Hikka, зайву не синхронізуємо
+      // The thirteenth episode is named "OVA 1" and stands at the end: the main 12 match Hikka, we do not sync the extra one
       expect(find.text('TuTaZaSho'), findsWidgets);
       expect(find.textContaining('1–12 сер.'), findsWidgets);
       expect(find.textContaining('Останні 1 серія схожа на OVA або спецвипуск (OVA 1)'), findsOneWidget);
       expect(find.textContaining('передаватимуться на Hikka'), findsNothing);
       await openEpisodes(tester);
-      expect(find.text('13'), findsOneWidget); // кнопка серії підписана номером, назва «OVA 1» — у підказці
+      expect(find.text('13'), findsOneWidget); // the episode button is labeled with the number, the name "OVA 1" is in the hint
     });
 
     testWidgets('жодної серії при відомих 12: поясняє, що їх могли додати на іншу частину; «Джерела» під рукою', (tester) async {
@@ -532,7 +532,7 @@ void main() {
       expect(find.widgetWithText(AppSecondaryButton, 'Спробувати ще'), findsOneWidget);
       expect(find.widgetWithText(AppSecondaryButton, 'Джерела'), findsOneWidget);
       expect(find.text('Серії'), findsNothing);
-      expect(accent('Дивитись'), findsOneWidget); // кнопка є завжди, але дивитись ще нема чого
+      expect(accent('Дивитись'), findsOneWidget); // the button is always there, but there is nothing to watch yet
     });
 
     testWidgets('тайтл завершено, а в озвучці не всі серії — теж жовтий прапорець, але нумерація чесна', (tester) async {
@@ -550,12 +550,12 @@ void main() {
       expect(find.text('TuTaZaSho'), findsWidgets);
       expect(colorContaining(tester, '1–7 сер.'), amber);
       expect(find.textContaining('У цього озвучення є відсутні серії: 7/12'), findsNothing, reason: 'плашку прибрано: застереження вже є в рядку озвучки');
-      // Це не збій нумерації: хоч щось, а синхронізувати можна (рівень incomplete, не mismatch)
+      // This is not a numbering failure: something can still be synced (level incomplete, not mismatch)
       expect(find.textContaining('передаватимуться на Hikka'), findsNothing);
     });
   });
 
-  // ── Ліцензія ───────────────────────────────────────────────────────────────
+  // ── License ───────────────────────────────────────────────────────────────
 
   group('Ліцензований тайтл', () {
     final license = {
@@ -576,7 +576,7 @@ void main() {
       expect(find.widgetWithText(AppAccentButton, 'Crunchyroll'), findsOneWidget);
       expect(find.widgetWithText(AppSecondaryButton, 'Netflix'), findsOneWidget);
       expect(find.text('Все одно дивитись'), findsOneWidget);
-      // Озвучок і серій не показуємо, а плеєр не відкриваємо, поки людина не підтвердила вибір
+      // We show no dubs or episodes and do not open the player until the person confirms the choice
       expect(accent('Дивитись · серія 1'), findsNothing);
       expect(find.text('Серії'), findsNothing);
       expect(find.text('Inari'), findsNothing);
@@ -598,7 +598,7 @@ void main() {
       expect(find.textContaining('гальмує ліцензування аніме в Україні'), findsOneWidget);
       await shot(tester, 'desktop_licensed_dialog');
 
-      // Головна дія діалогу — легальний перегляд. Закриває діалог, відкриває посилання, плеєр не запускається
+      // The dialog's main action is legal viewing. It closes the dialog, opens the link, the player does not start
       await tester.tap(find.widgetWithText(AppAccentButton, 'Дивитись легально'));
       await settle(tester);
       expect(opened, ['https://www.crunchyroll.com/series/X']);
@@ -609,33 +609,33 @@ void main() {
     });
 
     testWidgets('підтвердження в діалозі одразу відкриває плеєр; на сторінці лишається нагадування з посиланнями', (tester) async {
-      StorageService.saveWatchTeamPriority(['Inari']); // фікстури розраховані на Inari як озвучку за замовчуванням
+      StorageService.saveWatchTeamPriority(['Inari']); // fixtures assume Inari as the default dub
       await mount(tester);
       await tester.tap(find.text('Все одно дивитись'));
       await settle(tester);
       await tester.tap(find.text('Все одно дивитись').last);
       await settle(tester);
 
-      // Плеєр відкрито без жодного додаткового кроку
+      // The player opens without any extra step
       expect(find.text('Тричі подумайте'), findsNothing);
       expect(launches, hasLength(1));
       expect(launches.single.group.label, 'Inari');
       expect(launches.single.epKey, '1');
 
-      // Сторінка тепер звичайна, з нагадуванням зверху
+      // The page is now ordinary, with a reminder on top
       expect(find.text('Ліцензовано в Україні. Якщо можете, дивіться легально.'), findsOneWidget);
       expect(accent('Дивитись · серія 1'), findsOneWidget);
       expect(find.text('Inari'), findsWidgets);
-      expect(find.text('Crunchyroll'), findsOneWidget); // посилання правовласника лишаються під рукою як чипи
+      expect(find.text('Crunchyroll'), findsOneWidget); // the rights holder's links stay at hand as chips
       await shot(tester, 'desktop_licensed_acknowledged');
 
-      // Повторно запускати вже не питає: людина підтвердила вибір на цьому показі сторінки
+      // Launching again no longer asks: the person confirmed the choice on this showing of the page
       await tester.tap(accent('Дивитись · серія 1'));
       await tester.pump();
       expect(launches, hasLength(2));
       expect(find.text('Тричі подумайте'), findsNothing);
 
-      // Вибір не зберігається: нова сторінка (новий маршрут) показує картку знову
+      // The choice is not saved: a new page (a new route) shows the card again
       await mount(tester);
       expect(find.text('Ліцензовано в Україні'), findsOneWidget);
       expect(find.text('Inari'), findsNothing);
@@ -680,7 +680,7 @@ void main() {
     });
   });
 
-  // ── Порожньо й помилки ─────────────────────────────────────────────────────
+  // ── Empty and errors ─────────────────────────────────────────────────────
 
   group('Порожні стани й помилки', () {
     testWidgets('нічого не знайшли: пояснення й «Спробувати ще», що справді шукає наново', (tester) async {
@@ -727,7 +727,7 @@ void main() {
       expect(accent('Дивитись · серія 1'), findsOneWidget);
       await tester.tap(find.byTooltip('Ще'));
       await settle(tester);
-      expect(find.textContaining('Mikai:'), findsOneWidget); // помилка джерела — у меню «Ще»
+      expect(find.textContaining('Mikai:'), findsOneWidget); // a source error is in the "Ще" menu
       expect(find.byIcon(Symbols.cloud_off_rounded), findsOneWidget);
       await closeDialog(tester);
       await shot(tester, 'desktop_source_error');
@@ -768,7 +768,7 @@ void main() {
     });
   });
 
-  // ── Вікно «Джерела» ────────────────────────────────────────────────────────
+  // ── The "Джерела" window ────────────────────────────────────────────────────
 
   group('Вікно «Джерела»', () {
     testWidgets('відкривається з шапки блоку: сайти з поясненнями, якість, плеєр за замовчуванням, ключ', (tester) async {
@@ -813,7 +813,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
       expect(StorageService.getWatchTeamPriority(), ['Nova Team']);
 
-      // список лишається відкритим; та сама назва вдруге не пропонується як нова
+      // the list stays open; the same name is not offered a second time as new
       await tester.enterText(find.byType(TextField).last, 'nova team');
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.text('Додати «nova team»'), findsNothing);
@@ -870,7 +870,7 @@ void main() {
       for (var i = 0; i < 40; i++) {
         await tester.pump(const Duration(milliseconds: 16));
       }
-      // клавіатура звужує видиму область сторінки
+      // the keyboard narrows the page's visible area
       tester.view.physicalSize = Size(tester.view.physicalSize.width, tester.view.physicalSize.height - 300 * tester.view.devicePixelRatio);
       tester.view.viewInsets = FakeViewPadding(bottom: 300 * tester.view.devicePixelRatio);
       addTearDown(() => tester.view.resetViewInsets());
@@ -941,7 +941,7 @@ void main() {
     testWidgets('продовження йде тією озвучкою, яку обрано: серії інші, номер той самий', (tester) async {
       store.setWatched(animeKey, '1', true);
       store.setWatched(animeKey, '2', true);
-      store.setPinnedGroup(animeKey, 'mikai|7601|t_102:voice'); // у цьому варіанті лише 4 серії
+      store.setPinnedGroup(animeKey, 'mikai|7601|t_102:voice'); // this variant has only 4 episodes
       await mount(tester);
 
       expect(accent('Продовжити · серія 3'), findsOneWidget);
@@ -970,7 +970,7 @@ void main() {
       await tester.pump();
       expect(store.watched(animeKey), {'3'});
       expect(find.text('Переглянуто 1 з 5'), findsOneWidget);
-      expect(launches, isEmpty); // довге натиснення не запускає відтворення
+      expect(launches, isEmpty); // a long press does not start playback
 
       await tester.longPress(find.text('3'));
       await tester.pump();
@@ -983,7 +983,7 @@ void main() {
     });
 
     testWidgets('натискання на номер серії запускає саме її', (tester) async {
-      StorageService.saveWatchTeamPriority(['Inari']); // фікстури розраховані на Inari як озвучку за замовчуванням
+      StorageService.saveWatchTeamPriority(['Inari']); // fixtures assume Inari as the default dub
       await mount(tester);
       await openEpisodes(tester);
       await tester.tap(find.text('4'));
@@ -1005,7 +1005,7 @@ void main() {
     testWidgets('повернення на сторінку: вибір озвучки й дані ті самі, без нового пошуку', (tester) async {
       final route = newRoute();
       await mount(tester, route: route);
-      store.setPinnedGroup(animeKey, 'mikai|7601|t_3:voice'); // обрали в плеєрі
+      store.setPinnedGroup(animeKey, 'mikai|7601|t_3:voice'); // chosen in the player
       await tester.pump();
       final calls = site.count('/anime/');
 
@@ -1036,7 +1036,7 @@ void main() {
       expect(find.text('Показати всі (120)'), findsOneWidget);
       expect(find.textContaining('Показано серії'), findsOneWidget);
       expect(find.text('61'), findsOneWidget);
-      expect(find.text('1'), findsNothing); // перші серії поза вікном
+      expect(find.text('1'), findsNothing); // the first episodes are outside the window
 
       await tester.tap(find.text('Показати всі (120)'));
       await settle(tester);
@@ -1050,10 +1050,10 @@ void main() {
     });
   });
 
-  // ── Телефон ────────────────────────────────────────────────────────────────
+  // ── Phone ────────────────────────────────────────────────────────────────
 
   group('Телефон', () {
-    /// Зона дотику не менша за 48 dp
+    /// Touch zone at least 48 dp
     void expectTouchTarget(WidgetTester tester, Finder f, String reason) {
       final s = tester.getSize(f.first);
       expect(s.height, greaterThanOrEqualTo(AppPlatform.touchTarget), reason: '$reason: висота');
@@ -1165,7 +1165,7 @@ void main() {
     });
   });
 
-  // ── Тема ───────────────────────────────────────────────────────────────────
+  // ── Theme ───────────────────────────────────────────────────────────────────
 
   group('Світла тема', () {
     testWidgets('читається й не ламається', (tester) async {

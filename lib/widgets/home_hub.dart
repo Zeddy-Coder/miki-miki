@@ -14,15 +14,15 @@ import 'hikka/hikka_hub.dart';
 import 'local_library.dart';
 import 'update_prompt.dart';
 
-/// Оболонка застосунку Miki Miki: чотири головні вкладки («Головна», «Огляд», «Списки», «Профіль») із вмістом
-/// Hikka. Телефон у портреті отримує нижню навігацію, ПК і широкі екрани — бічне меню. Сам вміст і відкриті
-/// сторінки живуть у [HikkaHub]; цей віджет лише перемикає вкладки та віддає екрану плеєра обробник «Назад».
+/// The Miki Miki app shell: four main tabs ("Головна", "Огляд", "Списки", "Профіль") with Hikka
+/// content. A phone in portrait gets the bottom navigation, PC and wide screens a side menu. The content itself and open
+/// pages live in [HikkaHub]; this widget only switches tabs and gives the player screen a "Back" handler.
 class HomeHub extends StatefulWidget {
-  /// Висота нижньої навігації вузького екрана (телефон у портреті), dp
+  /// Height of the narrow-screen bottom navigation (phone in portrait), dp
   static const double bottomNavHeight = 64;
 
-  /// Обробник кнопки «Назад» головного екрана: true — натискання поглинуто (закрито сторінку чи панель,
-  /// повернуто з іншої вкладки на «Головну»). Ставиться, поки екран на місці; його викликає екран плеєра.
+  /// The main screen's "Back" button handler: true means the press was consumed (a page or panel closed,
+  /// returned from another tab to "Головна"). Set while the screen is in place; the player screen calls it.
   static bool Function()? backHandler;
 
   @visibleForTesting
@@ -30,11 +30,11 @@ class HomeHub extends StatefulWidget {
     backHandler = null;
   }
 
-  /// Телефон у портреті: бічне меню замінює нижня навігація, а картки стають у стовпчик
+  /// Phone in portrait: the bottom navigation replaces the side menu, and the cards stack in a column
   static bool isCompact(BuildContext context) =>
       AppPlatform.isMobile && AppLayout(MediaQuery.sizeOf(context)).isCompactWidth;
 
-  /// Значок головної вкладки (нижня навігація й бічне меню)
+  /// The main tab icon (bottom navigation and side menu)
   static IconData iconOf(MainTab tab) => switch (tab) {
         MainTab.home => Symbols.home_rounded,
         MainTab.discover => Symbols.explore_rounded,
@@ -47,13 +47,13 @@ class HomeHub extends StatefulWidget {
   final ValueChanged<List<String>> onOpenMultipleFiles;
   final void Function(List<Map<String, String>> items, int startIndex) onOpenQueue;
 
-  /// Налаштування застосунку; [tab] — відразу відкрити потрібну вкладку (див. `AppSettingsDialog.tab*`)
+  /// App settings; [tab] opens the needed tab at once (see `AppSettingsDialog.tab*`)
   final void Function({int? tab}) onOpenSettings;
 
-  /// Додатковий відступ знизу у списках (телефон: щоб згорнутий плеєр не закривав кінець списку)
+  /// Extra bottom padding in lists (phone: so the collapsed player does not cover the end of the list)
   final double reserveBottom;
 
-  /// Налаштування як сторінка всередині застосунку (телефон, портрет). Без нього налаштування відкриває вікно
+  /// Settings as a page inside the app (phone, portrait). Without it, settings open as a window
   final WidgetBuilder? settingsBuilder;
 
   const HomeHub({
@@ -83,14 +83,14 @@ class _HomeHubState extends State<HomeHub> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _maybePromptUpdate());
   }
 
-  /// Вікно оновлення показується раз за запуск: коли відома новіша версія, яку не пропустили
-  static bool _updatePrompted = false;
+  /// The update window is shown once per version per launch: when a newer version is known that was not skipped
+  static String _promptedVersion = '';
 
   void _maybePromptUpdate() {
-    if (!mounted || _updatePrompted) return;
+    if (!mounted) return;
     final st = AppUpdater.instance.state.value;
-    if (st is! UpdateAvailable || !AppUpdater.instance.shouldPrompt(st.info)) return;
-    _updatePrompted = true;
+    if (st is! UpdateAvailable || !AppUpdater.instance.shouldPrompt(st.info) || _promptedVersion == st.info.version) return;
+    _promptedVersion = st.info.version;
     UpdatePrompt.show(context, scale: widget.scale, info: st.info);
   }
 
@@ -106,8 +106,8 @@ class _HomeHubState extends State<HomeHub> {
     if (mounted) setState(() {});
   }
 
-  /// «Назад»: спершу закриває відкриту сторінку чи панель, з кореня іншої вкладки повертає на «Головну».
-  /// false — уже на «Головній»: екран плеєра вирішує, чи виходити із застосунку.
+  /// "Back": first closes an open page or panel, from another tab's root returns to "Головна".
+  /// false: already on "Головна": the player screen decides whether to exit the app.
   bool _handleBack() => _nav.back();
 
   Widget _localLibrary(BuildContext context) => LocalLibrary(
@@ -122,14 +122,16 @@ class _HomeHubState extends State<HomeHub> {
   Widget build(BuildContext context) {
     final scale = widget.scale;
     final compact = HomeHub.isCompact(context);
-    // Телефон: виріз камери й системні панелі не мають закривати вміст
+    // Phone: the camera cutout and system bars must not cover the content
     final EdgeInsets safe = AppPlatform.isMobile ? MediaQuery.paddingOf(context) : EdgeInsets.zero;
+    // The title page lays itself under the status bar
+    final double topPad = HikkaNav.immersive(_nav.top) ? 0 : safe.top;
 
     final content = HikkaHub(
       scale: scale,
       bottomInset: widget.reserveBottom,
       onOpenSettings: ({int? tab}) {
-        // Телефон у портреті: налаштування (за потреби — з потрібного розділу) — сторінка поверх вкладки, навігація видима; інакше вікно
+        // Phone in portrait: settings (from the needed section if required) are a page over the tab, navigation visible; otherwise a window
         if (compact && widget.settingsBuilder != null) {
           _nav.openSettings(tab: tab ?? 0);
         } else {
@@ -143,11 +145,11 @@ class _HomeHubState extends State<HomeHub> {
     if (compact) {
       return Container(
         color: uiTheme.bgPrimary,
-        padding: EdgeInsets.only(top: safe.top, left: safe.left, right: safe.right),
+        padding: EdgeInsets.only(top: topPad, left: safe.left, right: safe.right),
         child: Column(
           children: [
             Expanded(child: content),
-            // З відкритою клавіатурою навігація не потрібна: інакше вона піднімається разом із нею й закриває вміст
+            // With the keyboard open the navigation is not needed: otherwise it rises with it and covers the content
             if (MediaQuery.viewInsetsOf(context).bottom == 0) _buildBottomNav(safe.bottom),
           ],
         ),
@@ -156,7 +158,7 @@ class _HomeHubState extends State<HomeHub> {
 
     return Container(
       color: uiTheme.bgPrimary,
-      padding: EdgeInsets.only(top: safe.top, left: safe.left, right: safe.right, bottom: safe.bottom),
+      padding: EdgeInsets.only(top: topPad, left: safe.left, right: safe.right, bottom: safe.bottom),
       child: Row(
         children: [
           _buildSidebar(scale),
@@ -166,7 +168,7 @@ class _HomeHubState extends State<HomeHub> {
     );
   }
 
-  // ── Нижня навігація (телефон, портрет) ─────────────────────────────────────
+  // ── Bottom navigation (phone, portrait) ─────────────────────────────────────
 
   Widget _buildBottomNav(double bottomInset) {
     Widget item(MainTab tab) {
@@ -183,7 +185,7 @@ class _HomeHubState extends State<HomeHub> {
             highlightColor: uiTheme.touchHighlight,
             child: SizedBox(
               height: HomeHub.bottomNavHeight,
-              // 0 → 1 при виборі: плашка розростається з центру, значок і підпис плавно міняють колір, значок «підстрибує»
+              // 0 → 1 on selection: the pill grows from the center, the icon and label smoothly change color, the icon "bounces"
               child: TweenAnimationBuilder<double>(
                 tween: Tween<double>(end: selected ? 1 : 0),
                 duration: AppAnim.medium,
@@ -248,14 +250,14 @@ class _HomeHubState extends State<HomeHub> {
     );
   }
 
-  // ── Бічне меню (ПК, широкі екрани) ─────────────────────────────────────────
+  // ── Side menu (PC, wide screens) ─────────────────────────────────────────
 
   Widget _buildSidebar(double scale) {
     return AppSidebar(
       scale: scale,
       header: Row(
         children: [
-          // Тимчасовий знак: монограма. Маскот (чібі-мишка) замінить її, коли буде готовий
+          // A temporary mark: a monogram. The mascot (a chibi mouse) will replace it when ready
           Container(
             width: 32 * scale,
             height: 32 * scale,

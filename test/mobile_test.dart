@@ -29,7 +29,7 @@ import 'package:miki_miki/widgets/skip_button.dart';
 import 'support/fakes.dart';
 import 'support/hikka_fakes.dart';
 
-// Розміри екрана Pixel 8 Pro у dp (dpr = 1.0): альбомна й портрет
+// Pixel 8 Pro screen sizes in dp (dpr = 1.0): landscape and portrait
 const Size kLandscape = Size(997, 448);
 const Size kPortrait = Size(448, 997);
 const Size kNarrow = Size(360, 780);
@@ -48,7 +48,7 @@ Future<void> tick(WidgetTester tester, [int ms = 600]) async {
 Future<void> shot(WidgetTester tester, String name) =>
     expectLater(find.byType(MaterialApp), matchesGoldenFile('shots/$name.png'));
 
-/// Вирізи / системні панелі: у MediaQuery підставляємо відступи, як на справжньому телефоні
+/// Cutouts / system bars: we put insets into MediaQuery as on a real phone
 Widget withInsets(EdgeInsets pad, Widget child) => MaterialApp(
       debugShowCheckedModeBanner: false,
       builder: (context, w) => MediaQuery(
@@ -58,7 +58,7 @@ Widget withInsets(EdgeInsets pad, Widget child) => MaterialApp(
       home: child,
     );
 
-/// «Відео»: кольоровий кадр, на якому видно прозорість кнопок і градієнтів
+/// "Video": a colored frame that shows the transparency of buttons and gradients
 class FakeVideo extends StatelessWidget {
   const FakeVideo({super.key});
 
@@ -82,8 +82,8 @@ final List<VideoChapter> kChapters = [
   const VideoChapter(title: 'Preview', startTime: Duration(minutes: 24)),
 ];
 
-/// Збирає той самий стек шарів, що й мобільний плеєр: відео → жести → кнопка «Пропустити» →
-/// керування → меню-панелі → сповіщення. Стан (панелі, видимість) живе в самій сцені.
+/// Assembles the same layer stack as the mobile player: video → gestures → the "Skip" button →
+/// controls → menu panels → notifications. State (panels, visibility) lives in the scene itself.
 class PhoneScene extends StatefulWidget {
   final FakeController c;
   final bool controls;
@@ -291,7 +291,7 @@ class PhoneSceneState extends State<PhoneScene> {
   }
 }
 
-/// Усі кнопки-«скло» на екрані: їхній розмір — це зона дотику
+/// All "glass" buttons on screen: their size is the touch zone
 List<Size> overlayButtonSizes(WidgetTester tester) => [
       for (final e in find.byType(AppOverlayButton).evaluate()) tester.getSize(find.byWidget(e.widget)),
     ];
@@ -314,7 +314,7 @@ void main() {
     SystemControls.userBrightness = null;
   });
 
-  // ── Чиста математика жестів ────────────────────────────────────────────────
+  // ── Pure gesture math ────────────────────────────────────────────────────────
 
   group('TouchGestureMath', () {
     test('діапазон перемотки: 10 % тривалості, 60…240 с, не далі за кінець короткого відео', () {
@@ -325,7 +325,7 @@ void main() {
     });
 
     test('seekTarget: вправо — вперед, вліво — назад, у межах 0…тривалість', () {
-      const total = Duration(minutes: 24); // 144 с на всю ширину
+      const total = Duration(minutes: 24); // 144 s for the full width
       const start = Duration(minutes: 10);
       final half = TouchGestureMath.seekTarget(start: start, total: total, dx: 500, width: 1000);
       expect(half, start + const Duration(seconds: 72));
@@ -333,7 +333,7 @@ void main() {
       expect(back, start - const Duration(seconds: 36));
       expect(TouchGestureMath.seekTarget(start: start, total: total, dx: -99999, width: 1000), Duration.zero);
       expect(TouchGestureMath.seekTarget(start: start, total: total, dx: 99999, width: 1000), total);
-      // немає тривалості (потік) — позиція не змінюється
+      // no duration (a stream): the position does not change
       expect(TouchGestureMath.seekTarget(start: start, total: Duration.zero, dx: 400, width: 1000), start);
     });
 
@@ -354,10 +354,10 @@ void main() {
 
     test('краї екрана — системні жести, їх не чіпаємо', () {
       const size = Size(448, 997);
-      expect(TouchGestureMath.inSystemEdge(const Offset(5, 500), size), isTrue); // ліво
-      expect(TouchGestureMath.inSystemEdge(const Offset(440, 500), size), isTrue); // право
-      expect(TouchGestureMath.inSystemEdge(const Offset(200, 10), size), isTrue); // шторка
-      expect(TouchGestureMath.inSystemEdge(const Offset(200, 990), size), isTrue); // «додому»
+      expect(TouchGestureMath.inSystemEdge(const Offset(5, 500), size), isTrue); // left
+      expect(TouchGestureMath.inSystemEdge(const Offset(440, 500), size), isTrue); // right
+      expect(TouchGestureMath.inSystemEdge(const Offset(200, 10), size), isTrue); // shade
+      expect(TouchGestureMath.inSystemEdge(const Offset(200, 990), size), isTrue); // "home"
       expect(TouchGestureMath.inSystemEdge(const Offset(200, 500), size), isFalse);
     });
 
@@ -389,7 +389,7 @@ void main() {
     });
   });
 
-  // ── Канал Android ──────────────────────────────────────────────────────────
+  // ── Android channel ──────────────────────────────────────────────────────────
 
   group('SystemControls (канал miki_miki/system)', () {
     const channel = MethodChannel('miki_miki/system');
@@ -432,20 +432,47 @@ void main() {
       expect(calls[3].arguments, {'enabled': false, 'w': 16, 'h': 9});
     });
 
+    test('PiP-кнопка й аудіофокус: виклики до Android та події звідти', () async {
+      await SystemControls.setPipPlaying(true);
+      await SystemControls.setAudioFocus(true);
+      await SystemControls.setAudioFocus(false);
+      expect(calls.map((c) => c.method), ['pipPlaying', 'audioFocus', 'audioFocus']);
+      expect(calls[0].arguments, {'playing': true});
+      expect(calls[1].arguments, {'enabled': true});
+      expect(calls[2].arguments, {'enabled': false});
+
+      SystemControls.init();
+      var toggled = 0;
+      final focus = <String>[];
+      SystemControls.onPipToggle = () => toggled++;
+      SystemControls.onAudioFocus = focus.add;
+      for (final m in [const MethodCall('pipToggle'), const MethodCall('audioFocus', 'transient'), const MethodCall('audioFocus', 'gain')]) {
+        await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.handlePlatformMessage(
+          'miki_miki/system',
+          const StandardMethodCodec().encodeMethodCall(m),
+          (_) {},
+        );
+      }
+      expect(toggled, 1);
+      expect(focus, ['transient', 'gain']);
+      SystemControls.onPipToggle = null;
+      SystemControls.onAudioFocus = null;
+    });
+
     test('яскравість: запам\'ятовує вибір користувача, скидає й відновлює', () async {
       expect(await SystemControls.getBrightness(), 0.4);
       expect(SystemControls.userBrightness, isNull);
 
-      await SystemControls.restoreBrightness(); // нічого не вибирали — нічого й не шлемо
+      await SystemControls.restoreBrightness(); // nothing was chosen, so we send nothing
       expect(calls.where((c) => c.method == 'setBrightness'), isEmpty);
 
       await SystemControls.setBrightness(0.8);
       expect(SystemControls.userBrightness, 0.8);
-      await SystemControls.resetBrightness(); // вийшли на головну: системна яскравість
+      await SystemControls.resetBrightness(); // exited to home: the system brightness
       expect(calls.last.method, 'setBrightness');
       expect(calls.last.arguments, {'value': -1.0});
-      expect(SystemControls.userBrightness, 0.8); // вибір не губиться
-      await SystemControls.restoreBrightness(); // знову у плеєрі
+      expect(SystemControls.userBrightness, 0.8); // the choice is not lost
+      await SystemControls.restoreBrightness(); // in the player again
       expect(calls.last.arguments, {'value': 0.8});
     });
 
@@ -461,7 +488,7 @@ void main() {
       expect(await SystemControls.pipSupported(), isFalse);
       expect(await SystemControls.enterPip(), isFalse);
       expect(await SystemControls.getVolume(), isNull);
-      await SystemControls.setBrightness(0.3); // не кидає
+      await SystemControls.setBrightness(0.3); // does not throw
     });
 
     test('подія pipChanged від Android оновлює inPip', () async {
@@ -487,7 +514,7 @@ void main() {
     });
   });
 
-  // ── Жести на відео ─────────────────────────────────────────────────────────
+  // ── Gestures on the video ─────────────────────────────────────────────────
 
   group('MobileGestureLayer', () {
     late FakePlayer p;
@@ -532,7 +559,7 @@ void main() {
 
     testWidgets('вертикально ліворуч — яскравість; вгору збільшує', (tester) async {
       await mount(tester, kPortrait);
-      await drag(tester, const Offset(100, 600), const Offset(0, -40), 6); // усього 240 px вгору
+      await drag(tester, const Offset(100, 600), const Offset(0, -40), 6); // 240 px up in total
       expect(vol, isEmpty);
       expect(bright, isNotEmpty);
       expect(bright.last, closeTo(0.5 + 240 / (997 * 0.85), 0.02));
@@ -558,13 +585,13 @@ void main() {
       final g = await tester.startGesture(const Offset(330, 700));
       for (var i = 0; i < 60; i++) {
         await g.moveBy(const Offset(0, -3));
-        await tester.pump(const Duration(milliseconds: 5)); // 300 мс усього
+        await tester.pump(const Duration(milliseconds: 5)); // 300 ms in total
       }
       await g.up();
       await tester.pump(const Duration(milliseconds: 100));
       expect(vol.length, lessThan(25));
       expect(vol.length, greaterThan(1));
-      expect(vol.last, greaterThan(0.3)); // останнє значення дійшло
+      expect(vol.last, greaterThan(0.3)); // the last value arrived
     });
 
     testWidgets('жест із краю екрана (системний) ігнорується', (tester) async {
@@ -578,9 +605,9 @@ void main() {
 
     testWidgets('зони системних жестів Android розширюють «мертві» краї', (tester) async {
       await mount(tester, kPortrait, gestureInsets: const EdgeInsets.fromLTRB(48, 0, 48, 0));
-      await drag(tester, const Offset(40, 600), const Offset(0, -40), 6); // у зоні жесту «назад»
+      await drag(tester, const Offset(40, 600), const Offset(0, -40), 6); // in the "back" gesture zone
       expect(bright, isEmpty);
-      await drag(tester, const Offset(60, 600), const Offset(0, -40), 6); // за її межами
+      await drag(tester, const Offset(60, 600), const Offset(0, -40), 6); // outside it
       expect(bright, isNotEmpty);
     });
 
@@ -591,12 +618,12 @@ void main() {
         await g.moveBy(const Offset(40, 0));
         await tester.pump(const Duration(milliseconds: 30));
       }
-      expect(p.seeks, isEmpty); // поки тримаємо — лише підказка
+      expect(p.seeks, isEmpty); // while holding, only the hint
       expect(osd, isNotEmpty);
       await g.up();
       await tester.pump();
       expect(p.seeks, hasLength(1));
-      // 240 px із 448 при 240 с на ширину ≈ +129 с до 20:00
+      // 240 px of 448 at 240 s per width ≈ +129 s to 20:00
       final expectedMs = const Duration(minutes: 20).inMilliseconds + (240 / 448 * 240 * 1000);
       expect(p.seeks.single.inMilliseconds, closeTo(expectedMs, 1500));
       expect(osd.last.title, '+2:08');
@@ -626,7 +653,7 @@ void main() {
     });
   });
 
-  // ── Керування: розкладка, цілі дотику, дії ─────────────────────────────────
+  // ── Controls: layout, touch targets, actions ─────────────────────────────────
 
   group('MobileControls', () {
     Future<PhoneSceneState> mount(
@@ -706,10 +733,10 @@ void main() {
         expect(fwd.center.dx, lessThan(next.center.dx));
         expect(prev.left, greaterThan(0));
         expect(next.right, lessThan(size.width));
-        // повзунок і швидкі кнопки — під центром, у нижній частині
+        // the slider and quick buttons are below the center, in the lower part
         final seek = tester.getRect(find.byType(AppSeekBar));
         expect(seek.center.dy, greaterThan(size.height * 0.62), reason: 'повзунок унизу ($size)');
-        // верхня панель — угорі
+        // the top bar is at the top
         expect(tester.getRect(find.byIcon(Symbols.arrow_back_rounded)).center.dy, lessThan(80));
         await tester.pumpWidget(const SizedBox());
       }
@@ -755,7 +782,7 @@ void main() {
       await tester.tap(find.byIcon(Symbols.skip_previous_rounded));
       await tick(tester, 100);
       expect(c.fakePlayer.seeks, isEmpty);
-      // назва без підпису серії
+      // the title without the episode label
       expect(find.textContaining('Серія'), findsNothing);
       expect(find.text('Frieren: Beyond Journey\'s End'), findsOneWidget);
     });
@@ -774,7 +801,7 @@ void main() {
       final s = await mount(tester, kPortrait, controls: false, c: c);
       await tester.tap(find.byIcon(Symbols.play_arrow_rounded), warnIfMissed: false);
       await tick(tester, 100);
-      // тап пройшов у відео, а не в кнопку паузи
+      // the tap went to the video, not to the pause button
       expect(c.fakePlayer.playPauseCalls, 0);
       expect(s.events, contains('video-tap'));
       expect(s.controls, isTrue);
@@ -782,7 +809,7 @@ void main() {
 
     testWidgets('тап по порожньому відео ховає панелі, тап по кнопці — ні', (tester) async {
       final s = await mount(tester, kLandscape);
-      await tester.tapAt(const Offset(300, 200)); // порожнє місце між кнопками
+      await tester.tapAt(const Offset(300, 200)); // empty space between buttons
       await tick(tester, 100);
       expect(s.events.last, 'video-tap');
       expect(s.controls, isFalse);
@@ -803,7 +830,7 @@ void main() {
       await tick(tester);
       expect(s.drawer, 'speed');
       expect(find.text('Швидкість відтворення'), findsWidgets);
-      await tester.tapAt(const Offset(224, 80)); // затемнення над панеллю
+      await tester.tapAt(const Offset(224, 80)); // the dimming above the panel
       await tick(tester);
       expect(s.drawer, isNull);
 
@@ -824,7 +851,7 @@ void main() {
     });
   });
 
-  // ── Меню-панелі ────────────────────────────────────────────────────────────
+  // ── Menu panels ────────────────────────────────────────────────────────────
 
   group('MobileSheetFrame + меню', () {
     final subs = [
@@ -859,7 +886,7 @@ void main() {
       for (final d in ['settings', 'speed', 'subs', 'audio', 'anime4k']) {
         await open(tester, kPortrait, drawer: d, pad: const EdgeInsets.only(top: 30, bottom: 18));
         final surface = tester.getRect(find.byType(MobileSheetFrame).first);
-        expect(surface.height, closeTo(kPortrait.height, 1)); // рамка на весь екран
+        expect(surface.height, closeTo(kPortrait.height, 1)); // a full-screen frame
         final drawer = find.byType(SettingsDrawer);
         expect(drawer, findsOneWidget);
         final r = tester.getRect(drawer);
@@ -892,7 +919,7 @@ void main() {
       final box = tester.getSize(find.ancestor(of: closeIcon, matching: find.byType(SizedBox)).first);
       expect(box.width, greaterThanOrEqualTo(48));
       expect(box.height, greaterThanOrEqualTo(48));
-      // рядки пунктів: знаходимо за підписами
+      // item rows: found by labels
       for (final label in ['Швидкість', 'Субтитри', 'Аудіо']) {
         final t = find.descendant(of: find.byType(SettingsDrawer), matching: find.text(label));
         if (t.evaluate().isEmpty) continue;
@@ -988,14 +1015,14 @@ void main() {
     });
   });
 
-  // ── Кнопка «Пропустити» і сповіщення ───────────────────────────────────────
+  // ── The "Skip" button and notifications ───────────────────────────────────────
 
   group('SkipButton / OsdToast на телефоні', () {
     testWidgets('«Пропустити» стоїть над нижньою панеллю, має висоту ≥ 48 dp і перемотує на кінець розділу', (tester) async {
       for (final size in [kPortrait, kLandscape]) {
         setScreen(tester, size);
         final c = FakeController();
-        c.fakePlayer.current = c.fakePlayer.current.copyWith(position: const Duration(seconds: 5)); // початок «Опенінґу»
+        c.fakePlayer.current = c.fakePlayer.current.copyWith(position: const Duration(seconds: 5)); // start of the "Опенінґ"
         await tester.pumpWidget(withInsets(
           size == kPortrait ? const EdgeInsets.fromLTRB(0, 30, 0, 18) : const EdgeInsets.fromLTRB(46, 0, 0, 0),
           PhoneScene(c: c),
@@ -1013,7 +1040,7 @@ void main() {
         await shot(tester, size == kPortrait ? 'm_skip_portrait' : 'm_skip_landscape');
         await tester.tap(label);
         await tick(tester, 100);
-        expect(c.fakePlayer.seeks.last, const Duration(minutes: 2)); // кінець розділу «Opening»
+        expect(c.fakePlayer.seeks.last, const Duration(minutes: 2)); // end of the "Opening" chapter
         await tester.pumpWidget(const SizedBox());
       }
       expect(tester.takeException(), isNull);
@@ -1032,7 +1059,7 @@ void main() {
     });
   });
 
-  // ── Головна ────────────────────────────────────────────────────────────────
+  // ── Home ────────────────────────────────────────────────────────────────
 
   group('HomeHub на телефоні', () {
     late HikkaTestEnv env;
@@ -1043,7 +1070,7 @@ void main() {
       env.dispose();
     });
 
-    /// Дає час підставній мережі, диску й декодеру зображень: вони живуть у справжньому часі
+    /// Gives time to the fake network, the disk and the image decoder: they live in real time
     Future<void> loadHikka(WidgetTester tester, {int rounds = 14}) async {
       for (int i = 0; i < rounds; i++) {
         await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 30)));
@@ -1187,7 +1214,7 @@ void main() {
     });
   });
 
-  // ── Налаштування на весь екран ─────────────────────────────────────────────
+  // ── Full-screen settings ─────────────────────────────────────────────────
 
   group('AppSettingsDialog на телефоні', () {
     Future<void> openDialog(WidgetTester tester, Size size, EdgeInsets pad) async {
@@ -1199,7 +1226,7 @@ void main() {
       await tick(tester, 600);
     }
 
-    // Кожна вкладка — окремий тест, щоб одне переповнення не ховало решту
+    // Each tab is a separate test so one overflow does not hide the rest
     const tabs = [
       ('Вигляд', 'look'),
       ('Субтитри', 'subs'),
@@ -1212,7 +1239,7 @@ void main() {
       ('Про програму', 'about'),
     ];
 
-    /// Вкладка може бути поза екраном: рядок вкладок (портрет) і бічне меню (альбомна) прокручуються
+    /// A tab may be off screen: the tab row (portrait) and the side menu (landscape) scroll
     Future<void> goTab(WidgetTester tester, String label) async {
       if (label == 'Вигляд') return;
       if (find.text(label).evaluate().isEmpty) {
@@ -1239,12 +1266,12 @@ void main() {
       await tick(tester, 700);
       expect(find.text('Тема, кольори та заокруглення'), findsOneWidget, reason: 'свайп праворуч — назад');
 
-      // Рядок вкладок слідує за активною: після кількох свайпів «Про програму» опиняється в полі зору
+      // The tab row follows the active one: after several swipes "Про програму" ends up in view
       for (var i = 0; i < 8; i++) {
         await tester.flingFrom(const Offset(220, 500), const Offset(-300, 0), 1500);
         await tick(tester, 700);
       }
-      // Вкладка в рядку під шапкою (нижче за заголовок) цілком у межах екрана
+      // A tab in the row under the header (below the title) is entirely within the screen
       final inStrip = [for (final e in find.text('Про програму').evaluate()) tester.getRect(find.byWidget(e.widget))]
           .any((r) => r.top > 80 && r.left >= 0 && r.right <= kPortrait.width);
       expect(inStrip, isTrue, reason: 'активна вкладка не втрачається за краєм рядка');
@@ -1307,7 +1334,7 @@ void main() {
       await goTab(tester, 'Розробник');
 
       final library = find.text('Локальна медіатека');
-      // Поле посеред екрана: згортна шапка накладена зверху й може перекрити край
+      // A field in the middle of the screen: the collapsing header lies on top and may cover the edge
       await Scrollable.ensureVisible(tester.element(library), alignment: 0.5);
       await tester.pump(const Duration(milliseconds: 200));
       await tester.tap(library);
@@ -1368,7 +1395,7 @@ void main() {
 
     testWidgets('рядок-перемикач на телефоні перемикається тапом по всьому рядку (≥ 48 dp)', (tester) async {
       await openDialog(tester, kPortrait, const EdgeInsets.fromLTRB(0, 30, 0, 18));
-      await tester.drag(find.byType(ListView).first, const Offset(-200, 0)); // «Відтворення» тепер за краєм рядка вкладок
+      await tester.drag(find.byType(ListView).first, const Offset(-200, 0)); // "Відтворення" is now beyond the edge of the tab row
       await tick(tester, 300);
       await tester.tap(find.text('Відтворення').first);
       await tick(tester, 600);
@@ -1376,7 +1403,7 @@ void main() {
       final title = find.text('Автовідтворення наступного епізоду');
       final row = find.ancestor(of: title, matching: find.byType(GestureDetector)).first;
       expect(tester.getSize(row).height, greaterThanOrEqualTo(48));
-      await tester.tap(title); // не по самому перемикачу, а по підпису
+      await tester.tap(title); // not on the switch itself but on the label
       await tick(tester, 400);
       expect(find.text('Застосувати'), findsOneWidget);
     });
@@ -1387,7 +1414,7 @@ void main() {
       await tick(tester, 300);
       await tester.tap(find.text('Відтворення').first);
       await tick(tester, 600);
-      // змінюємо значення, щоб з'явились усі три кнопки
+      // we change the value so that all three buttons appear
       await tester.tap(find.text('Автовідтворення наступного епізоду'));
       await tick(tester, 400);
       expect(tester.takeException(), isNull);
@@ -1399,7 +1426,7 @@ void main() {
       expect(done.right, lessThanOrEqualTo(360));
       for (final t in ['Скасувати', 'Застосувати', 'Готово']) {
         final b = tester.getSize(find.ancestor(of: find.text(t), matching: find.byType(ElevatedButton)).first);
-        expect(b.height, greaterThanOrEqualTo(40), reason: t); // після стиснення рядка: ≥ 48 × масштаб
+        expect(b.height, greaterThanOrEqualTo(40), reason: t); // after the row shrinks: ≥ 48 × scale
       }
       await shot(tester, 'm_settings_narrow');
     });

@@ -1,11 +1,11 @@
 import 'dart:io';
 
-/// Вбудовані шрифти, які справді є на пристрої: у списку не показуємо те, чого немає (на Android це лише Roboto)
+/// Bundled fonts that really exist on the device: we do not list what is missing (on Android only Roboto)
 class SystemFonts {
   SystemFonts._();
 
-  /// Шрифти, вбудовані в застосунок (assets/fonts). Комерційні шрифти (Trebuchet MS, Impress BT) у репозиторій не
-  /// входять з ліцензійних причин; сюди можна додати власні вільні шрифти.
+  /// Fonts bundled into the app (assets/fonts). Commercial fonts (Trebuchet MS, Impress BT) are not
+  /// in the repository for licensing reasons; you can add your own free fonts here.
   static const Map<String, String> embedded = {};
 
   static const Map<String, List<String>> _files = {
@@ -46,6 +46,6 @@ class SystemFonts {
     return [...embedded.keys, ...found];
   }
 
-  /// Типовий шрифт субтитрів: Arial на ПК, Roboto на телефоні (єдиний системний)
+  /// Default subtitle font: Arial on PC, Roboto on phone (the only system one)
   static String get defaultFont => Platform.isAndroid ? 'Roboto' : 'Arial';
 }

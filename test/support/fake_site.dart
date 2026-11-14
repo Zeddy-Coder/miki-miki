@@ -3,8 +3,8 @@ import 'dart:io';
 
 import 'package:miki_miki/services/sources/source_http.dart';
 
-/// Підроблений сайт для тестів джерел: відповіді за підрядком у `"МЕТОД адреса"`, перший збіг виграє.
-/// Значення — рядок (200 OK), `Resp` (статус / тіло / заголовки) або функція від запиту.
+/// A fake site for source tests: responses by a substring in `"METHOD address"`, the first match wins.
+/// The value is a string (200 OK), a `Resp` (status / body / headers) or a function of the request.
 class Resp {
   final int status;
   final String body;

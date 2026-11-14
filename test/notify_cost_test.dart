@@ -8,8 +8,8 @@ import 'package:miki_miki/widgets/skip_button.dart';
 import 'support/fakes.dart';
 import 'support/perf_harness.dart';
 
-/// Вартість подій керування: загальне сповіщення контролера (перебудова оверлею) проти
-/// окремого нотифікатора гучності. Запуск: flutter test test/notify_cost_test.dart
+/// Cost of control events: the controller's general notification (an overlay rebuild) versus
+/// a separate volume notifier. Run: flutter test test/notify_cost_test.dart
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -22,7 +22,7 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
     final p = FakePlayer();
-    final tick = ValueNotifier<int>(0); // стандартне сповіщення контролера → перебудова екрана
+    final tick = ValueNotifier<int>(0); // the controller's standard notification → a screen rebuild
     addTearDown(tick.dispose);
     final volState = ValueNotifier<VolumeState>(const VolumeState(50, false));
     addTearDown(volState.dispose);

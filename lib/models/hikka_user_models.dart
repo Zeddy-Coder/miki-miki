@@ -1,9 +1,9 @@
-/// Дані акаунта Hikka: профіль, записи списку перегляду, лічильники за статусами.
+/// Hikka account data: profile, watch-list entries, per-status counters.
 library;
 
 import 'hikka_models.dart';
 
-/// Статус тайтлу у списку перегляду (значення збігаються з API Hikka)
+/// Status of a title in the watch list (values match the Hikka API)
 enum HikkaWatchStatus {
   watching('watching', 'Дивлюсь'),
   planned('planned', 'У планах'),
@@ -24,7 +24,7 @@ enum HikkaWatchStatus {
   }
 }
 
-/// Токен доступу, виданий після дозволу користувача (`POST /auth/token`)
+/// Access token issued after the user's consent (`POST /auth/token`)
 class HikkaToken {
   final String secret;
   final int created;
@@ -39,7 +39,7 @@ class HikkaToken {
       );
 }
 
-/// Поточний користувач (`GET /user/me`). Пошту навмисно не зберігаємо.
+/// Current user (`GET /user/me`). The email is deliberately not stored.
 class HikkaMe {
   final String reference;
   final String username;
@@ -69,20 +69,20 @@ class HikkaMe {
       };
 }
 
-/// Запис у списку перегляду (`WatchResponse`)
+/// Watch-list entry (`WatchResponse`)
 class HikkaWatchEntry {
   final String reference;
   final HikkaWatchStatus status;
 
-  /// Скільки серій переглянуто
+  /// How many episodes were watched
   final int episodes;
 
-  /// Оцінка 1–10, `0` — без оцінки
+  /// Score 1–10, `0` means no score
   final int score;
   final int rewatches;
   final String? note;
 
-  /// Дати початку й завершення (unix, секунди)
+  /// Start and end dates (unix, seconds)
   final int? startDate;
   final int? endDate;
   final int updated;
@@ -130,19 +130,19 @@ class HikkaWatchEntry {
         anime: anime ?? this.anime,
       );
 
-  /// Тіло `PUT /watch/{slug}`. Передаємо запис повністю, щоб зміна статусу чи серії не стерла оцінку,
-  /// нотатку й дати, які людина виставила на сайті.
+  /// Body of `PUT /watch/{slug}`. We send the whole entry so a status or episode change does not erase the score,
+  /// note and dates the person set on the site.
   Map<String, Object?> toArgs() => {
         'status': status.api,
         'episodes': episodes,
         'score': score,
         'rewatches': rewatches,
         if (note != null) 'note': note,
-        // Дати (start_date / end_date) не передаємо: API Hikka відповідає 400 «Invalid field start_date in request body»
+        // We do not send the dates (start_date / end_date): the Hikka API answers 400 "Invalid field start_date in request body"
       };
 }
 
-/// Скільки тайтлів у кожному статусі (`GET /watch/{username}/stats`)
+/// How many titles are in each status (`GET /watch/{username}/stats`)
 class HikkaWatchStats {
   final int watching;
   final int planned;
@@ -150,7 +150,10 @@ class HikkaWatchStats {
   final int onHold;
   final int dropped;
 
-  const HikkaWatchStats({this.watching = 0, this.planned = 0, this.completed = 0, this.onHold = 0, this.dropped = 0});
+  /// Total minutes watched (Hikka counts by episode duration)
+  final int duration;
+
+  const HikkaWatchStats({this.watching = 0, this.planned = 0, this.completed = 0, this.onHold = 0, this.dropped = 0, this.duration = 0});
 
   factory HikkaWatchStats.fromJson(Map<String, dynamic> j) => HikkaWatchStats(
         watching: (j['watching'] as num?)?.toInt() ?? 0,
@@ -158,6 +161,7 @@ class HikkaWatchStats {
         completed: (j['completed'] as num?)?.toInt() ?? 0,
         onHold: (j['on_hold'] as num?)?.toInt() ?? 0,
         dropped: (j['dropped'] as num?)?.toInt() ?? 0,
+        duration: (j['duration'] as num?)?.toInt() ?? 0,
       );
 
   int of(HikkaWatchStatus s) => switch (s) {

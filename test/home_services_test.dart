@@ -25,7 +25,7 @@ HikkaAnime anime(int malId, {String? slug, String? mediaType = 'tv', int? year =
 }
 
 void main() {
-  // ── Дрібні помічники ───────────────────────────────────────────────────────
+  // ── Small helpers ───────────────────────────────────────────────────────
 
   group('HikkaText.compact', () {
     test('до тисячі — як є, далі тисячі й мільйони з одним знаком', () {
@@ -79,7 +79,7 @@ void main() {
     });
   });
 
-  // ── Продовжити перегляд ────────────────────────────────────────────────────
+  // ── Continue watching ────────────────────────────────────────────────────
 
   group('ContinueWatching', () {
     test('підписи серій: звичайна, порядкова, сезонна, порожня', () {
@@ -122,10 +122,10 @@ void main() {
       final server = FakeHikka();
       final api = HikkaApi(sender: server.call, retryDelay: Duration.zero);
       store
-        ..setLast('hikka:$frierenSlug', '28', 'g') // завершений, усі 28 серій позначено
-        ..setLast('hikka:$ongoingSlug', '3', 'g') // виходить: лишається
+        ..setLast('hikka:$frierenSlug', '28', 'g') // finished, all 28 episodes marked
+        ..setLast('hikka:$ongoingSlug', '3', 'g') // airing: stays
         ..setLast('hikka:${FakeHikka.adultSlug}', '1', 'g') // 18+
-        ..setLast('hikka:there-is-no-such-anime', '1', 'g'); // сервер не знає
+        ..setLast('hikka:there-is-no-such-anime', '1', 'g'); // the server does not know
       for (var i = 1; i <= 28; i++) {
         store.setWatched('hikka:$frierenSlug', '$i', true);
       }
@@ -160,7 +160,7 @@ void main() {
     });
   });
 
-  // ── Банери ─────────────────────────────────────────────────────────────────
+  // ── Banners ─────────────────────────────────────────────────────────────────
 
   group('AniListBanners', () {
     test('розбір відповіді: банер і колір; без банера — лише колір; чужі записи ігноруються', () {
@@ -282,7 +282,7 @@ void main() {
           urls.add(url);
           expect(method, 'GET');
           expect(headers, isNull, reason: 'v3-ключ не потребує заголовка');
-          // Перший запит нічого не дає, другий — банер
+          // The first request gives nothing, the second a banner
           return urls.length == 1
               ? {'results': [{'backdrop_path': null}]}
               : {'results': [{'backdrop_path': null}, {'backdrop_path': '/wide.jpg'}]};
@@ -342,7 +342,7 @@ void main() {
     late Map<String, dynamic> disk;
     late int anilistCalls;
     late int tmdbCalls;
-    late Map<int, String?> anilistBanners; // MAL-id → банер (null — немає)
+    late Map<int, String?> anilistBanners; // MAL id → banner (null means none)
     late bool anilistDown;
     late String tmdbKey;
 
@@ -443,14 +443,14 @@ void main() {
       expect(noKey[2]!.hasImage, isFalse);
 
       tmdbKey = 'key';
-      now = now.add(const Duration(days: 3)); // негативний запис з минулого кроку застарів
+      now = now.add(const Duration(days: 3)); // the negative entry from the previous step has expired
       final art = make(preload: disk);
       final withKey = await art.load([anime(1), anime(2)]);
       expect(tmdbCalls, 2, reason: 'записи, зроблені без TMDB, перевіряються знову, щойно з’явився ключ');
       expect(withKey[1]!.url, 'https://image.tmdb.org/t/p/w1280/tmdb.jpg', reason: 'TMDB — основне джерело');
       expect(withKey[2]!.url, 'https://image.tmdb.org/t/p/w1280/tmdb.jpg');
       expect(withKey[2]!.color, 0xFF336699, reason: 'колір обкладинки лишається з AniList');
-      // Результат TMDB теж кешується
+      // The TMDB result is cached too
       await art.load([anime(2)]);
       expect(tmdbCalls, 2);
     });

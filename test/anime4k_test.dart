@@ -6,7 +6,7 @@ import 'package:miki_miki/services/anime4k_service.dart';
 import 'package:miki_miki/services/osd_message.dart';
 import 'package:miki_miki/services/storage_service.dart';
 
-/// Розбирає офіційний input.conf Anime4K: `CTRL+N … set "~~/shaders/a.glsl;~~/shaders/b.glsl"`
+/// Parses the official Anime4K input.conf: `CTRL+N … set "~~/shaders/a.glsl;~~/shaders/b.glsl"`
 Map<int, List<String>> parseOfficial(String path) {
   final out = <int, List<String>>{};
   final re = RegExp(r'^CTRL\+(\d)\s+no-osd change-list glsl-shaders set "([^"]+)"');
@@ -36,7 +36,7 @@ class Rig {
 
   List<List<String>> get glsl => commands.where((a) => a.length > 1 && a[1] == 'glsl-shaders').toList();
 
-  /// Файли з останньої команди `set`
+  /// Files from the last `set` command
   List<String> get lastChain {
     final set = glsl.lastWhere((a) => a[2] == 'set');
     return set[3].split(Platform.isWindows ? ';' : ':').map((p) => p.split('/').last).toList();
@@ -119,7 +119,7 @@ void main() {
         expect(f.contains('\\'), isFalse, reason: 'шляхи мають бути з прямими слешами');
         final file = File(f);
         expect(file.existsSync(), isTrue, reason: f);
-        // Розпакований файл ідентичний оригіналу з assets
+        // The unpacked file is identical to the original from assets
         final name = f.split('/').last;
         expect(file.readAsBytesSync(), File('assets/shaders/anime4k/$name').readAsBytesSync(), reason: name);
       }
@@ -185,6 +185,34 @@ void main() {
       expect(r.osd.last.detail, 'Режим B+B (Fast)');
       expect(r.osd.last.keys, ['Ctrl', '5']);
       expect(r.controller.summary, 'Режим B+B · Fast');
+    });
+
+    test('міні-плеєр / PiP: шейдери знімаються на час малого вікна й повертаються, налаштування не змінюється', () async {
+      final r = Rig();
+      await r.controller.setMode(Anime4kMode.a);
+      expect(r.controller.active, isTrue);
+      r.osd.clear();
+
+      await r.controller.setSuspended(true);
+      expect(r.controller.active, isFalse, reason: 'у малому вікні шейдери не працюють');
+      expect(r.controller.enabled, isTrue, reason: 'налаштування лишилось увімкненим');
+      expect(r.glsl.last[2], 'clr', reason: 'у mpv очищено glsl-shaders');
+      expect(r.osd, isEmpty, reason: 'без сповіщення: людина цього не просила');
+
+      final before = r.glsl.length;
+      await r.controller.setSuspended(true);
+      expect(r.glsl.length, before, reason: 'повторний виклик нічого не робить');
+
+      await r.controller.setSuspended(false);
+      expect(r.controller.active, isTrue);
+      expect(r.lastChain, Anime4kService.chain(Anime4kMode.a, Anime4kQuality.fast));
+    });
+
+    test('призупинення при вимкненому Anime4K не чіпає mpv', () async {
+      final r = Rig();
+      await r.controller.setSuspended(true);
+      await r.controller.setSuspended(false);
+      expect(r.commands, isEmpty);
     });
 
     test('вибір режиму зберігається в налаштуваннях', () async {
@@ -261,7 +289,7 @@ void main() {
       expect(r.controller.summary, 'Пропущено (1080p)');
       expect(r.controller.active, isFalse);
 
-      // Наступне відео 720p — шейдери повертаються
+      // The next video is 720p: the shaders come back
       r.controller.onVideoHeight(720);
       expect(r.controller.skipped, isFalse);
       await settled(r, 3);
@@ -280,11 +308,11 @@ void main() {
       expect(r.controller.skipped, isFalse);
       expect(r.glsl.last[2], 'set');
 
-      // Той самий файл: нове значення висоти не скасовує ручний вибір
+      // The same file: a new height value does not cancel a manual choice
       r.controller.onVideoHeight(2160);
       expect(r.controller.skipped, isFalse);
 
-      // Інший файл — знову діє поріг
+      // A different file: the threshold applies again
       r.controller.onFileChanged();
       expect(r.controller.skipped, isTrue);
     });

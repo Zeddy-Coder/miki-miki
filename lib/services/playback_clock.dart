@@ -4,15 +4,15 @@ import 'package:media_kit/media_kit.dart';
 import '../models/media_models.dart';
 import '../utils/formatters.dart';
 
-/// Єдиний «годинник відтворення» для інтерфейсу.
+/// A single "playback clock" for the UI.
 ///
-/// mpv повідомляє позицію 24–60+ разів на секунду. Якщо кожен віджет сам підписується на
-/// `player.stream.position` і перебудовується на кожну подію, то під час перегляду інтерфейс
-/// постійно працює вхолосту (навіть коли панель керування прихована). Годинник підписується
-/// на потоки плеєра **один раз** і віддає віджетам готові похідні значення, які змінюються
-/// лише тоді, коли їх справді видно: цілі секунди, проміле прогресу, номер розділу тощо.
+/// mpv reports the position 24–60+ times per second. If every widget subscribes to
+/// `player.stream.position` itself and rebuilds on every event, the UI constantly
+/// idles while watching (even when the control panel is hidden). The clock subscribes
+/// to the player streams **once** and hands widgets ready derived values that change
+/// only when they are actually visible: whole seconds, progress per mille, chapter number, etc.
 ///
-/// Один годинник на плеєр: [PlaybackClock.of].
+/// One clock per player: [PlaybackClock.of].
 class PlaybackClock {
   PlaybackClock._(this.player)
       : position = ValueNotifier<Duration>(player.state.position),
@@ -31,10 +31,10 @@ class PlaybackClock {
 
   static final Expando<PlaybackClock> _registry = Expando<PlaybackClock>('PlaybackClock');
 
-  /// Спільний годинник плеєра (створюється при першому зверненні)
+  /// The player's shared clock (created on first access)
   static PlaybackClock of(Player player) => _registry[player] ??= PlaybackClock._(player);
 
-  /// Відписує годинник від потоків плеєра. Викликати перед `player.dispose()`.
+  /// Unsubscribes the clock from the player streams. Call before `player.dispose()`.
   static void release(Player player) {
     final clock = _registry[player];
     if (clock == null) return;
@@ -44,21 +44,21 @@ class PlaybackClock {
 
   final Player player;
 
-  /// Позиція «як є», на кожну подію mpv. Слухати лише дешевими слухачами (без setState).
+  /// The position "as is", on every mpv event. Listen only with cheap listeners (no setState).
   final ValueNotifier<Duration> position;
 
-  /// Тривалість поточного файлу
+  /// Duration of the current file
   final ValueNotifier<Duration> duration;
 
-  /// Скільки вже в буфері демультиплексора
+  /// How much is already in the demuxer buffer
   final ValueNotifier<Duration> buffer;
 
   final ValueNotifier<bool> playing;
 
-  /// Ціла кількість секунд позиції: змінюється раз на секунду (для підписів часу)
+  /// Whole seconds of the position: changes once per second (for time labels)
   final ValueNotifier<int> seconds;
 
-  /// Прогрес у проміле (0..1000): для тонких смужок прогресу, де піксельна точність не потрібна
+  /// Progress in per mille (0..1000): for thin progress bars where pixel precision is not needed
   final ValueNotifier<int> permille;
 
   final List<StreamSubscription<dynamic>> _subs = [];
@@ -79,7 +79,7 @@ class PlaybackClock {
     permille.value = _permille(position.value, d);
   }
 
-  /// Похідне значення: слухачі отримують сповіщення лише коли результат [select] змінився
+  /// Derived value: listeners are notified only when the result of [select] changed
   ClockValue<T> derive<T>(T Function(Duration position, Duration duration) select) => ClockValue<T>(this, select);
 
   void _cancel() {
@@ -90,8 +90,8 @@ class PlaybackClock {
   }
 }
 
-/// Значення, обчислене з позиції та тривалості, що сповіщає лише при зміні результату.
-/// Власник (State) мусить викликати [dispose].
+/// A value computed from position and duration that notifies only when the result changes.
+/// The owner (State) must call [dispose].
 class ClockValue<T> extends ChangeNotifier implements ValueListenable<T> {
   ClockValue(this._clock, this._select) {
     _value = _select(_clock.position.value, _clock.duration.value);
@@ -106,9 +106,9 @@ class ClockValue<T> extends ChangeNotifier implements ValueListenable<T> {
   @override
   T get value => _value;
 
-  /// Перераховує значення після зміни вхідних даних віджета (наприклад, списку розділів).
-  /// Без [notify] слухачі не сповіщаються — для виклику з `didUpdateWidget`, коли власник
-  /// усе одно перебудовується.
+  /// Recomputes the value after the widget's inputs change (e.g. the chapter list).
+  /// Without [notify] listeners are not notified: for calling from `didUpdateWidget` when the owner
+  /// rebuilds anyway.
   void refresh({bool notify = false}) {
     final v = _select(_clock.position.value, _clock.duration.value);
     if (v == _value) return;
@@ -131,12 +131,12 @@ class ClockValue<T> extends ChangeNotifier implements ValueListenable<T> {
   }
 }
 
-/// Прогрес відтворення для смужки: сповіщає лише коли смужка зсунулась хоча б на один
-/// крок квантування ([steps] — зазвичай ширина смужки у фізичних пікселях).
+/// Playback progress for the bar: notifies only when the bar shifted by at least one
+/// quantization step ([steps] is usually the bar width in physical pixels).
 ///
-/// Для 90-хвилинного фільму на смужці в 1500 пікселів це ~0,3 перемальовування на секунду
-/// замість 24–60. Поки [live] вимкнено (панель прихована), нічого не сповіщається, а при
-/// увімкненні смужка одразу догоняє актуальний стан.
+/// For a 90-minute film on a 1500-pixel bar that is ~0.3 repaints per second
+/// instead of 24–60. While [live] is off (the panel is hidden), nothing is notified, and when
+/// it is turned on the bar catches up with the current state at once.
 class ClockProgress extends ChangeNotifier {
   ClockProgress(this._clock, {double steps = 1000, bool live = true})
       : _steps = steps,
@@ -158,15 +158,15 @@ class ClockProgress extends ChangeNotifier {
   int _lastBufferedStep = 0;
   bool _pending = false;
 
-  /// Частка відтвореного (0..1), точна
+  /// Fraction played (0..1), exact
   double get played => _played;
 
-  /// Частка буфера (0..1), точна
+  /// Fraction buffered (0..1), exact
   double get buffered => _buffered;
 
   bool get live => _live;
 
-  /// Скільки різних положень має смужка (ширина у фізичних пікселях)
+  /// How many distinct positions the bar has (width in physical pixels)
   set steps(double v) {
     if (v <= 0 || v == _steps) return;
     _steps = v;
@@ -219,11 +219,11 @@ class ClockProgress extends ChangeNotifier {
   }
 }
 
-/// Прості обчислення над розділами (чисті функції, зручно перевіряти тестами)
+/// Simple computations over chapters (pure functions, easy to test)
 class ChapterMath {
   const ChapterMath._();
 
-  /// Розділ, що почався востаннє до [pos]; -1, якщо позиція ще до першого розділу
+  /// The chapter that last started before [pos]; -1 if the position is before the first chapter
   static int indexAt(List<VideoChapter> chapters, Duration pos) {
     for (int i = chapters.length - 1; i >= 0; i--) {
       if (pos >= chapters[i].startTime) return i;
@@ -241,11 +241,11 @@ class ChapterMath {
     return false;
   }
 
-  /// Для кожного розділу: чи пропонувати для нього «Пропустити» (рахується раз на список)
+  /// For each chapter: whether to offer "Skip" for it (computed once per list)
   static List<bool> skippableFlags(List<VideoChapter> chapters) => [for (final c in chapters) isSkippable(c)];
 
-  /// Розділ, для якого зараз треба показувати «Пропустити» (перші 15 с і ще щонайменше 2 с до кінця), або -1.
-  /// [flags] — результат [skippableFlags] для того самого списку.
+  /// The chapter for which "Skip" should be shown now (the first 15 s and at least 2 s before the end), or -1.
+  /// [flags] is the result of [skippableFlags] for the same list.
   static int skipIndexAt(List<VideoChapter> chapters, List<bool> flags, Duration pos, Duration total) {
     for (int i = 0; i < chapters.length; i++) {
       final start = chapters[i].startTime;

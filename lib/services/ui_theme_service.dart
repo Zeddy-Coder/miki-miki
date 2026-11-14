@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../utils/platform_info.dart';
 import 'storage_service.dart';
 
-/// Дизайн-токени теми (світла та темна палітри)
+/// Theme design tokens (light and dark palettes)
 class AppThemePalette {
   final Color bgPrimary;
   final Color bgSurface;
@@ -89,7 +89,7 @@ class UiThemeService extends ChangeNotifier {
     '#FF0000': ('Класичний червоний', Color(0xFFFF0000)),
   };
 
-  /// Типові значення: жовтий акцент і системна тема
+  /// Defaults: a yellow accent and the system theme
   static const String defaultAccentHex = '#FFAA00';
   static const String defaultThemeMode = 'system';
 
@@ -106,7 +106,7 @@ class UiThemeService extends ChangeNotifier {
   String _radiusKey = 'MD';
   String _themeMode = defaultThemeMode; // 'system', 'dark', 'light'
 
-  // Акценти, підігнані під світлу/темну тему (рахуються один раз при зміні кольору)
+  // Accents adjusted for the light / dark theme (computed once when the color changes)
   Color _accentForLight = const Color(0xFFCF2525);
   Color _accentForDark = const Color(0xFFE46767);
 
@@ -136,10 +136,10 @@ class UiThemeService extends ChangeNotifier {
     return false;
   }
 
-  /// Активна палітра (автоматично Світла або Темна)
+  /// The active palette (automatically Light or Dark)
   AppThemePalette get colors => isLight ? AppThemePalette.light : AppThemePalette.dark;
 
-  // Прямі скорочення до найуживаніших токенів
+  // Direct shortcuts to the most used tokens
   Color get bgPrimary => colors.bgPrimary;
   Color get bgSurface => colors.bgSurface;
   Color get bgElevated => colors.bgElevated;
@@ -151,18 +151,18 @@ class UiThemeService extends ChangeNotifier {
   Color get textMuted => colors.textMuted;
   Color get textDarkMuted => colors.textDarkMuted;
 
-  // ── Акцентні кольори ───────────────────────────────────────────────────────
+  // ── Accent colors ───────────────────────────────────────────────────────
   //
-  // Колір, який обрав користувач ([baseAccent]), не можна брати «як є»: насичений
-  // неон (#00FF66, #00E5FF, #FFAA00) на світлому фоні має контраст 1.1–1.6:1 і
-  // зникає, а на темному вібрує. Тому [accentColor] — це той самий відтінок (hue),
-  // у якого підігнано світлість під фон активної теми за контрастом WCAG:
-  //   • мінімум 4.5:1 — щоб текст і іконки акценту читались;
-  //   • максимум 8:1 (світла) / 10:1 (темна) — щоб не виходило майже чорне
-  //     або засліплююче біле.
-  // Насиченість трохи обмежена, щоб яскраві кольори не «різали» очі.
+  // The color the user picked ([baseAccent]) cannot be used "as is": a saturated
+  // neon (#00FF66, #00E5FF, #FFAA00) on a light background has a contrast of 1.1–1.6:1 and
+  // vanishes, and on a dark one it vibrates. So [accentColor] is the same hue
+  // with the lightness adjusted to the active theme's background by WCAG contrast:
+  //   • at least 4.5:1, so the accent's text and icons are readable;
+  //   • at most 8:1 (light) / 10:1 (dark), so it does not turn almost black
+  //     or blinding white.
+  // Saturation is slightly limited so that bright colors do not "cut" the eyes.
 
-  /// Колір, який користувач обрав у налаштуваннях (для зразків-свотчів)
+  /// The color the user picked in settings (for swatches)
   Color get baseAccent {
     if (presets.containsKey(_accentHex)) {
       return presets[_accentHex]!.$2;
@@ -175,17 +175,17 @@ class UiThemeService extends ChangeNotifier {
     }
   }
 
-  /// Акцент для поточної теми
+  /// Accent for the current theme
   Color get accentColor => isLight ? _accentForLight : _accentForDark;
 
-  /// Акцент для елементів поверх відео (там фон завжди темний, незалежно від теми)
+  /// Accent for elements over the video (the background there is always dark, regardless of theme)
   Color get accentOnDark => _accentForDark;
 
-  /// Колір тексту/іконок поверх суцільної заливки акцентом (білий або майже чорний)
+  /// Color of text / icons over a solid accent fill (white or almost black)
   Color get onAccent => readableOn(accentColor);
 
-  static const Color _lightRef = Color(0xFFEBEBF2); // найтемніша поверхня світлої теми
-  static const Color _darkRef = Color(0xFF1E1E22); // найсвітліша поверхня темної теми
+  static const Color _lightRef = Color(0xFFEBEBF2); // the darkest surface of the light theme
+  static const Color _darkRef = Color(0xFF1E1E22); // the lightest surface of the dark theme
 
   static double contrastRatio(Color a, Color b) {
     final la = a.computeLuminance();
@@ -195,16 +195,16 @@ class UiThemeService extends ChangeNotifier {
     return (hi + 0.05) / (lo + 0.05);
   }
 
-  /// Білий або майже чорний — залежно від того, що контрастніше на [bg]
+  /// White or almost black, whichever contrasts more on [bg]
   static Color readableOn(Color bg) {
     const dark = Color(0xFF111114);
     return contrastRatio(Colors.white, bg) >= contrastRatio(dark, bg) ? Colors.white : dark;
   }
 
-  /// Підганяє [base] під світлий або темний фон, зберігаючи відтінок.
+  /// Adjusts [base] to a light or dark background, keeping the hue.
   static Color adaptAccent(Color base, {required bool forLight}) {
     final ref = forLight ? _lightRef : _darkRef;
-    // Світла тема: насичений акцент має лишатись яскравим (3:1 для крупних елементів), темна — суворіше
+    // Light theme: a saturated accent must stay bright (3:1 for large elements), dark is stricter
     final minContrast = forLight ? 3.0 : 4.5;
     final maxContrast = forLight ? 8.0 : 10.0;
 
@@ -218,7 +218,7 @@ class UiThemeService extends ChangeNotifier {
     final bool tooLow = current < minContrast;
     final double target = tooLow ? minContrast : maxContrast;
 
-    // Контраст монотонний за світлістю: на світлому фоні падає зі зростанням L, на темному — росте.
+    // Contrast is monotonic in lightness: on a light background it falls as L grows, on a dark one it rises.
     double lo = 0.0, hi = 1.0;
     for (int i = 0; i < 24; i++) {
       final mid = (lo + hi) / 2;
@@ -230,7 +230,7 @@ class UiThemeService extends ChangeNotifier {
         hi = mid;
       }
     }
-    // Беремо той бік, що гарантовано тримається в межах [min, max]
+    // We take the side that is guaranteed to stay within [min, max]
     final double l = tooLow ? (forLight ? lo : hi) : (forLight ? hi : lo);
     return at(l);
   }
@@ -244,13 +244,13 @@ class UiThemeService extends ChangeNotifier {
   Color get accentWash => accentColor.withValues(alpha: isLight ? 0.12 : 0.16);
   Color get accentBorder => accentColor.withValues(alpha: isLight ? 0.75 : 0.65);
 
-  /// Підсвітка при наведенні на елементи списків/меню
+  /// Highlight on hover over list / menu items
   Color get hoverOverlay => isLight ? Colors.black.withValues(alpha: 0.04) : Colors.white.withValues(alpha: 0.05);
-  /// Підсвітка рядка в момент дотику. Мишею рядок підсвічує hover, тож на десктопі вона вимкнена;
-  /// на телефоні hover немає, і без неї натискання не мало б жодного відгуку.
+  /// Row highlight at the moment of a touch. With a mouse the row is highlighted by hover, so it is off on desktop;
+  /// a phone has no hover, and without it a press would have no feedback at all.
   Color get touchHighlight => AppPlatform.isMobile ? hoverOverlay : Colors.transparent;
 
-  /// Колір повзунка скролбару у панелях
+  /// Scrollbar thumb color in panels
   Color get scrollbarThumb => isLight ? const Color(0xFFC0C0C8) : const Color(0xFF555555);
 
   double get radiusMultiplier => radiusMultipliers[_radiusKey] ?? 1.0;

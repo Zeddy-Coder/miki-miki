@@ -1,4 +1,4 @@
-/// Міст між [RemoteDriver] і media_kit: відкриває пряме відео із заголовками й місцем початку, додає зовнішні доріжки.
+/// A bridge between [RemoteDriver] and media_kit: opens a direct video with headers and a start position, adds external tracks.
 library;
 
 import 'package:media_kit/media_kit.dart' show Media, Player;
@@ -11,12 +11,12 @@ class MpvRemoteEngine implements RemoteEngine {
 
   final Player player;
 
-  /// Виконує команду mpv (`PlayerStateController.mpv`); помилки не кидає
+  /// Runs an mpv command (`PlayerStateController.mpv`); does not throw errors
   final Future<void> Function(List<String> args) command;
 
-  /// Заголовки (Referer, User-Agent …) media_kit передає mpv перед завантаженням, місце початку — опцією `start`
-  /// (тому відео одразу відкривається з потрібної секунди, без «стрибка» після старту).
-  /// Додаткові опції mpv із [Video.mpvOptions] поки не застосовуються: жодне джерело їх не задає.
+  /// media_kit passes headers (Referer, User-Agent …) to mpv before loading, and the start position as the `start` option
+  /// (so the video opens at the right second at once, without a "jump" after the start).
+  /// Extra mpv options from [Video.mpvOptions] are not applied yet: no source sets them.
   @override
   Future<void> openVideo(Video video, {Duration? start}) {
     final media = Media(
@@ -44,7 +44,7 @@ class MpvRemoteEngine implements RemoteEngine {
   Future<void> addAudio(Track track, {required bool select}) =>
       command(['audio-add', track.url, select ? 'select' : 'auto', ..._labels(track)]);
 
-  /// mpv: `<назва> <мова>`; мова — лише коротким кодом (`uk`, `eng`), довільний підпис іде в назву
+  /// mpv: `<title> <language>`; the language only as a short code (`uk`, `eng`), an arbitrary label goes into the title
   static List<String> _labels(Track t) {
     final lang = t.lang.trim();
     if (lang.isEmpty) return const [];

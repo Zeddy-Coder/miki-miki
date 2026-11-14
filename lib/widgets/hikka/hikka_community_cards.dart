@@ -9,8 +9,9 @@ import '../../services/ui_theme_service.dart';
 import '../app_animation_kit.dart';
 import '../app_ui_kit.dart';
 import 'hikka_common.dart';
+import '../../utils/app_clock.dart';
 
-/// Дрібний лічильник із іконкою («▲ 12», «💬 3»)
+/// A small counter with an icon ("▲ 12", "💬 3")
 class HikkaStat extends StatelessWidget {
   final IconData icon;
   final String text;
@@ -33,8 +34,8 @@ class HikkaStat extends StatelessWidget {
   }
 }
 
-/// Горизонтальний рядок міток, що прокручується (фільтри, розділи): на вузькому екрані не ламається на два рядки.
-/// Якщо задано [selectedIndex], вибрана мітка сама прокручується в поле зору (наприклад, після свайпу між вкладками).
+/// A horizontal scrolling row of labels (filters, sections): on a narrow screen it does not break into two rows.
+/// If [selectedIndex] is set, the selected label scrolls into view by itself (e.g. after a swipe between tabs).
 class HikkaChipRow extends StatefulWidget {
   final double scale;
   final List<Widget> children;
@@ -80,7 +81,7 @@ class _HikkaChipRowState extends State<HikkaChipRow> {
       _keys.add(GlobalKey());
     }
     return ScrollConfiguration(
-      // Тягнути мишкою можна й на ПК
+      // On PC you can drag with the mouse too
       behavior: ScrollConfiguration.of(context).copyWith(dragDevices: PointerDeviceKind.values.toSet(), scrollbars: false),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
@@ -98,13 +99,13 @@ class _HikkaChipRowState extends State<HikkaChipRow> {
   }
 }
 
-/// «@автор · 12 січня»
+/// "@автор · 12 січня"
 String hikkaByline(HikkaAuthor author, DateTime when) {
-  final date = HikkaText.dayMonth(when, now: DateTime.now());
+  final date = HikkaText.dayMonth(when, now: AppClock.now());
   return author.username.isEmpty ? date : '@${author.username} · $date';
 }
 
-/// Картка колекції: смужка з постерами перших тайтлів, назва, автор і лічильники. Натискання відкриває колекцію.
+/// Collection card: a strip of posters of the first titles, the title, author and counters. A tap opens the collection.
 class HikkaCollectionCard extends StatelessWidget {
   final HikkaCollection collection;
   final double scale;
@@ -190,7 +191,7 @@ class HikkaCollectionCard extends StatelessWidget {
   }
 }
 
-/// Картка статті: обкладинка (якщо є), категорія й дата, назва, початок тексту й лічильники
+/// Article card: a cover (if any), category and date, title, the beginning of the text and counters
 class HikkaArticleCard extends StatelessWidget {
   final HikkaArticle article;
   final double scale;
@@ -203,7 +204,7 @@ class HikkaArticleCard extends StatelessWidget {
     final a = article;
     final cover = a.coverImage;
     final snippet = a.snippet();
-    final date = HikkaText.dayMonth(a.createdAt, now: DateTime.now());
+    final date = HikkaText.dayMonth(a.createdAt, now: AppClock.now());
     return Semantics(
       button: true,
       label: '${a.categoryLabel}. ${a.title}',

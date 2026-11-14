@@ -1,9 +1,9 @@
-/// Зображення каталогу Hikka: зменшені копії через сервіс зображень сайту, дисковий кеш і `ImageProvider`.
+/// Hikka catalog images: downscaled copies via the site's image service, a disk cache and an `ImageProvider`.
 ///
-/// Постер повного розміру важить ~180 КБ, а картка в сітці — 100–200 px завширшки, тому запитуємо
-/// зменшену копію (≈25 КБ). Кеш на диску тримається між запусками: повторне відкриття каталогу
-/// не качає нічого. Завантаження йде в обмеженому паралелізмі, останній запит — першим
-/// (картки, що саме на екрані, обганяють ті, що вже проскролили).
+/// A full-size poster weighs ~180 KB while a grid card is 100–200 px wide, so we request
+/// a downscaled copy (≈25 KB). The disk cache persists between launches: reopening the catalog
+/// downloads nothing. Downloads run with limited parallelism, the last request first
+/// (cards currently on screen overtake those already scrolled past).
 library;
 
 import 'dart:async';
@@ -20,27 +20,27 @@ class HikkaImages {
 
   static const String resizer = 'https://img.hikka.io';
 
-  /// Зменшена копія зображення через сервіс Hikka (imgproxy). Чужі адреси не чіпаємо.
+  /// Downscaled image copy through the Hikka service (imgproxy). Foreign addresses are left alone.
   static String resized(String src, {int width = 0, int height = 0}) {
     final host = Uri.tryParse(src)?.host;
     if (host != 'cdn.hikka.io' || (width <= 0 && height <= 0)) return src;
     return '$resizer/insecure/rs:fit:$width:$height:0:0/plain/$src';
   }
 
-  /// Ширина запиту в пікселях, округлена вгору до кроку 80: різні картки ділять один файл кешу
+  /// Requested width in pixels, rounded up to a step of 80: different cards share one cache file
   static int bucket(double logicalWidth, double devicePixelRatio) {
     final px = logicalWidth * devicePixelRatio;
     return ((px / 80).ceil() * 80).clamp(80, 960);
   }
 
-  /// Ім'я файлу кешу: FNV-1a (64 біти) від адреси, 16 шістнадцяткових цифр
+  /// Cache file name: FNV-1a (64-bit) of the address, 16 hex digits
   static String fileName(String url) {
     int h = 0xcbf29ce484222325;
     for (final b in utf8.encode(url)) {
       h ^= b;
       h *= 0x100000001b3;
     }
-    // int у Dart знаковий: від'ємне число дало б '-…', тож виводимо дві половини окремо
+    // Dart's int is signed: a negative number would give '-…', so we output the two halves separately
     final hi = (h >>> 32).toRadixString(16).padLeft(8, '0');
     final lo = (h & 0xFFFFFFFF).toRadixString(16).padLeft(8, '0');
     return '$hi$lo.img';
@@ -49,7 +49,7 @@ class HikkaImages {
 
 typedef HikkaImageFetcher = Future<Uint8List> Function(String url);
 
-/// Обмежувач паралелізму: черга працює як стек (останній запит обслуговується першим)
+/// Parallelism limiter: the queue works as a stack (the last request is served first)
 class _Gate {
   final int limit;
   int _active = 0;
@@ -77,7 +77,7 @@ class _Gate {
 }
 
 class HikkaImageStore {
-  /// Спільний екземпляр (у тестах підміняється)
+  /// Shared instance (replaced in tests)
   static HikkaImageStore instance = HikkaImageStore();
 
   static HttpClient? _client;
@@ -107,7 +107,7 @@ class HikkaImageStore {
   bool _pruned = false;
   final Map<String, Future<Uint8List>> _inflight = {};
 
-  /// Скільки зображень реально завантажено з мережі (для тестів)
+  /// How many images were actually downloaded from the network (for tests)
   int downloads = 0;
 
   HikkaImageStore({
@@ -126,16 +126,16 @@ class HikkaImageStore {
       if (!await d.exists()) await d.create(recursive: true);
       return _dir = d;
     } catch (_) {
-      return null; // без диска працюємо лише через мережу
+      return null; // without a disk we work through the network only
     }
   }
 
   File _file(Directory d, String url) => File('${d.path}/${HikkaImages.fileName(url)}');
 
-  /// Байти зображення: з диска або з мережі; [fallback] — запасна адреса, якщо основна не відповіла
+  /// Image bytes: from disk or the network; [fallback] is a spare address if the main one did not respond
   Future<Uint8List> load(String url, {String? fallback}) {
-    // Тіло з фігурними дужками: `remove` повертає сам Future зі списку, і `whenComplete` чекав би на нього
-    // самого (вічне очікування).
+    // A body with braces: `remove` returns the Future from the list itself, and `whenComplete` would wait on
+    // itself (waiting forever).
     return _inflight[url] ??= _load(url, fallback).whenComplete(() {
       _inflight.remove(url);
     });
@@ -183,7 +183,7 @@ class HikkaImageStore {
     return bytes;
   }
 
-  /// Видаляє файл з кешу (наприклад, якщо його не вдалося розкодувати)
+  /// Removes a file from the cache (e.g. if it could not be decoded)
   Future<void> evict(String url) async {
     final dir = await _ensureDir();
     if (dir == null) return;
@@ -193,7 +193,7 @@ class HikkaImageStore {
     } catch (_) {}
   }
 
-  /// Скільки місця займає дисковий кеш зображень, байт
+  /// How much space the on-disk image cache takes, in bytes
   Future<int> diskSize() async {
     final dir = await _ensureDir();
     if (dir == null) return 0;
@@ -206,7 +206,7 @@ class HikkaImageStore {
     return total;
   }
 
-  /// Видаляє всі збережені зображення; повертає, скільки байт звільнено
+  /// Deletes all stored images; returns how many bytes were freed
   Future<int> clear() async {
     final dir = await _ensureDir();
     if (dir == null) return 0;
@@ -224,7 +224,7 @@ class HikkaImageStore {
     return freed;
   }
 
-  /// Раз за запуск: якщо кеш перевищив ліміт, видаляє найстаріші файли до ~70 % ліміту
+  /// Once per launch: if the cache exceeded the limit, deletes the oldest files down to ~70 % of the limit
   void _pruneOnce(Directory dir) {
     if (_pruned) return;
     _pruned = true;
@@ -253,7 +253,7 @@ class HikkaImageStore {
   }
 }
 
-/// `ImageProvider` для зображень Hikka з дисковим кешем. Ключ — адреса (+ запасна адреса).
+/// `ImageProvider` for Hikka images with a disk cache. The key is the address (+ the fallback address).
 @immutable
 class HikkaImage extends ImageProvider<HikkaImage> {
   final String url;

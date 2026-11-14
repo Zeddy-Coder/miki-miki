@@ -1,6 +1,6 @@
-/// Журнал джерел перегляду для діагностики: запити, кроки екстракторів, помилки.
-/// Видно у «Статистика → Джерела» і потрапляє в «Копіювати звіт». Лише в памʼяті, без особистих даних:
-/// у адресах приховано значення `token`, `key`, `apikey`.
+/// Watch-source log for diagnostics: requests, extractor steps, errors.
+/// Visible in "Статистика → Джерела" and goes into "Копіювати звіт". In memory only, no personal data:
+/// the values of `token`, `key`, `apikey` are hidden in addresses.
 library;
 
 import 'package:flutter/foundation.dart';
@@ -20,7 +20,7 @@ class SourceLog extends ChangeNotifier {
 
   static String clean(String s) => s.replaceAllMapped(_secret, (m) => '${m.group(1)}***');
 
-  /// Запис із позначкою часу (мм:сс.мс від запуску застосунку)
+  /// A timestamped entry (mm:ss.ms since the app launch)
   static void add(String text) {
     final i = instance;
     final t = i._clock.elapsed;
@@ -29,7 +29,7 @@ class SourceLog extends ChangeNotifier {
     if (i.lines.length >= maxLines) i.lines.removeAt(0);
     i.lines.add('$stamp $cleaned');
     i.notifyListeners();
-    // Те саме потрапляє в єдиний журнал (файл)
+    // The same goes into the single log (file)
     final bad = cleaned.startsWith('✗') || cleaned.startsWith('Збій') || cleaned.contains('ПОМИЛКА');
     if (bad) {
       AppLog.w('джерела', cleaned);

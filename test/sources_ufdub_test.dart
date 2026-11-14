@@ -24,7 +24,7 @@ void main() {
     expect(a.originalTitle, 'Shiguang Dailiren III');
     expect(a.url, '/anime/451-agenty-chasu.html');
     expect(a.thumbnailUrl, 'https://ufdub.com/uploads/posts/2026-08/linkclick.png');
-    expect(a.genres, ['Донхва', 'Драма', 'Містика', 'Фантастика']); // «Аніме» відкинуто
+    expect(a.genres, ['Донхва', 'Драма', 'Містика', 'Фантастика']); // "Аніме" is dropped
     expect(a.description, startsWith('Після того, як інцидент'));
     expect(page.animes.map((e) => e.title), everyElement(isNotEmpty));
   });

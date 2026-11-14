@@ -9,7 +9,7 @@ import '../app_animation_kit.dart';
 import '../app_ui_kit.dart';
 import 'hikka_common.dart';
 
-/// Панель фільтрів каталогу. Працює з копією умов; застосовується кнопкою внизу.
+/// Catalog filter panel. Works with a copy of the conditions; applied by the button at the bottom.
 class HikkaFilterSheet extends StatefulWidget {
   final double scale;
   final HikkaSearchFilters initial;
@@ -17,7 +17,7 @@ class HikkaFilterSheet extends StatefulWidget {
   final ValueChanged<HikkaSearchFilters> onApply;
   final VoidCallback onClose;
 
-  /// Варіанти сортування й те, що вважається «за замовчуванням» (для списків користувача — свої)
+  /// Sort options and what counts as "default" (user lists have their own)
   final List<HikkaSortOption> sortOptions;
   final String defaultSort;
 
@@ -32,7 +32,7 @@ class HikkaFilterSheet extends StatefulWidget {
     this.defaultSort = 'score',
   });
 
-  /// Перший рік у повзунку
+  /// The first year in the slider
   static const int firstYear = 1960;
 
   @override
@@ -87,7 +87,7 @@ class _HikkaFilterSheetState extends State<HikkaFilterSheet> {
     );
   }
 
-  /// Той самий вигляд, що й повзунки в налаштуваннях
+  /// The same look as the sliders in settings
   SliderThemeData _sliderTheme(BuildContext context) => SliderTheme.of(context).copyWith(
         trackHeight: 3.0 * _scale,
         activeTrackColor: uiTheme.accentColor,
@@ -280,6 +280,25 @@ class _HikkaFilterSheetState extends State<HikkaFilterSheet> {
                       hint: 'Разом з роком виходу'),
                   _section('Рік виходу', _years()),
                   _section('Оцінка MyAnimeList', _scores()),
+                  if (_f.studios.isNotEmpty)
+                    _section(
+                      'Студія',
+                      Wrap(
+                        spacing: 8 * scale,
+                        runSpacing: 8 * scale,
+                        children: [
+                          for (final slug in _f.studios)
+                            HikkaChip(
+                              label: _f.studioNames[slug] ?? slug,
+                              scale: scale,
+                              icon: Symbols.apartment_rounded,
+                              selected: true,
+                              onTap: () => setState(() => _f = _f.copyWith(studios: _toggled(_f.studios, slug))),
+                            ),
+                        ],
+                      ),
+                      hint: 'Натисніть, щоб прибрати',
+                    ),
                   _genreGroups(),
                   _section('Вікова категорія', _chips(ratings, _f.ratings, (v) => setState(() => _f = _f.copyWith(ratings: v)))),
                   Padding(

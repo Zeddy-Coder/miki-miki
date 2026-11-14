@@ -13,8 +13,8 @@ import 'player_state_controller.dart';
 import 'shortcut_catalog.dart';
 import 'storage_service.dart';
 
-/// Виконує дії гарячих клавіш. Ідентифікатори збігаються з [ShortcutCatalog].
-/// Команди mpv ідуть напряму в рушій, а результат показується екранним сповіщенням.
+/// Executes hotkey actions. Identifiers match the [ShortcutCatalog].
+/// mpv commands go straight to the engine, and the result is shown as an on-screen notification.
 class PlayerActions {
   PlayerActions(this.c);
 
@@ -26,7 +26,7 @@ class PlayerActions {
 
   bool has(String id) => table.containsKey(id);
 
-  /// Виконує дію. Повертає `false`, якщо клавіша нічого не зробила (щоб віддати її далі).
+  /// Executes an action. Returns `false` if the key did nothing (to pass it on).
   Future<bool> run(String id) async {
     if (id == 'escape') return escape();
     final action = table[id];
@@ -36,7 +36,7 @@ class PlayerActions {
     return true;
   }
 
-  // ───────────────────────── допоміжні ─────────────────────────
+  // ───────────────────────── helpers ─────────────────────────
 
   static String _num(double v) => v == v.truncateToDouble() ? v.toInt().toString() : v.toString();
 
@@ -61,7 +61,7 @@ class PlayerActions {
 
   Future<void> _seekBy(int seconds) async {
     final dur = _p.state.duration;
-    // Під час швидких натискань позиція плеєра ще не оновилась — рахуємо від попередньої цілі
+    // During rapid presses the player position has not updated yet: we count from the previous target
     final now = DateTime.now();
     final recent = _lastSeekAt != null &&
         _lastSeekTarget != null &&
@@ -83,7 +83,7 @@ class PlayerActions {
     );
   }
 
-  /// `add <prop> <delta>` і сповіщення зі значенням, яке повернув mpv
+  /// `add <prop> <delta>` and a notification with the value mpv returned
   Future<void> _addProp(
     String prop,
     double delta, {
@@ -123,7 +123,7 @@ class PlayerActions {
 
   void _volume(double delta) => c.setVolumeDelta(delta);
 
-  // ───────────────────────── субтитри / аудіо ─────────────────────────
+  // ───────────────────────── subtitles / audio ─────────────────────────
 
   void _cycleSubtitle(int dir) {
     final tracks = c.cachedSubtitleTracks;
@@ -132,13 +132,13 @@ class PlayerActions {
       return;
     }
     final cur = _p.state.track.subtitle;
-    // 0 — «вимкнено», далі доріжки
+    // 0 is "off", then the tracks
     int index;
     if (cur.id == 'no') {
       index = 0;
     } else {
       final found = tracks.indexWhere((t) => t.track.id == cur.id);
-      index = found >= 0 ? found + 1 : 1; // 'auto' — перша доріжка
+      index = found >= 0 ? found + 1 : 1; // 'auto' is the first track
     }
     final count = tracks.length + 1;
     index = (index + dir) % count;
@@ -166,7 +166,7 @@ class PlayerActions {
     c.showOsd('Аудіо', icon: Symbols.music_note_rounded, detail: next.formattedTitle);
   }
 
-  // ───────────────────────── розділи, черга ─────────────────────────
+  // ───────────────────────── chapters, queue ─────────────────────────
 
   void _chapter(int dir) {
     final chapters = c.currentChapters;
@@ -187,7 +187,7 @@ class PlayerActions {
       }
       target = cur + 1;
     } else {
-      // Як у mpv: якщо відтворення пішло далі за кілька секунд — спершу на початок поточного розділу
+      // As in mpv: if playback has gone past a few seconds, first go to the start of the current chapter
       target = (pos - chapters[cur].startTime > const Duration(seconds: 5) || cur == 0) ? cur : cur - 1;
     }
     _p.seek(chapters[target].startTime);
@@ -229,7 +229,7 @@ class PlayerActions {
         icon: Symbols.queue_music_rounded, detail: (items[idx].extras?['title'] ?? '').toString());
   }
 
-  // ───────────────────────── цикли ─────────────────────────
+  // ───────────────────────── loops ─────────────────────────
 
   Future<void> _abLoop() async {
     await c.mpv(['ab-loop']);
@@ -286,8 +286,8 @@ class PlayerActions {
     c.showOsd('Масштаб і зсув скинуто', icon: Symbols.zoom_out_map_rounded);
   }
 
-  /// Esc: закриває статистику, меню, бічну панель, а потім виходить із повного екрана.
-  /// Повертає `false`, якщо закривати нічого — тоді клавіша йде далі.
+  /// Esc: closes stats, the menu, the side panel, then exits full screen.
+  /// Returns `false` if there is nothing to close; then the key goes on.
   bool escape() {
     if (c.showStatsOverlay) {
       c.closeStatsOverlay();
@@ -308,11 +308,11 @@ class PlayerActions {
     return false;
   }
 
-  // ───────────────────────── таблиця дій ─────────────────────────
+  // ───────────────────────── action table ─────────────────────────
 
   Map<String, FutureOr<void> Function()> _buildTable() {
     return {
-      // Відтворення
+      // Playback
       'play_pause': () => _p.playOrPause(),
       'frame_step': () => c.mpv(['frame-step']),
       'frame_back': () => c.mpv(['frame-back-step']),
@@ -333,7 +333,7 @@ class PlayerActions {
       'show_progress': _showProgress,
       'quit_video': () => c.returnToHome(),
 
-      // Перемотка
+      // Seek
       'seek_back_5': () => _seekBy(-5),
       'seek_fwd_5': () => _seekBy(5),
       'seek_back_1': () => _seekBy(-1),
@@ -361,14 +361,14 @@ class PlayerActions {
         c.showOsd('Затримка субтитрів', icon: Symbols.sync_rounded, detail: _signedMs(await c.mpvGet('sub-delay')));
       },
 
-      // Швидкість
+      // Speed
       'speed_down': () => _setSpeed(_p.state.rate / 1.1),
       'speed_up': () => _setSpeed(_p.state.rate * 1.1),
       'speed_half': () => _setSpeed(_p.state.rate * 0.5),
       'speed_double': () => _setSpeed(_p.state.rate * 2.0),
       'speed_reset': () => _setSpeed(1.0),
 
-      // Звук
+      // Sound
       'volume_up_5': () => _volume(5),
       'volume_down_5': () => _volume(-5),
       'volume_up_2': () => _volume(2),
@@ -380,7 +380,7 @@ class PlayerActions {
           _addProp('audio-delay', 0.1, title: 'Затримка звуку', icon: Symbols.sync_rounded, format: _signedMs),
       'audio_cycle': _cycleAudio,
 
-      // Субтитри
+      // Subtitles
       'sub_toggle': () => _cycleProp('sub-visibility',
           title: 'Субтитри', icon: Symbols.subtitles_rounded, format: (raw) => raw == 'yes' ? 'показано' : 'сховано'),
       'sub_cycle': () => _cycleSubtitle(1),
@@ -398,7 +398,7 @@ class PlayerActions {
       'sub_scale_up': () => _addProp('sub-scale', 0.1,
           title: 'Розмір субтитрів', icon: Symbols.format_size_rounded, format: (raw) => '${((double.tryParse(raw) ?? 1) * 100).round()}%'),
 
-      // Зображення
+      // Picture
       'contrast_down': () => _picture('contrast', 'Контраст', Symbols.contrast_rounded, -1),
       'contrast_up': () => _picture('contrast', 'Контраст', Symbols.contrast_rounded, 1),
       'brightness_down': () => _picture('brightness', 'Яскравість', Symbols.light_mode_rounded, -1),
@@ -428,7 +428,7 @@ class PlayerActions {
       'a4k_toggle': () => c.anime4k.toggle(),
       'a4k_quality': () => c.anime4k.toggleQuality(),
 
-      // Вікно та сервіс
+      // Window and service
       'escape': () => escape(),
       'fullscreen': () => c.toggleFullscreen(),
       'ontop': () => c.toggleAlwaysOnTop(),

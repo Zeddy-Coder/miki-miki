@@ -6,6 +6,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import '../../models/hikka_models.dart';
 import '../../services/continue_watching.dart';
 import '../../services/hikka_api.dart';
+import '../../services/episode_alerts.dart';
 import '../../services/hikka_nav.dart';
 import '../../services/hikka_prefs.dart';
 import '../../services/ui_theme_service.dart';
@@ -17,25 +18,25 @@ import 'hikka_banner.dart';
 import 'hikka_cards.dart';
 import 'hikka_continue_card.dart';
 import 'hikka_common.dart';
-import 'hikka_notifications_dialog.dart';
 import 'hikka_page_kit.dart';
 import 'hikka_shelf.dart';
+import '../../utils/app_clock.dart';
 
-/// «Головна» Miki Miki: пошукова панель зі сповіщеннями, тонка стрічка календаря, банери поточних онґоїнґів і полиці
-/// (продовжити перегляд, рекомендації, що виходить, анонси, найпопулярніше, найкраще за оцінкою).
+/// Miki Miki "Головна": a search bar with notifications, a thin calendar ticker, banners of current ongoing titles and shelves
+/// (continue watching, recommendations, airing now, announcements, most popular, best by score).
 class HikkaHomePage extends StatefulWidget {
   final double scale;
   final double bottomInset;
 
-  /// Змінюється, коли користувач просить оновити дані
+  /// Changes when the user asks to refresh the data
   final int refreshToken;
 
-  /// Оновлення потягом вниз
+  /// Pull-down refresh
   final Future<void> Function()? onRefresh;
 
   const HikkaHomePage({super.key, required this.scale, this.bottomInset = 0, this.refreshToken = 0, this.onRefresh});
 
-  /// Скільки поточних онґоїнґів іде в банери (решта — на полицю «Зараз виходить»)
+  /// How many current ongoing titles go into the banners (the rest go to the "Зараз виходить" shelf)
   static const int bannerCount = 6;
 
   @override
@@ -51,7 +52,7 @@ class _HikkaHomePageState extends State<HikkaHomePage> {
     super.dispose();
   }
 
-  /// Підпис недавніх переглядів: зміна означає, що полицю «Продовжити перегляд» треба перечитати
+  /// Label of recent views: a change means the "Продовжити перегляд" shelf must be reread
   static String _recentSignature() => ContinueWatching.recent(limit: 12).map((e) => '${e.$1}|${e.$2}|${e.$3.millisecondsSinceEpoch}').join(';');
 
   @override
@@ -59,7 +60,7 @@ class _HikkaHomePageState extends State<HikkaHomePage> {
     final scale = widget.scale;
     final api = HikkaApi.instance;
     final adult = HikkaPrefs.instance.allowAdult;
-    final now = DateTime.now();
+    final now = AppClock.now();
     final (season, year) = HikkaText.currentSeason(now);
     final token = '${widget.refreshToken}-$adult';
     final pad = HikkaLayout.sidePad(context, scale);
@@ -141,7 +142,7 @@ class _HikkaHomePageState extends State<HikkaHomePage> {
                 final recs = (await api.recommendations(recent.first.$1, size: 16, allowAdult: adult)).items;
                 if (recs.isNotEmpty) return recs;
               } catch (_) {
-                // нижче — загальна добірка
+                // below is the general selection
               }
             }
             return search(community);
@@ -155,7 +156,7 @@ class _HikkaHomePageState extends State<HikkaHomePage> {
           title: 'Зараз виходить',
           subtitle: '${HikkaText.season(season)} $year',
           token: token,
-          // Перші з них уже в банерах
+          // The first of them are already in the banners
           load: () async => (await search(ongoing, size: 24)).skip(HikkaHomePage.bannerCount).toList(),
           itemBuilder: (context, a) => HikkaAnimeCard(anime: a, scale: scale),
           onMore: () => HikkaNav.instance.openCatalog(ongoing),
@@ -169,12 +170,12 @@ class _HikkaHomePageState extends State<HikkaHomePage> {
   }
 }
 
-/// Верхній рядок: пошукова панель (відкриває каталог із курсором у полі пошуку) і сповіщення
+/// Top row: the search bar (opens the catalog with the cursor in the search field) and notifications
 class _TopBar extends StatelessWidget {
   final double scale;
   final double pad;
 
-  /// На ПК потяг вниз не працює: оновлення — кнопка поруч зі сповіщеннями
+  /// On PC pull-down does not work: refresh is a button next to notifications
   final Future<void> Function()? onRefresh;
 
   const _TopBar({required this.scale, required this.pad, this.onRefresh});
@@ -192,11 +193,41 @@ class _TopBar extends StatelessWidget {
               : Flexible(child: ConstrainedBox(constraints: BoxConstraints(maxWidth: 560 * scale), child: search)),
           SizedBox(width: 4 * scale),
           if (!mobile && onRefresh != null) HikkaIconButton(icon: Symbols.refresh_rounded, tooltip: 'Оновити', scale: scale, onTap: () => onRefresh!()),
-          HikkaIconButton(
-            icon: Symbols.notifications_rounded,
-            tooltip: 'Сповіщення',
-            scale: scale,
-            onTap: () => HikkaNotificationsDialog.show(context, scale: scale),
+          // Counter of unread new episodes
+          ListenableBuilder(
+            listenable: EpisodeAlerts.instance,
+            builder: (context, _) {
+              final unread = EpisodeAlerts.instance.unread;
+              return Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  HikkaIconButton(
+                    icon: Symbols.notifications_rounded,
+                    tooltip: unread > 0 ? 'Сповіщення: $unread нових' : 'Сповіщення',
+                    scale: scale,
+                    onTap: HikkaNav.instance.openNotifications,
+                  ),
+                  if (unread > 0)
+                    Positioned(
+                      key: const ValueKey('bell-badge'),
+                      right: 2 * scale,
+                      top: 2 * scale,
+                      child: IgnorePointer(
+                        child: Container(
+                          constraints: BoxConstraints(minWidth: 16 * scale),
+                          padding: EdgeInsets.symmetric(horizontal: 4 * scale, vertical: 1 * scale),
+                          decoration: BoxDecoration(color: uiTheme.accentColor, borderRadius: BorderRadius.circular(10 * scale)),
+                          child: Text(
+                            unread > 99 ? '99+' : '$unread',
+                            textAlign: TextAlign.center,
+                            style: hikkaStyle(10 * scale, color: Colors.white, weight: FontWeight.bold, height: 1.2),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
           ),
         ],
       ),

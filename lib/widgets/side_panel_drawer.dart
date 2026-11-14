@@ -20,7 +20,7 @@ class SidePanelDrawer extends StatelessWidget {
   final ValueChanged<int> onQueueRemove;
   final VoidCallback onQueueClear;
 
-  /// Серії із сайту (див. [SidePanel.remote])
+  /// Site episodes (see [SidePanel.remote])
   final RemoteDriver? remote;
 
   const SidePanelDrawer({
