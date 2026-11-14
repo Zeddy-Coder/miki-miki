@@ -144,13 +144,7 @@ class _RemotePanelBodyState extends State<RemotePanelBody> {
   Widget _scrollArea(double scale, Widget child) {
     return ScrollConfiguration(
       behavior: const AppScrollBehavior().copyWith(scrollbars: false),
-      child: RawScrollbar(
-        controller: _scroll,
-        thumbVisibility: false,
-        thickness: 4.0 * scale,
-        radius: Radius.circular(uiTheme.radius(2.0 * scale)),
-        thumbColor: uiTheme.scrollbarThumb,
-        padding: EdgeInsets.only(right: 2.0 * scale, bottom: 6.0 * scale),
+      child: KeyedSubtree(
         child: child,
       ),
     );
@@ -311,7 +305,7 @@ class _RemotePanelBodyState extends State<RemotePanelBody> {
           return AppSelectableTile(
             scale: scale,
             title: g.label,
-            subtitle: '${g.kindLabel} · ${check.summary} сер. · $source',
+            subtitle: '${g.kindLabel} · ${g.coverage} сер. · $source',
             icon: g.isSub ? Symbols.subtitles_rounded : Symbols.record_voice_over_rounded,
             isSelected: g.id == d.groupId,
             trailing: episodeCheckWarns(check) ? Icon(Symbols.warning_rounded, color: watchWarnColor(), size: 18 * scale, fill: 1, weight: 400) : null,

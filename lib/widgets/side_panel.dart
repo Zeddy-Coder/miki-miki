@@ -260,13 +260,7 @@ class _SidePanelState extends State<SidePanel> {
   Widget _scrollArea(double scale, Widget child) {
     return ScrollConfiguration(
       behavior: const AppScrollBehavior().copyWith(scrollbars: false),
-      child: RawScrollbar(
-        controller: _scrollController,
-        thumbVisibility: false,
-        thickness: 4.0 * scale,
-        radius: Radius.circular(uiTheme.radius(2.0 * scale)),
-        thumbColor: uiTheme.scrollbarThumb,
-        padding: EdgeInsets.only(right: 2.0 * scale, bottom: 6.0 * scale),
+      child: KeyedSubtree(
         child: child,
       ),
     );

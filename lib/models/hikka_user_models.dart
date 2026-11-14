@@ -130,8 +130,6 @@ class HikkaWatchEntry {
         anime: anime ?? this.anime,
       );
 
-  static String _iso(int unixSeconds) => DateTime.fromMillisecondsSinceEpoch(unixSeconds * 1000, isUtc: true).toIso8601String();
-
   /// Тіло `PUT /watch/{slug}`. Передаємо запис повністю, щоб зміна статусу чи серії не стерла оцінку,
   /// нотатку й дати, які людина виставила на сайті.
   Map<String, Object?> toArgs() => {
@@ -140,8 +138,7 @@ class HikkaWatchEntry {
         'score': score,
         'rewatches': rewatches,
         if (note != null) 'note': note,
-        if (startDate != null) 'start_date': _iso(startDate!),
-        if (endDate != null) 'end_date': _iso(endDate!),
+        // Дати (start_date / end_date) не передаємо: API Hikka відповідає 400 «Invalid field start_date in request body»
       };
 }
 

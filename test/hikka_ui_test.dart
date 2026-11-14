@@ -579,19 +579,19 @@ void main() {
       await shot(tester, 'settings_desktop');
 
       // Джерела перегляду вбудовані у вкладку, а не за окремою кнопкою
-      expect(find.text('Якість відео'), findsOneWidget);
-      expect(find.text('Ключ Mikai API'), findsOneWidget);
+      expect(find.text('Максимальна якість відео'), findsOneWidget);
+      expect(find.text('Ключ Mikai API'), findsNothing, reason: 'ключі API — у вкладці «Розробник»');
 
       await tester.tap(find.text('English').first);
       await load(tester, rounds: 4);
       expect(HikkaPrefs.instance.titleLang, HikkaTitleLang.en);
 
-      // Другорядна назва: мова з'являється лише при ввімкненому перемикачі
+      // Друга назва: мова з'являється лише при ввімкненому перемикачі
       expect(HikkaPrefs.instance.showSecondary, isTrue);
       await tester.tap(find.text('Ромаджі').last);
       await load(tester, rounds: 4);
       expect(HikkaPrefs.instance.secondaryLang, HikkaTitleLang.ja);
-      await tester.tap(find.text('Другорядна назва'));
+      await tester.tap(find.text('Друга назва'));
       await load(tester, rounds: 4);
       expect(HikkaPrefs.instance.showSecondary, isFalse);
       expect(find.text('Ромаджі'), findsOneWidget);
@@ -867,7 +867,7 @@ void main() {
       await load(tester, rounds: 6);
       expect(tester.takeException(), isNull);
       await shot(tester, 'settings_narrow');
-      expect(find.text('Якість відео'), findsOneWidget);
+      expect(find.text('Максимальна якість відео'), findsOneWidget);
     });
 
     testWidgets('потяг вниз оновлює головну: кеш скидається, полиці перезавантажуються', (tester) async {
@@ -1015,7 +1015,7 @@ void main() {
       for (final label in ['Головна', 'Огляд', 'Списки', 'Профіль', 'Налаштування']) {
         expect(find.text(label), findsWidgets, reason: label);
       }
-      expect(find.text('v1.1.2'), findsOneWidget);
+      expect(find.text('v1.1.3'), findsOneWidget);
       expect(find.text('MyPlayer'), findsNothing);
       expect(find.text('YouTube Mobile Fork'), findsNothing);
       await shot(tester, 'homehub_desktop_home');

@@ -152,7 +152,7 @@ void main() {
       expect(server.of('GET', '/watch/$slug').single.headers['auth'], 'tok');
     });
 
-    test('збереження не стирає оцінку, нотатку й дату початку, які людина виставила на сайті', () async {
+    test('збереження не стирає оцінку й нотатку, а дат не надсилає (API Hikka: 400 «Invalid field start_date»)', () async {
       serveWatch(existing: watchJson(episodes: 5, score: 8, note: 'Ого', start: 1700000000));
       await list.save(slug, status: HikkaWatchStatus.completed, total: 28);
       final b = put();
@@ -160,7 +160,7 @@ void main() {
       expect(b['episodes'], 28, reason: '«Переглянуто» добиває лічильник до кінця');
       expect(b['score'], 8);
       expect(b['note'], 'Ого');
-      expect(b['start_date'], '2023-11-14T22:13:20.000Z');
+      expect(b.containsKey('start_date'), isFalse, reason: 'API відхиляє дати у тілі PUT /watch');
       expect(b.containsKey('end_date'), isFalse);
     });
 
@@ -315,7 +315,10 @@ void main() {
 
     test('номер серії: цілий номер із джерела, але не наскрізний понад кількість серій', () {
       expect(HikkaMyList.episodeNumber(number: 5, position: 1, total: 12), 5);
-      expect(HikkaMyList.episodeNumber(number: 13, position: 1, total: 12), 1, reason: 'наскрізний номер другого сезону');
+      expect(HikkaMyList.episodeNumber(number: 13, position: 1, total: 12), 12, reason: '13 з 12 — відмічено 12');
+      expect(HikkaMyList.episodeNumber(number: 13, position: 3, total: 12, trustNumber: false), 3, reason: 'наскрізна нумерація — за позицією');
+      expect(HikkaMyList.episodeNumber(number: 12, position: 3, total: 24), 12, reason: 'номер із плеєра');
+      expect(HikkaMyList.episodeNumber(number: 5, position: 20, total: 12, trustNumber: false), 12);
       expect(HikkaMyList.episodeNumber(number: 2.5, position: 3, total: 12), 3);
       expect(HikkaMyList.episodeNumber(number: null, position: 4, total: null), 4);
       expect(HikkaMyList.episodeNumber(number: 30, position: 9, total: null), 30);
@@ -330,8 +333,9 @@ void main() {
       expect(e.anime?.slug, slug);
       final args = e.toArgs();
       expect(args['status'], 'on_hold');
-      expect(args['start_date'], '2023-11-14T22:13:20.000Z');
+      expect(jsonEncode(args), isNot(contains('start_date')));
       expect(jsonEncode(args), isNot(contains('end_date')));
+      expect(e.startDate, 1700000000, reason: 'дату з відповіді розбираємо, лише не надсилаємо назад');
     });
 
     test('невідомий статус не ламає розбір', () {

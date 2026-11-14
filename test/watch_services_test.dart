@@ -118,7 +118,7 @@ void main() {
       expect(c.count, 24);
       expect(c.summary, '24 з 12');
       expect(c.note, contains('об’єднано 2 частини'));
-      expect(c.note, contains('не синхронізуватимуться'));
+      expect(c.note, contains('передаватимуться на Hikka'));
       expect(c.syncSafe, isFalse);
       expect(c.isWarning, isTrue);
     });

@@ -129,8 +129,8 @@ class _MobileGestureLayerState extends State<MobileGestureLayer> with SingleTick
     if (_pointers.length < 2 || !z.pinching) return;
     final pts = _pointers.values.toList();
     final dist = (pts[0] - pts[1]).distance;
-    // Збільшення завжди від центру екрана; трохи нижче 1× дозволено «відтягнути», на відпусканні повернеться
-    var s = (_pinchStartScale * dist / _pinchStartDist).clamp(0.7, VideoZoomMath.maxScale).toDouble();
+    // Збільшення завжди від центру екрана; менше за 1× (звичайний розмір) не буває
+    var s = (_pinchStartScale * dist / _pinchStartDist).clamp(VideoZoomMath.minScale, VideoZoomMath.maxScale).toDouble();
     // Примагнічування до 1× і «на весь екран»: відчутне клацання й підпис
     final cover = VideoZoomMath.coverScale(_size, _fit());
     final magnet = VideoZoomMath.magnetOf(s, cover: cover);

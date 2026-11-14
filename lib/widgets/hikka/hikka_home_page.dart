@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
@@ -115,9 +117,13 @@ class _HikkaHomePageState extends State<HikkaHomePage> {
             scale: scale,
             pad: pad,
             title: 'Продовжити перегляд',
-            subtitle: 'Те, що ви дивилися нещодавно',
-            token: '$token-${_recentSignature()}',
-            load: () => ContinueWatching.load(allowAdult: adult),
+            subtitle: 'Ваш список «Дивлюсь» і нещодавні перегляди',
+            token: '$token-${_recentSignature()}-${ContinueWatching.availabilitySignature()}',
+            load: () async {
+              final items = await ContinueWatching.load(allowAdult: adult);
+              unawaited(ContinueWatching.refreshAvailability(items));
+              return items;
+            },
             cardWidth: HikkaContinueCard.width(scale),
             cardHeight: HikkaContinueCard.height(scale),
             itemBuilder: (context, it) => HikkaContinueCard(item: it, scale: scale),

@@ -150,4 +150,34 @@ void main() {
       expect(second.watched('hikka:x'), {'1'});
     });
   });
+
+  group('звідки продовжити з урахуванням Hikka', () {
+    final keys = ['1', '2', '3', '4', '5'];
+
+    test('історії в застосунку немає, на Hikka відмічено 3 серії — пропонується четверта', () {
+      final p = continuePoint(keys, <String>{}, null, hikkaEpisodes: 3);
+      expect(p.index, 3);
+      expect(p.started, isTrue, reason: 'підпис «Продовжити»');
+      expect(p.allWatched, isFalse);
+    });
+
+    test('без прогресу Hikka поведінка не змінилась', () {
+      expect(continuePoint(keys, <String>{}, null).index, 0);
+      expect(continuePoint(keys, {'1', '2'}, null).index, 2);
+    });
+
+    test('на Hikka всі серії — «Дивитись знову»', () {
+      expect(continuePoint(keys, <String>{}, null, hikkaEpisodes: 5).allWatched, isTrue);
+      expect(continuePoint(keys, <String>{}, null, hikkaEpisodes: 9).allWatched, isTrue);
+    });
+
+    test('Hikka попереду за локальну історію: беремо наступну після Hikka', () {
+      // востаннє відкривали 2-гу й переглянули, але на Hikka вже 4
+      expect(continuePoint(keys, {'1', '2'}, '2', hikkaEpisodes: 4).index, 4);
+    });
+
+    test('локальна історія попереду за Hikka: лишається локальна', () {
+      expect(continuePoint(keys, {'1', '2', '3', '4'}, '4', hikkaEpisodes: 1).index, 4);
+    });
+  });
 }

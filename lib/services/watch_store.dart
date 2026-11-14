@@ -37,6 +37,8 @@ class WatchStore extends ChangeNotifier {
         'last': Map<String, dynamic>.of((src['last'] as Map?)?.cast<String, dynamic>() ?? const {}),
         'links': Map<String, dynamic>.of((src['links'] as Map?)?.cast<String, dynamic>() ?? const {}),
         'group': Map<String, dynamic>.of((src['group'] as Map?)?.cast<String, dynamic>() ?? const {}),
+        'pin': Map<String, dynamic>.of((src['pin'] as Map?)?.cast<String, dynamic>() ?? const {}),
+        'avail': Map<String, dynamic>.of((src['avail'] as Map?)?.cast<String, dynamic>() ?? const {}),
         if (src['favorites'] is List) 'favorites': [for (final x in src['favorites'] as List) '$x'],
       };
 
@@ -97,6 +99,7 @@ class WatchStore extends ChangeNotifier {
       for (final e in byAge.take(m.length - _maxTitles)) {
         m.remove(e.key);
         _map('watched').remove(e.key);
+        _map('avail').remove(e.key);
       }
     }
     _commit();
@@ -115,7 +118,53 @@ class WatchStore extends ChangeNotifier {
     return keys.take(limit).toList();
   }
 
+  // ── Скільки серій є в озвучці, яку обрано для тайтлу ──────────────────────────
+
+  /// Скільки серій востаннє було у варіанті [groupId] цього тайтлу (і як він називається; `prev` — скільки було до останнього
+  /// збільшення); `null` — ще не перевіряли
+  ({String groupId, String label, int count, int prev, DateTime at})? available(String animeKey) {
+    final j = _map('avail')[animeKey];
+    if (j is! Map || j['g'] is! String) return null;
+    return (
+      groupId: j['g'] as String,
+      label: (j['l'] as String?) ?? '',
+      count: (j['n'] as num?)?.toInt() ?? 0,
+      prev: (j['p'] as num?)?.toInt() ?? (j['n'] as num?)?.toInt() ?? 0,
+      at: DateTime.fromMillisecondsSinceEpoch((j['t'] as num?)?.toInt() ?? 0),
+    );
+  }
+
+  /// Запам'ятовує кількість серій обраного варіанта. Записується (й сповіщає), лише якщо щось змінилось або дані
+  /// старіші за пів години, щоб часті перевірки не дзвеніли по всьому застосунку
+  void setAvailable(String animeKey, String groupId, String label, int count) {
+    final old = available(animeKey);
+    final same = old != null && old.groupId == groupId && old.count == count && old.label == label;
+    if (same && _now().difference(old.at) < const Duration(minutes: 30)) return;
+    // prev — скільки серій було доступно до останнього збільшення: за ним видно, чи глядач був «наздогнаний» на момент виходу нової
+    final prev = old == null || old.groupId != groupId ? count : (count > old.count ? old.count : (count < old.prev ? count : old.prev));
+    _map('avail')[animeKey] = {'g': groupId, 'l': label, 'n': count, 'p': prev, 't': _now().millisecondsSinceEpoch};
+    if (same) {
+      _save(_data);
+    } else {
+      _commit();
+    }
+  }
+
   String? preferredGroup(String animeKey) => _map('group')[animeKey] as String?;
+
+  /// Озвучка, яку людина обрала вручну для цього тайтлу (список на сторінці чи плеєр): вона сильніша за пріоритет
+  /// команд і автоперемикання. Автозапуск її не ставить
+  String? pinnedGroup(String animeKey) => _map('pin')[animeKey] as String?;
+
+  void setPinnedGroup(String animeKey, String groupId) {
+    if (_map('pin')[animeKey] == groupId) return;
+    _map('pin')[animeKey] = groupId;
+    _commit();
+  }
+
+  void clearPinnedGroup(String animeKey) {
+    if (_map('pin').remove(animeKey) != null) _commit();
+  }
 
   void setPreferredGroup(String animeKey, String groupId) {
     if (_map('group')[animeKey] == groupId) return;

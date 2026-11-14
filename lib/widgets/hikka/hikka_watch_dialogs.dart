@@ -4,6 +4,8 @@ import 'package:material_symbols_icons/symbols.dart';
 import '../../services/hikka_nav.dart';
 import '../../services/sources/ua/mikai_source.dart';
 import '../../services/ui_theme_service.dart';
+import '../../services/watch_models.dart';
+import '../../services/watch_service.dart';
 import '../../utils/platform_info.dart';
 import '../app_animation_kit.dart';
 import '../app_ui_kit.dart';
@@ -24,6 +26,12 @@ class WatchDialogs {
   static Future<bool> noSources(BuildContext context, {required double scale}) async {
     final r = await AppDialogs.show<bool>(context, builder: (ctx) => _NoSourcesDialog(scale: scale));
     return r == true;
+  }
+
+  /// В обраній вами озвучці немає наступної серії. Повертає озвучку, на яку перейти (обране скидається, щоб знову
+  /// працював автоматичний вибір), або `null`, якщо людина скасувала
+  static Future<WatchGroup?> missingNext(BuildContext context, {required double scale, required MissingNext plan, required int next}) {
+    return AppDialogs.show<WatchGroup>(context, builder: (ctx) => _MissingNextDialog(scale: scale, plan: plan, next: next));
   }
 
   /// Відомості про команди: опис, кількість тайтлів, посилання на соцмережі
@@ -391,6 +399,55 @@ class _TeamBlockState extends State<_TeamBlock> {
           },
         ),
       ],
+    );
+  }
+}
+
+class _MissingNextDialog extends StatelessWidget {
+  final double scale;
+  final MissingNext plan;
+  final int next;
+
+  const _MissingNextDialog({required this.scale, required this.plan, required this.next});
+
+  @override
+  Widget build(BuildContext context) {
+    Widget option(String caption, WatchGroup g, {bool accent = false}) {
+      final label = '${g.teamLabel} · ${g.coverage} сер.';
+      return Padding(
+        padding: EdgeInsets.only(top: 8 * scale),
+        child: AppAccentButton(
+          scale: scale,
+          solid: accent,
+          expand: true,
+          icon: g.isSub ? Symbols.subtitles_rounded : Symbols.record_voice_over_rounded,
+          label: '$caption: $label',
+          onTap: () => Navigator.of(context).pop(g),
+        ),
+      );
+    }
+
+    return WatchDialogFrame(
+      scale: scale,
+      title: 'Немає наступної серії',
+      icon: Symbols.warning_rounded,
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'В обраній вами озвучці «${plan.pinned.teamLabel}» (серії ${plan.pinned.coverage}) немає серії $next. Продовжити в іншій?',
+            style: hikkaStyle(13.5 * scale, weight: FontWeight.w600, height: 1.4),
+          ),
+          SizedBox(height: 6 * scale),
+          Text(
+            'Після переходу ваш ручний вибір для цього тайтлу скидається, і далі озвучка підбирається автоматично.',
+            style: hikkaStyle(12.5 * scale, color: uiTheme.textMuted, height: 1.45),
+          ),
+          option('Наступна за пріоритетом', plan.byPriority, accent: true),
+          if (plan.full != null) option('Повна', plan.full!),
+        ],
+      ),
+      actions: [QuietAction(label: 'Скасувати', scale: scale, onTap: () => Navigator.of(context).pop())],
     );
   }
 }

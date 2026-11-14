@@ -7,6 +7,7 @@ import 'dart:convert';
 
 import '../../../constants/app_identity.dart';
 import '../../../models/source_models.dart';
+import '../../storage_service.dart';
 import '../anime_source.dart';
 import '../extractors.dart';
 import '../source_http.dart';
@@ -387,6 +388,77 @@ class MikaiSource extends HttpAnimeSource {
   String animeWebUrl(SAnime anime) => '$baseUrl/anime/${anime.url}';
 
   // ── Команди ─────────────────────────────────────────────────────────────────────
+
+  /// Одна сторінка команд озвучення (`GET /teams`, без ключа), найпопулярніші (за кількістю тайтлів) першими.
+  /// Повертає й ознаку «далі є ще»
+  Future<(List<MikaiTeam>, bool)> teamsPage({int page = 1, int limit = 50, String search = ''}) async {
+    final q = search.trim();
+    final body = await api(
+      '/teams',
+      query: {'haveVoice': 'true', 'limit': '$limit', 'page': '$page', if (q.isEmpty) ...{'sort': 'count', 'order': 'desc'} else 'search': q},
+      ttl: const Duration(hours: 1),
+    );
+    final raw = (body['result'] as List? ?? const []);
+    final list = [for (final t in raw) if (t is Map) teamFromJson(t)].where((t) => t.name.isNotEmpty).toList();
+    final pages = (body['pages'] as num?)?.toInt();
+    final more = pages != null ? page < pages : raw.length >= limit;
+    return (list, more);
+  }
+
+  /// Перша сторінка команд (для коротких запитів і тестів)
+  Future<List<MikaiTeam>> teams({String search = '', int limit = 50}) async => (await teamsPage(limit: limit, search: search)).$1;
+
+  static const String teamsSection = 'mikai_teams';
+  static const Duration teamsMaxAge = Duration(hours: 24);
+
+  /// Усі команди озвучення Mikai: зі збереженого списку на диску, а коли він застарів (доба) — перезавантажує всі сторінки
+  /// й зберігає. Без мережі повертає застарілий список, якщо він є. Аватарки кешує віджет зображень.
+  Future<List<MikaiTeam>> allTeams({bool refresh = false}) async {
+    final cached = _readTeams();
+    if (!refresh && cached != null && _now().difference(cached.$1) < teamsMaxAge) return cached.$2;
+    try {
+      final all = <MikaiTeam>[];
+      final seen = <int>{};
+      for (var page = 1; page <= 60; page++) {
+        final (list, more) = await teamsPage(page: page);
+        for (final t in list) {
+          if (seen.add(t.id > 0 ? t.id : t.slug.hashCode)) all.add(t);
+        }
+        if (!more || list.isEmpty) break;
+      }
+      if (all.isNotEmpty) {
+        _writeTeams(all);
+        return all;
+      }
+    } catch (_) {
+      if (cached != null) return cached.$2;
+      rethrow;
+    }
+    return cached?.$2 ?? const [];
+  }
+
+  (DateTime, List<MikaiTeam>)? _readTeams() {
+    try {
+      final d = StorageService.getSection(teamsSection);
+      final l = d['list'];
+      if (l is! List || l.isEmpty) return null;
+      return (
+        DateTime.fromMillisecondsSinceEpoch((d['at'] as num?)?.toInt() ?? 0),
+        [for (final x in l) if (x is Map) MikaiTeam((x['i'] as num?)?.toInt() ?? 0, (x['s'] as String?) ?? '', (x['n'] as String?) ?? '', x['a'] as String?)],
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void _writeTeams(List<MikaiTeam> all) {
+    try {
+      StorageService.saveSection(teamsSection, {
+        'at': _now().millisecondsSinceEpoch,
+        'list': [for (final t in all) {'i': t.id, 's': t.slug, 'n': t.name, if (t.avatarUrl != null) 'a': t.avatarUrl}],
+      });
+    } catch (_) {}
+  }
 
   Future<MikaiTeamInfo> teamInfo(MikaiTeam team) async {
     final body = await api('/teams/${team.id > 0 ? team.id : team.slug}', ttl: const Duration(hours: 1));

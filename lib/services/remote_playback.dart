@@ -61,13 +61,14 @@ List<VideoChapter> chaptersFromTimestamps(List<TimeStamp> stamps, Duration total
   return out;
 }
 
-/// Чи можна вважати серію переглянутою: дивилися понад [fraction] тривалості або дійшли до титрів
+/// Чи можна вважати серію переглянутою: дивилися понад [fraction] тривалості або (якщо [byEnding]) дійшли до титрів
 /// (ендінґ, що починається в другій половині серії).
-bool episodeSeen(Duration position, Duration total, List<TimeStamp> stamps, {double fraction = 0.85}) {
+bool episodeSeen(Duration position, Duration total, List<TimeStamp> stamps, {double fraction = 0.85, bool byEnding = true}) {
   if (total <= Duration.zero) return false;
   final pos = position.inMilliseconds;
   final dur = total.inMilliseconds;
   if (pos >= dur * fraction) return true;
+  if (!byEnding) return false;
   for (final s in stamps) {
     if (s.type == ChapterType.ending && s.start * 1000 >= dur * 0.6 && pos >= s.start * 1000) return true;
   }

@@ -94,6 +94,12 @@ void main() {
       expect(episodeSeen(const Duration(seconds: 1330), total, [ed(1320, 1410)]), isTrue);
     });
 
+    test('свій поріг: 95 % і вимкнений ендінґ', () {
+      expect(episodeSeen(const Duration(minutes: 21), total, const [], fraction: 0.95), isFalse);
+      expect(episodeSeen(const Duration(minutes: 23), total, const [], fraction: 0.95), isTrue);
+      expect(episodeSeen(const Duration(seconds: 1330), total, [ed(1320, 1410)], fraction: 0.95, byEnding: false), isFalse, reason: 'ендінґ не враховується');
+    });
+
     test('ендінґ на початку (ранній ED) серію переглянутою не робить', () {
       expect(episodeSeen(const Duration(minutes: 5), total, [ed(120, 210)]), isFalse);
     });

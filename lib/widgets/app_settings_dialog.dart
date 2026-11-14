@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show FontLoader, ByteData;
@@ -13,7 +14,9 @@ import '../services/anime4k_service.dart';
 import '../services/app_log.dart';
 import '../services/log_export.dart';
 import '../services/orientation_policy.dart';
+import '../services/hikka_auth.dart';
 import '../services/storage_service.dart';
+import '../services/watch_service.dart';
 import '../services/system_fonts.dart';
 import '../services/ui_theme_service.dart';
 import '../services/mpv_config.dart';
@@ -67,6 +70,11 @@ class AppSettingsDialog extends StatefulWidget {
 
 class _AppSettingsDialogState extends State<AppSettingsDialog> {
   late int _activeTab = widget.initialTab;
+  late final TextEditingController _mikaiKey = TextEditingController(text: WatchService.instance.registry.prefs.mikaiKey);
+  late final TextEditingController _moonKey = TextEditingController(text: WatchService.instance.registry.prefs.moonKey);
+  late final TextEditingController _clientRef = TextEditingController(text: HikkaAuth.instance.customReference);
+  late final TextEditingController _clientSecret = TextEditingController(text: HikkaAuth.instance.customSecret);
+  Timer? _keyTimer;
   final TextEditingController _tmdbKey = TextEditingController(text: StorageService.getTmdbKey());
   bool _isResetting = false;
 
@@ -163,6 +171,12 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
   @override
   void dispose() {
     _hotkeysSearch.dispose();
+    _keyTimer?.cancel();
+    _commitKeys();
+    _clientRef.dispose();
+    _clientSecret.dispose();
+    _mikaiKey.dispose();
+    _moonKey.dispose();
     _tmdbKey.dispose();
     super.dispose();
   }
@@ -507,15 +521,29 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
     });
   }
 
+  void _keysChanged(String _) {
+    _keyTimer?.cancel();
+    _keyTimer = Timer(const Duration(milliseconds: 600), _commitKeys);
+  }
+
+  void _commitKeys() {
+    final prefs = WatchService.instance.registry.prefs;
+    final mikai = _mikaiKey.text.trim();
+    if (mikai != prefs.mikaiKey) prefs.mikaiKey = mikai;
+    final moon = _moonKey.text.trim();
+    if (moon != prefs.moonKey) prefs.moonKey = moon;
+    HikkaAuth.instance.setCustomClient(_clientRef.text, _clientSecret.text);
+  }
+
   /// Вкладки для вузького екрана телефона: (індекс вкладки, значок, підпис). «Гарячі клавіші» без клавіатури зайві.
   static const List<(int, IconData, String)> _phoneTabs = [
     (0, Symbols.palette_rounded, 'Вигляд'),
     (1, Symbols.subtitles_rounded, 'Субтитри'),
+    (9, Symbols.video_library_rounded, 'Каталог'),
     (2, Symbols.play_circle_rounded, 'Відтворення'),
     (3, Symbols.developer_board_rounded, 'Відео & GPU'),
     (7, Symbols.auto_awesome_rounded, 'Anime4K'),
     (4, Symbols.volume_up_rounded, 'Звук'),
-    (9, Symbols.video_library_rounded, 'Каталог'),
     (5, Symbols.terminal_rounded, 'Розробник'),
     (6, Symbols.info_rounded, 'Про програму'),
   ];
@@ -787,15 +815,15 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
                             _buildNavItem(scale, index: 0, icon: Symbols.palette_rounded, label: 'Вигляд'),
                             _buildNavItem(scale, index: 1, icon: Symbols.subtitles_rounded, label: 'Субтитри'),
                             SizedBox(height: 12 * scale),
+                            _buildNavGroupLabel(scale, 'КАТАЛОГ'),
+                            _buildNavItem(scale, index: 9, icon: Symbols.video_library_rounded, label: 'Каталог'),
+                            SizedBox(height: 12 * scale),
                             _buildNavGroupLabel(scale, 'ПЛЕЄР'),
                             _buildNavItem(scale, index: 2, icon: Symbols.play_circle_rounded, label: 'Відтворення'),
                             _buildNavItem(scale, index: 3, icon: Symbols.developer_board_rounded, label: 'Відео & GPU'),
                             _buildNavItem(scale, index: 7, icon: Symbols.auto_awesome_rounded, label: 'Anime4K'),
                             _buildNavItem(scale, index: 4, icon: Symbols.volume_up_rounded, label: 'Звук'),
                             if (!phone) _buildNavItem(scale, index: 8, icon: Symbols.keyboard_rounded, label: 'Гарячі клавіші'),
-                            SizedBox(height: 12 * scale),
-                            _buildNavGroupLabel(scale, 'КАТАЛОГ'),
-                            _buildNavItem(scale, index: 9, icon: Symbols.video_library_rounded, label: 'Каталог'),
                             SizedBox(height: 12 * scale),
                             _buildNavGroupLabel(scale, 'СИСТЕМА'),
                             _buildNavItem(scale, index: 5, icon: Symbols.terminal_rounded, label: 'Розробник'),
@@ -1010,8 +1038,8 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
                     children: [
                       _buildToggleRow(
                         scale,
-                        title: 'Автоматично завантажувати субтитри',
-                        subtitle: 'Вмикати бажану доріжку при відкритті нового відео',
+                        title: 'Автоматичне ввімкнення субтитрів',
+                        subtitle: 'За списком мов нижче',
                         value: _subtitlesEnabled,
                         onChanged: (enabled) {
                           setState(() {
@@ -1048,7 +1076,7 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
                         ),
                       ),
                       SizedBox(height: 28 * scale),
-                      _buildSectionHeader(scale, 'Режим заміни ASS / SSA', 'Рівень сумісності з аніме-субтитрами'),
+                      _buildSectionHeader(scale, 'Стилі SSA / ASS', 'Перезаписати вигляд субтитрів SSA'),
                       SizedBox(height: 8 * scale),
                       AppSegmentedBar<String>(
                         scale: scale,
@@ -1067,7 +1095,7 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Expanded(child: _buildSectionHeader(scale, 'Гарнітура шрифту', 'Оберіть системний або власний шрифт')),
+                          Expanded(child: _buildSectionHeader(scale, 'Шрифт', 'Оберіть шрифт для вигляду субтитрів')),
                           SizedBox(width: 10 * scale),
                           _buildActionPill(
                             scale,
@@ -1131,8 +1159,8 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
                       SizedBox(height: 16 * scale),
                       _buildAlignedSlider(scale, label: 'Розмір шрифту', valueText: '${_fontSize.toInt()} px', value: _fontSize, min: 24.0, max: 80.0, onChanged: (v) { setState(() => _fontSize = v.roundToDouble()); _applySubtitles(); }),
                       _buildAlignedSlider(scale, label: 'Товщина обводки', valueText: '${_borderSize.toStringAsFixed(1)} px', value: _borderSize, min: 0.0, max: 8.0, onChanged: (v) { setState(() => _borderSize = (v * 10).round() / 10); _applySubtitles(); }),
-                      _buildAlignedSlider(scale, label: 'Зсув твердої тіні', valueText: '${_shadowOffset.toStringAsFixed(1)} px', value: _shadowOffset, min: 0.0, max: 6.0, onChanged: (v) { setState(() => _shadowOffset = (v * 10).round() / 10); _applySubtitles(); }),
-                      _buildAlignedSlider(scale, label: 'Відступ знизу (Margin Y)', valueText: '${_marginY.toInt()} px', value: _marginY, min: 10.0, max: 80.0, onChanged: (v) { setState(() => _marginY = v.roundToDouble()); _applySubtitles(); }),
+                      _buildAlignedSlider(scale, label: 'Тінь', valueText: '${_shadowOffset.toStringAsFixed(1)} px', value: _shadowOffset, min: 0.0, max: 6.0, onChanged: (v) { setState(() => _shadowOffset = (v * 10).round() / 10); _applySubtitles(); }),
+                      _buildAlignedSlider(scale, label: 'Відступ знизу', valueText: '${_marginY.toInt()} px', value: _marginY, min: 10.0, max: 80.0, onChanged: (v) { setState(() => _marginY = v.roundToDouble()); _applySubtitles(); }),
                       SizedBox(height: 16 * scale),
                     ],
                   ),
@@ -1153,7 +1181,7 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            _buildSectionHeader(scale, 'Тема оформлення', 'Оберіть колірну гаму інтерфейсу плеєра'),
+            _buildSectionHeader(scale, 'Тема оформлення', 'Оберіть колірну схему вигляду'),
             SizedBox(height: 10 * scale),
             AppSegmentedBar<String>(
               scale: scale,
@@ -1277,14 +1305,14 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
             _buildToggleRow(
               scale,
               title: 'Автовідтворення наступного епізоду',
-              subtitle: 'Автоматично вмикати наступне відео в черзі після завершення поточного',
+              subtitle: 'Після завершення поточної серії автоматично вмикається наступна',
               value: _autoplayNext,
               onChanged: (v) {
                 setState(() => _autoplayNext = v);
               },
             ),
             SizedBox(height: 28 * scale),
-            _buildSectionHeader(scale, 'Стандартна швидкість відтворення', 'Швидкість, яка застосовується до нових відео за замовчуванням'),
+            _buildSectionHeader(scale, 'Швидкість відтворення за замовчуванням', 'Застосовується до кожного нового відео'),
             SizedBox(height: 10 * scale),
             AppSegmentedBar<double>(
               scale: scale,
@@ -1305,7 +1333,7 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
               _buildSectionHeader(
                 scale,
                 'Орієнтація плеєра',
-                'У якій орієнтації відкривається відео. Коли вийдете з плеєра або згорнете його в міні-плеєр, повернеться попередня',
+                'У якій орієнтації відкривається відео',
               ),
               SizedBox(height: 10 * scale),
               AppSegmentedBar<PlayerOrientation>(
@@ -1319,7 +1347,7 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
             _buildSectionHeader(
               scale,
               'Крок перемотування',
-              'Для подвійного дотику, кнопок ±крок та клавіш J / L (у стандартній схемі)',
+              AppPlatform.isMobile ? 'Для жесту подвійного дотику та кнопок на екрані' : 'Для клавіш J / L, стрілок чи кнопок на екрані',
             ),
             SizedBox(height: 10 * scale),
             AppSegmentedBar<int>(
@@ -1338,8 +1366,8 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
             SizedBox(height: 28 * scale),
             _buildToggleRow(
               scale,
-              title: 'Перемотка подвійним дотиком',
-              subtitle: 'Подвійний клік по лівому чи правому боці відео перемотує назад / вперед на крок',
+              title: 'Перемотування подвійним дотиком',
+              subtitle: 'Перемотувати відео подвійним дотиком ліворуч чи праворуч на екрані плеєра',
               value: _doubleTapSeek,
               onChanged: (v) => setState(() => _doubleTapSeek = v),
             ),
@@ -1347,24 +1375,24 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
             if (AppPlatform.isMobile)
               _buildToggleRow(
                 scale,
-                title: 'Кнопки перемотки на екрані',
-                subtitle: 'Показувати кнопки ±крок поруч із паузою; перемотку лишають подвійний дотик і повзунок',
+                title: 'Кнопки перемотування на екрані',
+                subtitle: 'Кнопки «назад» і «вперед» на заданий крок біля кнопки паузи',
                 value: _mobileSeekButtons,
                 onChanged: (v) => setState(() => _mobileSeekButtons = v),
               )
             else
               _buildToggleRow(
                 scale,
-                title: 'Кнопки перемотки на панелі',
-                subtitle: 'Показувати кнопки ±крок поруч із кнопкою паузи',
+                title: 'Кнопки перемотування на панелі',
+                subtitle: 'Кнопки «назад» і «вперед» на заданий крок біля кнопки паузи',
                 value: _seekButtons,
                 onChanged: (v) => setState(() => _seekButtons = v),
               ),
             SizedBox(height: 28 * scale),
             _buildToggleRow(
               scale,
-              title: 'Прискорення утримуванням на екрані',
-              subtitle: 'Тимчасове прискорення відео при затисканні клавіші миші чи тачпаду',
+              title: 'Прискорення утримуванням',
+              subtitle: 'Тимчасово збільшує швидкість відтворення, доки утримується екран',
               value: _holdToSpeed,
               onChanged: (v) {
                 setState(() => _holdToSpeed = v);
@@ -1378,13 +1406,13 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildSectionHeader(scale, 'Швидкість при утримуванні', 'Темп відтворення під час затискання екрана'),
+                    _buildSectionHeader(scale, 'Швидкість прискорення', 'З якою швидкістю відтворюється відео, доки утримується екран'),
                     SizedBox(height: 8 * scale),
                     AppSegmentedBar<double>(
                       scale: scale,
                       options: const [
                         AppSegmentOption(value: 1.5, label: '1.5x'),
-                        AppSegmentOption(value: 2.0, label: '2.0x (2x)'),
+                        AppSegmentOption(value: 2.0, label: '2.0x'),
                         AppSegmentOption(value: 2.5, label: '2.5x'),
                         AppSegmentOption(value: 3.0, label: '3.0x'),
                       ],
@@ -1400,16 +1428,16 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
             SizedBox(height: 28 * scale),
             _buildToggleRow(
               scale,
-              title: 'Кнопка пропуску опенінґу',
-              subtitle: 'Показувати «Пропустити опенінґ / ендінґ» під час відтворення',
+              title: 'Кнопка пропуску опенінґу й ендінґу',
+              subtitle: 'Показується під час опенінґу чи ендінґу',
               value: _showSkipButton,
               onChanged: (v) => setState(() => _showSkipButton = v),
             ),
             SizedBox(height: 28 * scale),
             _buildToggleRow(
               scale,
-              title: 'Автопропуск опенінґів та ендінґів',
-              subtitle: 'Пропускати вступні та титрові частини без натискання (типово вимкнено)',
+              title: 'Автоматичний пропуск опенінґів і ендінґів',
+              subtitle: 'Пропуск без натискання кнопки',
               value: _autoSkip,
               onChanged: (v) {
                 setState(() => _autoSkip = v);
@@ -1425,8 +1453,8 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
           children: [
             AppDropdown<String>(
               scale: scale,
-              label: 'Апаратний декодер (GPU)',
-              subtitle: 'Оберіть бекенд для апаратного декодування відео 120 FPS',
+              label: 'Апаратний декодер відео',
+              subtitle: 'У більшості випадків достатньо автоматичного вибору',
               value: widget.controller.currentHwdec,
               options: AppConstants.hwdecOptions.entries
                   .map((e) => AppDropdownOption(value: e.key, label: e.value))
@@ -1446,8 +1474,8 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
           children: [
             _buildToggleRow(
               scale,
-              title: 'Корекція висоти тону (Pitch Correction)',
-              subtitle: 'Зберігає природне звучання голосу при прискоренні відтворення 1.25x–2.0x',
+              title: 'Корекція висоти тону',
+              subtitle: 'Голос звучить природно за швидкості понад 1×',
               value: _pitchCorrection,
               onChanged: (v) async {
                 setState(() => _pitchCorrection = v);
@@ -1456,8 +1484,8 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
             SizedBox(height: 28 * scale),
             _buildSectionHeader(
               scale,
-              'Пріоритет мов аудіодоріжок',
-              'Плеєр автоматично вибере аудіо за найвищим доступним пріоритетом',
+              'Пріоритет мов звукових доріжок',
+              'Перетягуйте для зміни пріоритету; плеєр обере першу знайдену мову',
             ),
             SizedBox(height: 10 * scale),
             AppLanguagePriorityList(
@@ -1484,32 +1512,58 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            _buildSectionHeader(scale, 'Приховані можливості', 'Те, що поки не входить до основного інтерфейсу'),
+            _buildSectionHeader(scale, 'Експериментальні функції', 'Функції, які ще не є частиною основного інтерфейсу'),
             SizedBox(height: 10 * scale),
             _buildToggleRow(
               scale,
               title: 'Локальна медіатека',
-              subtitle: 'Відкрити файл чи посилання, історія файлів і плейлисти. Розділ з’являється у «Профілі»',
+              subtitle: 'Відкриття файлів і посилань, історія та плейлисти. Розділ з’явиться у «Профілі»',
               value: StorageService.getLocalLibrary(),
               onChanged: (v) => setState(() => StorageService.saveLocalLibrary(v)),
             ),
             SizedBox(height: 14 * scale),
-            _buildSectionHeader(scale, 'Банери на головній', 'Широкі зображення беруться з AniList; запасний варіант — TheMovieDB'),
+            _buildSectionHeader(scale, 'Ключ TheMovieDB', 'Необов’язково. Використовується для запасних банерів на головній'),
             SizedBox(height: 10 * scale),
             AppSearchField(
               scale: scale,
               controller: _tmdbKey,
               icon: Symbols.key_rounded,
-              hint: 'Ключ TheMovieDB (необов’язково)',
+              hint: 'Вставте ключ',
               onChanged: StorageService.saveTmdbKey,
             ),
+            SizedBox(height: 14 * scale),
+            _buildSectionHeader(scale, 'Ключ Mikai', 'Необов’язково. З ключем ліміт становить 300 запитів на хвилину замість 60'),
+            SizedBox(height: 10 * scale),
+            AppSearchField(
+              scale: scale,
+              controller: _mikaiKey,
+              icon: Symbols.key_rounded,
+              hint: 'Вставте ключ',
+              onChanged: _keysChanged,
+            ),
+            SizedBox(height: 14 * scale),
+            _buildSectionHeader(scale, 'Ключ Moon', 'Необов’язково. Власний ключ (наприклад, Premium) використовується замість вбудованого'),
+            SizedBox(height: 10 * scale),
+            AppSearchField(
+              scale: scale,
+              controller: _moonKey,
+              icon: Symbols.key_rounded,
+              hint: 'Вставте ключ',
+              onChanged: _keysChanged,
+            ),
             SizedBox(height: 28 * scale),
-            _buildSectionHeader(scale, 'Журнал і діагностика', 'Запис майже всіх дій застосунку, щоб знаходити помилки'),
+            _buildSectionHeader(scale, 'Власний клієнт Hikka', 'Потрібен лише тоді, коли вбудований клієнт перестав працювати. Зміни застосовуються після наступного входу'),
+            SizedBox(height: 10 * scale),
+            AppSearchField(scale: scale, controller: _clientRef, icon: Symbols.badge_rounded, hint: 'Референс клієнта', onChanged: _keysChanged),
+            SizedBox(height: 10 * scale),
+            AppSearchField(scale: scale, controller: _clientSecret, icon: Symbols.key_rounded, hint: 'Ключ клієнта', onChanged: _keysChanged),
+            SizedBox(height: 28 * scale),
+            _buildSectionHeader(scale, 'Журнал', 'Запис дій застосунку для пошуку помилок'),
             SizedBox(height: 10 * scale),
             _buildToggleRow(
               scale,
               title: 'Детальний журнал',
-              subtitle: 'Дії, мережа, події плеєра, синхронізація звуку й відео — в окремий файл. Докладність libmpv змінюється після перезапуску',
+              subtitle: 'Докладніший запис у файл. Повною мірою діє після перезапуску',
               value: AppLog.instance.detailed,
               onChanged: _setDetailedLog,
             ),
@@ -1549,7 +1603,7 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
             SizedBox(height: 8 * scale),
             _buildLogStatusLine(scale),
             SizedBox(height: 28 * scale),
-            _buildSectionHeader(scale, 'Конфігурація та Кеш', 'Прямий доступ до файлів конфігурації libmpv'),
+            _buildSectionHeader(scale, 'Конфігурація та кеш', 'Файли налаштувань плеєра та історія перегляду'),
             SizedBox(height: 12 * scale),
             Row(
               children: [
@@ -1579,7 +1633,7 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
               ],
             ),
             SizedBox(height: 18 * scale),
-            _buildSectionHeader(scale, 'Живий буфер логів libmpv', 'Останні записи внутрішнього C-рушія'),
+            _buildSectionHeader(scale, 'Журнал плеєра', 'Останні записи'),
             SizedBox(height: 8 * scale),
             Container(
               height: 180 * scale,
@@ -1774,8 +1828,8 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
       children: [
         _buildToggleRow(
           scale,
-          title: 'Увімкнути Anime4K',
-          subtitle: 'Відновлює лінії та збільшує роздільність відео в реальному часі шейдерами пристрою',
+          title: 'Anime4K',
+          subtitle: 'Підвищує чіткість ліній і роздільність відео в реальному часі',
           value: _a4kEnabled,
           onChanged: (v) => setState(() => _a4kEnabled = v),
         ),
@@ -1790,7 +1844,7 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
               _buildSectionHeader(
                 scale,
                 'Режим',
-                'Оберіть той, що на вашому відео виглядає найкраще. Перемикати можна й під час перегляду',
+                'Можна змінювати й під час перегляду',
               ),
               SizedBox(height: 10 * scale),
               for (final mode in Anime4kMode.values) _buildAnime4kModeCard(scale, mode),
@@ -1798,7 +1852,7 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
               Row(
                 children: [
                   Expanded(
-                    child: _buildSectionHeader(scale, 'Якість', 'Fast легший для пристрою, HQ дає чіткіший результат'),
+                    child: _buildSectionHeader(scale, 'Якість', 'Fast менше навантажує пристрій, HQ дає чіткіше зображення'),
                   ),
                   SizedBox(width: 12 * scale),
                   if (!AppPlatform.isMobile) AppKeyCombo(scale: scale, keys: const ['Ctrl', '9']),
@@ -1821,8 +1875,8 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
               SizedBox(height: 28 * scale),
               _buildSectionHeader(
                 scale,
-                'Пропускати відео з високою роздільністю',
-                'Не вмикати шейдери, коли апскейл уже не потрібен — це економить ресурси пристрою',
+                'Вимикати для високої роздільності',
+                'Шейдери не застосовуються, коли збільшення вже не потрібне',
               ),
               SizedBox(height: 10 * scale),
               AppSegmentedBar<int>(
@@ -2008,7 +2062,7 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
         _buildSectionHeader(
           scale,
           'Схема клавіш',
-          'Клавіші ↑ ↓ J L O у стандартній схемі та в схемі mpv виконують різні дії',
+          'Схеми по-різному використовують клавіші ↑ ↓ J L O',
         ),
         SizedBox(height: 10 * scale),
         AppSegmentedBar<KeyScheme>(
@@ -2039,7 +2093,7 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
         _buildSectionHeader(
           scale,
           'Усі комбінації',
-          'Працюють в будь-якій розкладці. Довідка поверх відео — клавіші ? або F1',
+          'Працюють у будь-якій розкладці. Довідка в плеєрі — клавіша ? або F1',
         ),
         SizedBox(height: 10 * scale),
         AppSearchField(
@@ -2358,15 +2412,17 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              SizedBox(height: 2 * scale),
-              Text(
-                subtitle,
-                style: TextStyle(
-                  fontFamily: 'Arial',
-                  color: uiTheme.textDarkMuted,
-                  fontSize: 11.5 * scale,
+              if (subtitle.isNotEmpty) ...[
+                SizedBox(height: 2 * scale),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    fontFamily: 'Arial',
+                    color: uiTheme.textDarkMuted,
+                    fontSize: 11.5 * scale,
+                  ),
                 ),
-              ),
+              ],
             ],
           ),
         ),
@@ -2430,15 +2486,17 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
             fontWeight: FontWeight.bold,
           ),
         ),
-        SizedBox(height: 2 * scale),
-        Text(
-          subtitle,
-          style: TextStyle(
-            fontFamily: 'Arial',
-            color: uiTheme.textDarkMuted,
-            fontSize: 11.5 * scale,
+        if (subtitle.isNotEmpty) ...[
+          SizedBox(height: 2 * scale),
+          Text(
+            subtitle,
+            style: TextStyle(
+              fontFamily: 'Arial',
+              color: uiTheme.textDarkMuted,
+              fontSize: 11.5 * scale,
+            ),
           ),
-        ),
+        ],
       ],
     );
   }
@@ -2493,25 +2551,25 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
   String _getTitle() {
     switch (_activeTab) {
       case 0:
-        return 'Оформлення та вигляд';
+        return 'Вигляд';
       case 1:
-        return 'Стилізація субтитрів';
+        return 'Субтитри';
       case 2:
-        return 'Параметри відтворення';
+        return 'Відтворення';
       case 3:
-        return 'Відео та апаратне прискорення';
+        return 'Відео & GPU';
       case 4:
-        return 'Аудіодоріжки та звук';
+        return 'Звук';
       case 5:
-        return 'Інструменти розробника';
+        return 'Розробник';
       case 6:
         return 'Про програму';
       case 7:
-        return 'Апскейл Anime4K';
+        return 'Anime4K';
       case 8:
         return 'Гарячі клавіші';
       case 9:
-        return 'Каталог і джерела перегляду';
+        return 'Каталог';
       default:
         return 'Налаштування';
     }
@@ -2520,25 +2578,25 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
   String _getSubtitle() {
     switch (_activeTab) {
       case 0:
-        return 'Кольори теми, заокруглення інтерфейсу';
+        return 'Тема, кольори та заокруглення';
       case 1:
-        return 'Шрифти, колір, тіні та сумісність з ASS';
+        return 'Мови, шрифт і стиль';
       case 2:
-        return 'Автопропуск, швидкість і перемотка';
+        return 'Швидкість, перемотування та пропуск';
       case 3:
-        return 'Декодери NVDEC, D3D11 та оптимізація 120 FPS';
+        return 'Апаратне декодування';
       case 4:
-        return 'Корекція тону та пріоритет мов аудіо';
+        return 'Висота тону та мови доріжок';
       case 5:
-        return 'Конфігураційні файли, логи рушія mpv';
+        return 'Журнал, ключі та експериментальні функції';
       case 6:
-        return 'Інформація про збірку та версію';
+        return 'Версія та збірка';
       case 7:
-        return 'Шейдери для аніме: режими, якість і комбінації клавіш';
+        return 'Покращення якості зображення';
       case 8:
-        return 'Схема клавіш і повний список комбінацій';
+        return 'Схема та перелік клавіш';
       case 9:
-        return 'Назви, 18+, сайти з озвучками, дані та кеш';
+        return 'Назви, джерела та кеш';
       default:
         return '';
     }

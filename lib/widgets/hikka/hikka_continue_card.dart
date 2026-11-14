@@ -6,6 +6,7 @@ import '../../services/continue_watching.dart';
 import '../../services/hikka_nav.dart';
 import '../../services/hikka_prefs.dart';
 import '../../services/quick_play.dart';
+import 'hikka_watch_dialogs.dart';
 import '../../services/ui_theme_service.dart';
 import '../../services/watch_store.dart';
 import '../../utils/platform_info.dart';
@@ -34,7 +35,10 @@ class _HikkaContinueCardState extends State<HikkaContinueCard> {
   Future<void> _open() async {
     if (_busy) return;
     setState(() => _busy = true);
-    final ok = await QuickPlay.resume(widget.item.anime);
+    final ok = await QuickPlay.resume(
+      widget.item.anime,
+      onMissingNext: (plan, next) => mounted ? WatchDialogs.missingNext(context, scale: widget.scale, plan: plan, next: next) : Future.value(null),
+    );
     if (!mounted) return;
     setState(() => _busy = false);
     if (!ok) HikkaNav.instance.openAnime(widget.item.anime.slug, seed: widget.item.anime);
@@ -66,6 +70,7 @@ class _HikkaContinueCardState extends State<HikkaContinueCard> {
       if (it.episodeLabel != null) it.episodeLabel!,
       HikkaText.dayName(it.at, DateTime.now()),
     ].join(' · ');
+    final tag = it.hasNew ? (it.dubName.isEmpty ? 'Нова серія' : 'Нова серія · ${it.dubName}') : (it.notInList ? 'Не в списку' : null);
     final r = uiTheme.borderRadius(14 * scale);
     return Semantics(
       button: true,
@@ -106,6 +111,10 @@ class _HikkaContinueCardState extends State<HikkaContinueCard> {
                       ),
                       SizedBox(height: 6 * scale),
                       Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: hikkaStyle(12 * scale, color: uiTheme.textMuted)),
+                      if (tag != null) ...[
+                        SizedBox(height: 4 * scale),
+                        Text(tag, maxLines: 1, overflow: TextOverflow.ellipsis, style: hikkaStyle(11 * scale, weight: FontWeight.w600, color: it.hasNew ? uiTheme.accentColor : uiTheme.textMuted)),
+                      ],
                     ],
                   ),
                 ),

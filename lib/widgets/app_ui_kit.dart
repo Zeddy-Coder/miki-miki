@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/physics.dart' show Simulation;
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
+import 'package:flutter/services.dart' show SystemChannels;
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import '../constants/app_constants.dart';
@@ -440,6 +441,16 @@ class AppSearchDropdown<T> extends StatefulWidget {
   final List<AppDropdownOption<T>> options;
   final ValueChanged<T> onChanged;
 
+  /// Напис у закритому полі, коли значення немає серед пунктів (список лише «додає» значення)
+  final String? placeholder;
+
+  /// Якщо задано, за пошуку без збігів пропонується додати введений текст як власне значення
+  final ValueChanged<String>? onAddCustom;
+
+  /// Режим «бюлетеня»: пункти з прапорцями, вибір не закриває список (він закривається торканням поза блоком).
+  /// Тут — множина значень, які зараз позначені; [onChanged] перемикає значення
+  final Set<T>? multiSelected;
+
   const AppSearchDropdown({
     super.key,
     required this.scale,
@@ -449,23 +460,53 @@ class AppSearchDropdown<T> extends StatefulWidget {
     required this.value,
     required this.options,
     required this.onChanged,
+    this.placeholder,
+    this.onAddCustom,
+    this.multiSelected,
   });
 
   @override
   State<AppSearchDropdown<T>> createState() => _AppSearchDropdownState<T>();
 }
 
-class _AppSearchDropdownState<T> extends State<AppSearchDropdown<T>> {
+class _AppSearchDropdownState<T> extends State<AppSearchDropdown<T>> with WidgetsBindingObserver {
   bool _isExpanded = false;
+  bool _keyboardOpen = false;
+  final FocusNode _searchFocus = FocusNode();
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   String _searchQuery = "";
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _searchFocus.dispose();
     _searchController.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  /// Клавіатура з'явилась або зникла: поле пошуку піднімається до верху видимої області, щоб список лишався видимим
+  @override
+  void didChangeMetrics() {
+    if (!mounted) return;
+    final open = View.of(context).viewInsets.bottom > 0;
+    if (open != _keyboardOpen) setState(() => _keyboardOpen = open);
+    if (_isExpanded) _revealList(delay: const Duration(milliseconds: 120));
+  }
+
+  /// Прокручує сторінку так, щоб поле пошуку було вгорі видимої області, а список — під ним
+  void _revealList({Duration? delay}) {
+    Future.delayed(delay ?? AppAnim.normal + const Duration(milliseconds: 60), () {
+      if (!mounted || !_isExpanded) return;
+      Scrollable.ensureVisible(context, duration: AppAnim.normal, curve: AppAnim.easeOut, alignment: 0.0);
+    });
   }
 
   void _closeDropdown() {
@@ -476,13 +517,97 @@ class _AppSearchDropdownState<T> extends State<AppSearchDropdown<T>> {
     });
   }
 
+  Widget _closedRow(double scale, String currentLabel, AppDropdownOption<T>? current) {
+    return SizedBox.expand(
+      child: GestureDetector(
+              onTap: () {
+                setState(() {
+                  _isExpanded = true;
+                  _searchQuery = "";
+                  _searchController.clear();
+                });
+                _revealList();
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (!mounted || !_isExpanded) return;
+                  _searchFocus.requestFocus();
+                  SystemChannels.textInput.invokeMethod<void>('TextInput.show');
+                });
+              },
+              behavior: HitTestBehavior.opaque,
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 14 * scale),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        currentLabel,
+                        style: TextStyle(
+                          fontFamily: 'Arial',
+                          color: current == null && widget.placeholder != null ? uiTheme.textMuted : uiTheme.textPrimary,
+                          fontSize: 13 * scale,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Icon(Symbols.unfold_more_rounded, color: uiTheme.textMuted, size: 18 * scale),
+                  ],
+                ),
+              ),
+            ),
+    );
+  }
+
+  Widget _searchRow(double scale) {
+    return SizedBox.expand(
+      child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 10 * scale),
+              child: Row(
+                children: [
+                  Icon(Symbols.search_rounded, color: uiTheme.accentColor, size: 18 * scale),
+                  SizedBox(width: 8 * scale),
+                  Expanded(
+                    child: TextField(
+                      controller: _searchController,
+                      focusNode: _searchFocus,
+                      style: TextStyle(
+                        fontFamily: 'Arial',
+                        color: uiTheme.textPrimary,
+                        fontSize: 13 * scale,
+                      ),
+                      onChanged: (val) => setState(() => _searchQuery = val.trim()),
+                      decoration: InputDecoration(
+                        hintText: widget.searchHint,
+                        hintStyle: TextStyle(
+                          color: uiTheme.textDarkMuted,
+                          fontSize: 12.5 * scale,
+                        ),
+                        border: InputBorder.none,
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(vertical: 8 * scale),
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    icon: Icon(Symbols.close_rounded, color: uiTheme.textMuted, size: 18 * scale),
+                    onPressed: _closeDropdown,
+                  ),
+                ],
+              ),
+            ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final scale = widget.scale;
-    final currentOption = widget.options.firstWhere(
-      (o) => o.value == widget.value,
-      orElse: () => widget.options.first,
-    );
+    final current = widget.options.where((o) => o.value == widget.value).firstOrNull;
+    final currentLabel = current?.label ?? widget.placeholder ?? (widget.options.isEmpty ? '' : widget.options.first.label);
 
     final filtered = widget.options.where((opt) {
       if (_searchQuery.isEmpty) return true;
@@ -490,8 +615,13 @@ class _AppSearchDropdownState<T> extends State<AppSearchDropdown<T>> {
       return opt.label.toLowerCase().contains(query) ||
           opt.value.toString().toLowerCase().contains(query);
     }).toList();
+    final multi = widget.multiSelected != null;
 
-    return Column(
+    return TapRegion(
+      onTapOutside: (_) {
+        if (_isExpanded) _closeDropdown();
+      },
+      child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -530,80 +660,11 @@ class _AppSearchDropdownState<T> extends State<AppSearchDropdown<T>> {
               width: 1.0,
             ),
           ),
-          child: AnimatedCrossFade(
+          child: AnimatedSwitcher(
             duration: AppAnim.fast,
-            firstCurve: AppAnim.easeOut,
-            secondCurve: AppAnim.easeOut,
-            crossFadeState: _isExpanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
-            firstChild: GestureDetector(
-              onTap: () {
-                setState(() {
-                  _isExpanded = true;
-                  _searchQuery = "";
-                  _searchController.clear();
-                });
-              },
-              behavior: HitTestBehavior.opaque,
-              child: Padding(
-                padding: EdgeInsets.symmetric(horizontal: 14 * scale),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        currentOption.label,
-                        style: TextStyle(
-                          fontFamily: 'Arial',
-                          color: uiTheme.textPrimary,
-                          fontSize: 13 * scale,
-                          fontWeight: FontWeight.w500,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    Icon(Symbols.unfold_more_rounded, color: uiTheme.textMuted, size: 18 * scale),
-                  ],
-                ),
-              ),
-            ),
-            secondChild: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 10 * scale),
-              child: Row(
-                children: [
-                  Icon(Symbols.search_rounded, color: uiTheme.accentColor, size: 18 * scale),
-                  SizedBox(width: 8 * scale),
-                  Expanded(
-                    child: TextField(
-                      controller: _searchController,
-                      autofocus: _isExpanded,
-                      style: TextStyle(
-                        fontFamily: 'Arial',
-                        color: uiTheme.textPrimary,
-                        fontSize: 13 * scale,
-                      ),
-                      onChanged: (val) => setState(() => _searchQuery = val.trim()),
-                      decoration: InputDecoration(
-                        hintText: widget.searchHint,
-                        hintStyle: TextStyle(
-                          color: uiTheme.textDarkMuted,
-                          fontSize: 12.5 * scale,
-                        ),
-                        border: InputBorder.none,
-                        isDense: true,
-                        contentPadding: EdgeInsets.symmetric(vertical: 8 * scale),
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    icon: Icon(Symbols.close_rounded, color: uiTheme.textMuted, size: 18 * scale),
-                    onPressed: _closeDropdown,
-                  ),
-                ],
-              ),
-            ),
+            switchInCurve: AppAnim.easeOut,
+            switchOutCurve: AppAnim.easeOut,
+            child: _isExpanded ? KeyedSubtree(key: const ValueKey('open'), child: _searchRow(scale)) : KeyedSubtree(key: const ValueKey('closed'), child: _closedRow(scale, currentLabel, current)),
           ),
         ),
         AppVerticalCollapse(
@@ -611,7 +672,8 @@ class _AppSearchDropdownState<T> extends State<AppSearchDropdown<T>> {
           duration: AppAnim.normal,
           curve: AppAnim.easeOut,
           child: Padding(
-            padding: EdgeInsets.only(top: 6 * scale),
+            // Знизу — запас лише з відкритою клавіатурою: сторінка може підняти поле пошуку нагору
+            padding: EdgeInsets.only(top: 6 * scale, bottom: _keyboardOpen ? 140 * scale : 0),
             child: Container(
               constraints: BoxConstraints(maxHeight: 230 * scale),
               padding: EdgeInsets.all(4 * scale),
@@ -627,7 +689,40 @@ class _AppSearchDropdownState<T> extends State<AppSearchDropdown<T>> {
                   ),
                 ],
               ),
-              child: filtered.isEmpty
+              child: filtered.isEmpty && widget.onAddCustom != null && _searchQuery.isNotEmpty
+                  ? GestureDetector(
+                      onTap: () {
+                        final v = _searchQuery;
+                        widget.onAddCustom!(v);
+                        if (multi) {
+                          setState(() {
+                            _searchQuery = '';
+                            _searchController.clear();
+                          });
+                        } else {
+                          _closeDropdown();
+                        }
+                      },
+                      behavior: HitTestBehavior.opaque,
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(vertical: 12 * scale, horizontal: 12 * scale),
+                        child: Row(
+                          children: [
+                            Icon(Symbols.add_rounded, color: uiTheme.accentColor, size: 18 * scale),
+                            SizedBox(width: 8 * scale),
+                            Expanded(
+                              child: Text(
+                                'Додати «$_searchQuery»',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(fontFamily: 'Arial', color: uiTheme.accentColor, fontSize: 13 * scale, fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  : filtered.isEmpty
                   ? Container(
                       width: double.infinity,
                       padding: EdgeInsets.symmetric(vertical: 20 * scale, horizontal: 16 * scale),
@@ -664,23 +759,19 @@ class _AppSearchDropdownState<T> extends State<AppSearchDropdown<T>> {
                     )
                   : ScrollConfiguration(
                       behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
-                      child: RawScrollbar(
-                        controller: _scrollController,
-                        thumbVisibility: false,
-                        thickness: 3.5 * scale,
-                        radius: Radius.circular(uiTheme.radius(2 * scale)),
-                        thumbColor: uiTheme.isLight ? const Color(0xFFC0C0C8) : const Color(0xFF555555),
+                      child: KeyedSubtree(
                         child: ListView.builder(
                           controller: _scrollController,
                           shrinkWrap: true,
+                          padding: EdgeInsets.zero,
                           itemCount: filtered.length,
                           itemBuilder: (context, idx) {
                             final opt = filtered[idx];
-                            final isSelected = opt.value == widget.value;
+                            final isSelected = multi ? widget.multiSelected!.contains(opt.value) : opt.value == widget.value;
                             return GestureDetector(
                               onTap: () {
                                 widget.onChanged(opt.value);
-                                _closeDropdown();
+                                if (!multi) _closeDropdown();
                               },
                               behavior: HitTestBehavior.opaque,
                               child: AppAnimatedContainer(
@@ -697,11 +788,17 @@ class _AppSearchDropdownState<T> extends State<AppSearchDropdown<T>> {
                                 ),
                                 child: Row(
                                   children: [
-                                    if (isSelected)
-                                      Icon(Symbols.check_rounded, color: uiTheme.accentColor, size: 16 * scale)
-                                    else
-                                      SizedBox(width: 16 * scale),
-                                    SizedBox(width: 8 * scale),
+                                    if (!multi) ...[
+                                      if (isSelected)
+                                        Icon(Symbols.check_rounded, color: uiTheme.accentColor, size: 16 * scale)
+                                      else
+                                        SizedBox(width: 16 * scale),
+                                      SizedBox(width: 8 * scale),
+                                    ],
+                                    if (opt.leading != null) ...[
+                                      opt.leading!,
+                                      SizedBox(width: 10 * scale),
+                                    ],
                                     Expanded(
                                       child: Text(
                                         opt.label,
@@ -717,6 +814,19 @@ class _AppSearchDropdownState<T> extends State<AppSearchDropdown<T>> {
                                         overflow: TextOverflow.ellipsis,
                                       ),
                                     ),
+                                    if (multi) ...[
+                                      SizedBox(width: 10 * scale),
+                                      Container(
+                                        width: 20 * scale,
+                                        height: 20 * scale,
+                                        decoration: BoxDecoration(
+                                          color: isSelected ? uiTheme.accentColor : Colors.transparent,
+                                          borderRadius: uiTheme.borderRadius(6 * scale),
+                                          border: Border.all(color: isSelected ? uiTheme.accentColor : uiTheme.borderSubtle, width: 1.5),
+                                        ),
+                                        child: isSelected ? Icon(Symbols.check_rounded, size: 15 * scale, color: Colors.black, weight: 700) : null,
+                                      ),
+                                    ],
                                   ],
                                 ),
                               ),
@@ -729,6 +839,7 @@ class _AppSearchDropdownState<T> extends State<AppSearchDropdown<T>> {
           ),
         ),
       ],
+    ),
     );
   }
 }
@@ -2497,7 +2608,8 @@ class AppScrollEdgeFade extends StatelessWidget {
   }
 }
 
-/// Тонкий скролбар у стилі застосунку. Контролер має бути підключений до дочірнього скролу.
+/// Обгортка колишнього скролбара: смуги прокрутки в застосунку більше немає (прибрано за ненадобою), віджет лишився,
+/// щоб не чіпати всі місця використання. Контролер має бути підключений до дочірнього скролу.
 class AppScrollbar extends StatelessWidget {
   final double scale;
   final ScrollController controller;
@@ -2506,24 +2618,7 @@ class AppScrollbar extends StatelessWidget {
   const AppScrollbar({super.key, required this.scale, required this.controller, required this.child});
 
   @override
-  Widget build(BuildContext context) {
-    return ScrollConfiguration(
-      behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
-      child: RawScrollbar(
-        controller: controller,
-        // З'являється під час гортання й за мить зникає (на телефоні й на ПК)
-        thumbVisibility: false,
-        interactive: !AppPlatform.isMobile,
-        fadeDuration: const Duration(milliseconds: 250),
-        timeToFade: const Duration(milliseconds: 900),
-        thickness: 4.0 * scale,
-        radius: Radius.circular(uiTheme.radius(2.0 * scale)),
-        thumbColor: uiTheme.scrollbarThumb,
-        padding: EdgeInsets.only(right: 2.0 * scale, bottom: 6.0 * scale),
-        child: child,
-      ),
-    );
-  }
+  Widget build(BuildContext context) => ScrollConfiguration(behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false), child: child);
 }
 
 /// Прокрутка як в сучасному Android: ефект «розтягування» на краю замість старого світіння (Android 5)

@@ -109,7 +109,7 @@ bool looksLikeExtra(String name) {
   return _extraBracket.hasMatch(name);
 }
 
-const String _syncOff = 'Тому відмітки «переглянуто» для цього варіанта не синхронізуватимуться з Hikka автоматично.';
+const String _syncOff = 'Відмітки «переглянуто» передаватимуться на Hikka за номером серії, не більше за кількість серій там.';
 
 /// Звіряє серії [episodes] із даними Hikka [info].
 EpisodeCheck checkEpisodes(List<SEpisode> episodes, HikkaEpisodeInfo info) {

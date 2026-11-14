@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../constants/app_identity.dart';
+import '../services/app_updater.dart';
 import '../services/hikka_nav.dart';
 import '../services/ui_theme_service.dart';
 import '../utils/platform_info.dart';
@@ -11,6 +12,7 @@ import 'app_animation_kit.dart';
 import 'app_ui_kit.dart';
 import 'hikka/hikka_hub.dart';
 import 'local_library.dart';
+import 'update_prompt.dart';
 
 /// Оболонка застосунку Miki Miki: чотири головні вкладки («Головна», «Огляд», «Списки», «Профіль») із вмістом
 /// Hikka. Телефон у портреті отримує нижню навігацію, ПК і широкі екрани — бічне меню. Сам вміст і відкриті
@@ -77,11 +79,25 @@ class _HomeHubState extends State<HomeHub> {
     super.initState();
     HomeHub.backHandler = _handleBack;
     _nav.addListener(_onNav);
+    AppUpdater.instance.state.addListener(_maybePromptUpdate);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _maybePromptUpdate());
+  }
+
+  /// Вікно оновлення показується раз за запуск: коли відома новіша версія, яку не пропустили
+  static bool _updatePrompted = false;
+
+  void _maybePromptUpdate() {
+    if (!mounted || _updatePrompted) return;
+    final st = AppUpdater.instance.state.value;
+    if (st is! UpdateAvailable || !AppUpdater.instance.shouldPrompt(st.info)) return;
+    _updatePrompted = true;
+    UpdatePrompt.show(context, scale: widget.scale, info: st.info);
   }
 
   @override
   void dispose() {
     _nav.removeListener(_onNav);
+    AppUpdater.instance.state.removeListener(_maybePromptUpdate);
     if (HomeHub.backHandler == _handleBack) HomeHub.backHandler = null;
     super.dispose();
   }
@@ -131,7 +147,8 @@ class _HomeHubState extends State<HomeHub> {
         child: Column(
           children: [
             Expanded(child: content),
-            _buildBottomNav(safe.bottom),
+            // З відкритою клавіатурою навігація не потрібна: інакше вона піднімається разом із нею й закриває вміст
+            if (MediaQuery.viewInsetsOf(context).bottom == 0) _buildBottomNav(safe.bottom),
           ],
         ),
       );

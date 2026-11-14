@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../../models/hikka_models.dart';
-import '../../services/hikka_auth.dart';
 import '../../services/hikka_images.dart';
 import '../../services/hikka_prefs.dart';
 import '../../services/ui_theme_service.dart';
@@ -36,9 +35,6 @@ class HikkaCatalogSettings extends StatefulWidget {
 class _HikkaCatalogSettingsState extends State<HikkaCatalogSettings> {
   int? _cacheBytes;
   bool _cleared = false;
-  late final TextEditingController _clientRef = TextEditingController(text: HikkaAuth.instance.customReference);
-  late final TextEditingController _clientSecret = TextEditingController(text: HikkaAuth.instance.customSecret);
-  Timer? _clientTimer;
 
   double get _scale => widget.scale;
   HikkaPrefs get _prefs => HikkaPrefs.instance;
@@ -49,19 +45,9 @@ class _HikkaCatalogSettingsState extends State<HikkaCatalogSettings> {
     _measure();
   }
 
-  void _clientChanged(String _) {
-    _clientTimer?.cancel();
-    _clientTimer = Timer(const Duration(milliseconds: 600), _commitClient);
-  }
-
-  void _commitClient() => HikkaAuth.instance.setCustomClient(_clientRef.text, _clientSecret.text);
 
   @override
   void dispose() {
-    _clientTimer?.cancel();
-    _commitClient();
-    _clientRef.dispose();
-    _clientSecret.dispose();
     super.dispose();
   }
 
@@ -109,7 +95,7 @@ class _HikkaCatalogSettingsState extends State<HikkaCatalogSettings> {
       builder: (context, _) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _title('Мова назв', hint: 'Якщо назви потрібною мовою немає, показується наступна доступна'),
+          _title('Мова назв', hint: 'Якщо потрібної назви немає, показується наступна доступна'),
           AppSegmentedBar<HikkaTitleLang>(
             scale: scale,
             selectedValue: _prefs.titleLang,
@@ -123,8 +109,8 @@ class _HikkaCatalogSettingsState extends State<HikkaCatalogSettings> {
           SizedBox(height: 22 * scale),
           HikkaToggleRow(
             scale: scale,
-            title: 'Другорядна назва',
-            subtitle: 'Одна додаткова назва під заголовком сторінки тайтла. Вимкни, якщо назви задовгі.',
+            title: 'Друга назва',
+            subtitle: 'Додаткова назва під заголовком тайтла',
             value: _prefs.showSecondary,
             onChanged: (v) => _prefs.showSecondary = v,
           ),
@@ -145,19 +131,14 @@ class _HikkaCatalogSettingsState extends State<HikkaCatalogSettings> {
           HikkaToggleRow(
             scale: scale,
             title: 'Контент 18+',
-            subtitle: 'Показувати хентай та інші матеріали для дорослих у списках, пошуку й календарі. Лише для повнолітніх.',
+            subtitle: 'Показувати у списках, пошуку й календарі. Лише для повнолітніх',
             value: _prefs.allowAdult,
             onChanged: (v) => _prefs.allowAdult = v,
           ),
           SizedBox(height: 22 * scale),
           SourcesSettings(scale: scale, registry: WatchService.instance.registry, heading: false),
           SizedBox(height: 22 * scale),
-          _title('Свій клієнт Hikka', hint: 'Необов’язково. У застосунку вже є вбудований клієнт для входу в акаунт; свій (його створюють на hikka.io, в налаштуваннях у розділі «Застосунки») знадобиться, якщо ключ вбудованого перестворили. Зміни діють при наступному вході.'),
-          AppSearchField(scale: scale, controller: _clientRef, icon: Symbols.badge_rounded, hint: 'Референс клієнта', onChanged: _clientChanged),
-          SizedBox(height: 10 * scale),
-          AppSearchField(scale: scale, controller: _clientSecret, icon: Symbols.key_rounded, hint: 'Ключ клієнта', onChanged: _clientChanged),
-          SizedBox(height: 22 * scale),
-          _title('Дані', hint: 'Каталог бере інформацію з hikka.io. Відповіді зберігаються на кілька хвилин, щоб сторінки відкривались швидко.'),
+          _title('Дані', hint: 'Оновлення даних каталогу та очищення кешу зображень'),
           Wrap(
             spacing: 10 * scale,
             runSpacing: 10 * scale,

@@ -270,13 +270,14 @@ class _HikkaTabEnterState extends State<HikkaTabEnter> with SingleTickerProvider
   }
 }
 
-/// Шапка, що закріплена на самому верху сторінки й ховається при прокрутці вмісту вниз. [header] лежить ПОВЕРХ
-/// [body] (як у YouTube) і лише зсувається вгору/вниз: вона не змінює ні розмір, ні позицію прокрутки вмісту, тож не
-/// додає прискорення чи зміщення. Щоб на самому верху вміст не опинявся під шапкою, списки всередині [body] лишають
-/// зверху відступ `AppHeaderInset.of(context)` (див. `HikkaPageFrame`, `HikkaPagedList`). Вкладені шапки (дні
-/// календаря в «Огляді») сидять під зовнішньою й ховаються разом із нею.
-/// Повертається шапка на самому верху сторінки або після помітного руху вгору: повільний рух рахується з меншою
-/// вагою, тож випадковий посмик її не показує. [resetOn] — значення, зміна якого знову показує шапку.
+/// Шапка «пливе» разом із прокруткою (як плаваюча панель): при прокрутці вниз її зсув дорівнює зсуву вмісту й вона
+/// їде вгору, а при русі вгору — на стільки ж виїжджає назад, у будь-якому місці сторінки, і прилипає до верху.
+/// Коли жест закінчено, шапка докочується до повністю видимої чи повністю схованої. [header] лежить ПОВЕРХ [body]
+/// і лише зсувається: розмір і позиція прокрутки вмісту не змінюються. Зверху вміст лишає відступ
+/// `AppHeaderInset.of(context)` (див. `HikkaPageFrame`, `HikkaPagedList`); поки вміст не прокручено повз цей відступ,
+/// шапка не може бути схованою глибше за прокрутку, тож порожнього місця на її позиції не з'являється.
+/// Вкладені шапки (дні календаря в «Огляді») сидять під зовнішньою й ховаються разом із нею.
+/// [resetOn] — значення, зміна якого знову показує шапку.
 class HikkaCollapsingHeader extends StatefulWidget {
   final Widget header;
   final Widget body;
@@ -289,21 +290,12 @@ class HikkaCollapsingHeader extends StatefulWidget {
 }
 
 class _HikkaCollapsingHeaderState extends State<HikkaCollapsingHeader> with SingleTickerProviderStateMixin {
-  /// Скільки пікселів треба проскролити вниз, щоб шапка сховалась, і вгору, щоб з'явилась («мертва зона»)
-  static const double _hideAfter = 24;
-  static const double _showAfter = 150;
-
-  /// Швидкість (px/мс), від якої рух угору враховується повністю; повільніший рахується з меншою вагою
-  static const double _fullSpeed = 1.2;
-  static const double _slowWeight = 0.3;
-
   final GlobalKey _headerKey = GlobalKey();
+
+  /// Видимість шапки 0…1: значення виставляється вручну за прокруткою, а після жесту докочується анімацією
   late final AnimationController _c = AnimationController(vsync: this, duration: AppAnim.medium, value: 1);
-  late final Animation<double> _factor = CurvedAnimation(parent: _c, curve: AppAnim.easeOut, reverseCurve: AppAnim.easeOut);
+  late final Animation<double> _factor = _c;
   double _height = 0;
-  double _acc = 0;
-  bool _shown = true;
-  Duration? _lastStamp;
 
   @override
   void initState() {
@@ -314,7 +306,7 @@ class _HikkaCollapsingHeaderState extends State<HikkaCollapsingHeader> with Sing
   @override
   void didUpdateWidget(HikkaCollapsingHeader old) {
     super.didUpdateWidget(old);
-    if (old.resetOn != widget.resetOn && !_shown) _setShown(true);
+    if (old.resetOn != widget.resetOn && _c.value < 1) _c.animateTo(1, curve: AppAnim.easeOut);
     WidgetsBinding.instance.addPostFrameCallback((_) => _measure());
   }
 
@@ -330,38 +322,25 @@ class _HikkaCollapsingHeaderState extends State<HikkaCollapsingHeader> with Sing
     if (h != null && (h - _height).abs() > 0.5) setState(() => _height = h);
   }
 
-  void _setShown(bool v) {
-    if (_shown == v) return;
-    _shown = v;
-    _acc = 0;
-    if (v) {
-      _c.forward();
-    } else {
-      _c.reverse();
-    }
-  }
+  /// Найменша видимість, за якої шапка ще закриває відступ над вмістом (поки вміст не прокручено повз нього)
+  double _minFactor(ScrollMetrics m) => _height <= 0 ? 0 : (1 - m.pixels / _height).clamp(0.0, 1.0);
 
   bool _onScroll(ScrollNotification n) {
-    if (n.metrics.axis != Axis.vertical || n is! ScrollUpdateNotification) return false;
-    final delta = n.scrollDelta ?? 0;
+    // Лише головна прокрутка сторінки: вкладений список (наприклад, команд у налаштуваннях) шапку не рухає
+    if (n.depth != 0 || n.metrics.axis != Axis.vertical || _height <= 0) return false;
     final m = n.metrics;
-    if (delta == 0) return false;
-    // Підписаний накопичувач із допуском: дрібні посмики назад не скидають рух, а лише зменшують його.
-    // Повільний рух угору враховується з меншою вагою: шапка з'являється пізніше, а різкий порух показує її швидко
-    var weight = 1.0;
-    final stamp = n.dragDetails?.sourceTimeStamp;
-    if (delta < 0 && stamp != null && _lastStamp != null) {
-      final dt = (stamp - _lastStamp!).inMicroseconds / 1000.0;
-      if (dt > 0) weight = ((-delta / dt) / _fullSpeed).clamp(_slowWeight, 1.0);
-    }
-    _lastStamp = stamp;
-    _acc = (_acc + delta * (delta < 0 ? weight : 1.0)).clamp(-_showAfter, _hideAfter);
-    if (m.pixels <= 1 && !_shown) {
-      _setShown(true);
-    } else if (_acc <= -_showAfter && !_shown) {
-      _setShown(true);
-    } else if (_acc >= _hideAfter && _shown && m.pixels > 24 && m.maxScrollExtent > _height) {
-      _setShown(false);
+    // Короткий вміст шапку не ховає: інакше її нічим було б повернути
+    if (m.maxScrollExtent <= _height) return false;
+    if (n is ScrollUpdateNotification) {
+      final delta = n.scrollDelta ?? 0;
+      if (delta == 0) return false;
+      // Нове значення задаємо напряму, тож поточна анімація докочування (якщо була) зупиняється
+      _c.value = (_c.value - delta / _height).clamp(_minFactor(m), 1.0);
+    } else if (n is ScrollEndNotification) {
+      final f = _c.value;
+      if (f > 0 && f < 1 && m.pixels > _height) {
+        _c.animateTo(f >= 0.5 ? 1.0 : 0.0, curve: AppAnim.easeOut);
+      }
     }
     return false;
   }

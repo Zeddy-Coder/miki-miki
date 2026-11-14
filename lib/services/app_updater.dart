@@ -168,6 +168,19 @@ class AppUpdater {
     return win.firstWhere((a) => has(a, 'win'), orElse: () => win.first);
   }
 
+  /// Версія, яку користувач попросив більше не пропонувати
+  String get skippedVersion => '${_data['skip'] ?? ''}';
+
+  void skip(String version) {
+    _data['skip'] = version;
+    try {
+      _save(_data);
+    } catch (_) {}
+  }
+
+  /// Чи варто показати вікно «Доступне оновлення»: версія новіша й її не пропустили
+  bool shouldPrompt(UpdateInfo info) => compareVersions(info.version, currentVersion) > 0 && skippedVersion != info.version;
+
   /// Перевіряє оновлення. `auto: true` — тиха перевірка, не частіше [autoEvery] і без показу помилок
   Future<void> check({bool auto = false}) {
     final running = _running;

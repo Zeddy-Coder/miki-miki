@@ -354,13 +354,11 @@ class _HikkaAnimePageState extends State<HikkaAnimePage> {
     final shown = _full ?? a;
     final pad = HikkaLayout.sidePad(context, scale);
     // Банер лише під постером і назвою (до рядка оцінок), а не під усією шапкою: до країв екрана й трохи вище, під панель
-    // Також лізе вгору під шапку-накладку: коли вона сховалась, на її місці не лишається порожнього тла
-    final inset = AppHeaderInset.of(context);
     Widget backdrop({double? height}) => Positioned(
           left: -pad,
           right: -pad,
-          top: -(4 * scale + inset),
-          height: height == null ? null : height + inset,
+          top: -4 * scale,
+          height: height,
           bottom: height == null ? -12 * scale : null,
           child: HikkaTitleBackdrop(anime: shown),
         );

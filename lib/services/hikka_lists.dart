@@ -256,16 +256,15 @@ class HikkaMyList extends ChangeNotifier {
 
   // ── Прогрес із плеєра ────────────────────────────────────────────
 
-  /// Яку серію вважати переглянутою у списку Hikka: номер із джерела, якщо він цілий і не більший за
-  /// кількість серій тайтлу (бувають наскрізні номери 13…24 для другого сезону), інакше — позиція серії
-  /// в черзі озвучки.
-  static int episodeNumber({double? number, required int position, int? total}) {
+  /// Яку серію вважати переглянутою у списку Hikka: номер серії з джерела (12-та серія — це 12), але не більше
+  /// за кількість серій тайтлу на Hikka («13 з 12» — відмічено 12). Якщо всі номери варіанта лежать за межами
+  /// тайтлу (наскрізна нумерація 13…24) або номера немає — [position], теж із стелею [total].
+  static int episodeNumber({double? number, required int position, int? total, bool trustNumber = true}) {
+    var r = position;
     final n = number;
-    if (n != null && n >= 1 && n == n.roundToDouble()) {
-      final i = n.toInt();
-      if (total == null || total <= 0 || i <= total) return i;
-    }
-    return position;
+    if (trustNumber && n != null && n >= 1 && n == n.roundToDouble()) r = n.toInt();
+    if (total != null && total > 0 && r > total) r = total;
+    return r < 1 ? 1 : r;
   }
 
   /// Серію [episode] тайтлу [slug] переглянуто. Додає тайтл у «Дивлюсь», піднімає лічильник серій і
@@ -283,7 +282,8 @@ class HikkaMyList extends ChangeNotifier {
 
   Future<void> _syncOne(String slug, int episode, int? total) async {
     try {
-      final old = await entry(slug);
+      // Свіжий запис: на сайті прогрес міг піти вперед, а за застарілим кешем ми б його занизили
+      final old = await entry(slug, refresh: true);
       if (old != null) {
         if (old.status == HikkaWatchStatus.completed) return;
         if (episode <= old.episodes && old.status == HikkaWatchStatus.watching) return;

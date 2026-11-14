@@ -86,4 +86,18 @@ void main() {
     await u.check();
     expect(calls, 2);
   });
+
+  test('вікно оновлення: пропущену версію більше не пропонує, а новішу — так', () async {
+    final store = <String, dynamic>{};
+    final u = make((_) async => (200, release('v1.2.0')), store: store);
+    await u.check();
+    final info = (u.state.value as UpdateAvailable).info;
+    expect(u.shouldPrompt(info), isTrue);
+    u.skip('1.2.0');
+    expect(u.shouldPrompt(info), isFalse);
+    // Пропуск переживає перезапуск
+    expect(make((_) async => throw 'x', store: store).shouldPrompt(info), isFalse);
+    expect(u.shouldPrompt(const UpdateInfo(version: '1.3.0', notes: '', pageUrl: 'p')), isTrue, reason: 'ще новіша версія знову пропонується');
+    expect(u.shouldPrompt(const UpdateInfo(version: '1.1.0', notes: '', pageUrl: 'p')), isFalse, reason: 'не новіша за поточну');
+  });
 }

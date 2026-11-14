@@ -145,6 +145,29 @@ void main() {
       expect(info.pageUrl, 'https://mikai.me/team/fanvoxua');
     });
 
+    test('список команд: запит без ключа, найпопулярніші першими, пошук за назвою', () async {
+      final site = FakeSite({
+        '/teams': const Resp('{"ok":true,"result":[{"id":2,"slug":"fanvoxua","name":"FanVoxUA"},{"id":121,"slug":"inari","name":"Inari"},{"id":9,"slug":"x","name":""}],"total":3}'),
+      });
+      final list = await MikaiSource(http: site.http).teams();
+      expect(list.map((t) => t.name), ['FanVoxUA', 'Inari'], reason: 'без назви відкидаються');
+      expect(list.last.id, 121);
+    });
+
+    test('усі команди: сторінки збираються докупи, зберігаються на диск і беруться звідти без мережі', () async {
+      final site = FakeSite({
+        'page=1': const Resp('{"ok":true,"pages":2,"result":[{"id":1,"slug":"a","name":"A","avatar":null}]}'),
+        'page=2': const Resp('{"ok":true,"pages":2,"result":[{"id":2,"slug":"b","name":"B"}]}'),
+      });
+      final first = await MikaiSource(http: site.http).allTeams(refresh: true);
+      expect(first.map((t) => t.name), ['A', 'B']);
+      expect(site.log.where((r) => '${r.url}'.contains('/teams')).length, 2, reason: 'обидві сторінки');
+      // Наступне читання: зі збереженого, мережі немає
+      final offline = FakeSite({});
+      expect((await MikaiSource(http: offline.http).allTeams()).map((t) => t.name), ['A', 'B']);
+      expect(offline.log, isEmpty);
+    });
+
     test('episodes: усі релізи, впорядковано за озвучкою й номером', () async {
       final site = FakeSite({'/anime/7601/player': fixture('mikai_player.json')});
       final eps = await MikaiSource(http: site.http).episodes(const SAnime(url: '7601', title: 'x'));

@@ -290,8 +290,8 @@ void main() {
       await settle(tester);
       expect(find.text('Команда А'), findsOneWidget);
       expect(find.text('Команда Б'), findsOneWidget);
-      expect(find.text('Озвучення · 3 з ? сер. · src'), findsOneWidget);
-      expect(find.text('Субтитри · 2 з ? сер. · src'), findsOneWidget);
+      expect(find.text('Озвучення · 1–3 сер. · src'), findsOneWidget);
+      expect(find.text('Субтитри · 1–2 сер. · src'), findsOneWidget);
 
       await tester.tap(find.text('Команда Б'));
       await settle(tester);
@@ -335,10 +335,10 @@ void main() {
       expect(find.text('Перемикається з того ж місця. Вибір запамʼятовується'), findsOneWidget);
       // Поточний варіант склеєний: пояснення над списком
       expect(find.textContaining('Тут 24 серій, а на Hikka їх лише 12.'), findsOneWidget);
-      expect(find.textContaining('не синхронізуватимуться з Hikka автоматично'), findsOneWidget);
-      expect(find.text('Озвучення · 24 з 12 сер. · src'), findsOneWidget);
-      expect(find.text('Озвучення · 12 з 12 сер. · src'), findsOneWidget);
-      expect(find.text('Озвучення · 7 з 12 сер. · src'), findsOneWidget);
+      expect(find.textContaining('передаватимуться на Hikka за номером серії'), findsOneWidget);
+      expect(find.text('Озвучення · 1–24 сер. · src'), findsOneWidget);
+      expect(find.text('Озвучення · 1–12 сер. · src'), findsOneWidget);
+      expect(find.text('Озвучення · 1–7 сер. · src'), findsOneWidget);
       // Жовта позначка біля склеєного й неповного, правильний варіант — без неї
       expect(warnIn('Склеєні'), findsOneWidget);
       expect(warnIn('Неповна'), findsOneWidget);

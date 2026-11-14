@@ -31,7 +31,7 @@ void main() {
     expect(t.getTopLeft(find.text('row 0')).dy, 128);
   });
 
-  testWidgets('шапка закріплена на верху сторінки й ховається при прокрутці вниз', (t) async {
+  testWidgets('шапка ховається при прокрутці вниз і повністю виїжджає назад угору', (t) async {
     await t.pumpWidget(app(items: 300));
     await t.pumpAndSettle();
     expect(hdrBottom(t), 120, reason: 'на верху сторінки шапка на місці');
@@ -40,17 +40,33 @@ void main() {
     expect(hdrBottom(t), lessThanOrEqualTo(0), reason: 'прокрутили вниз: шапка сховалась');
   });
 
-  testWidgets('шапка повертається після помітного руху вгору й на самому верху', (t) async {
+  testWidgets('шапка виїжджає в середині сторінки слідом за пальцем (1:1) і докочується', (t) async {
     await t.pumpWidget(app(items: 300));
     await t.pumpAndSettle();
     await t.drag(find.byType(ListView), const Offset(0, -600));
     await t.pumpAndSettle();
     final before = t.getTopLeft(find.text('row 12')).dy;
+    await t.drag(find.byType(ListView), const Offset(0, 50));
+    await t.pump();
+    final b = hdrBottom(t);
+    expect(b, inInclusiveRange(25, 70), reason: 'частково виїхала пропорційно руху');
+    await t.pumpAndSettle();
+    expect(hdrBottom(t), anyOf(120, lessThanOrEqualTo(0)), reason: 'після жесту докотилась до краю');
+    expect(t.getTopLeft(find.text('row 12')).dy - before, inInclusiveRange(30, 70), reason: 'вміст не штовхається шапкою');
     await t.drag(find.byType(ListView), const Offset(0, 220));
     await t.pumpAndSettle();
     expect(hdrBottom(t), 120);
-    final after = t.getTopLeft(find.text('row 12')).dy;
-    expect(after - before, inInclusiveRange(180, 260), reason: 'поява шапки не додає зміщення вмісту');
+  });
+
+  testWidgets('на початку сторінки шапка їде разом із вмістом без порожнього місця', (t) async {
+    await t.pumpWidget(app(items: 300));
+    await t.pumpAndSettle();
+    await t.drag(find.byType(ListView), const Offset(0, -50));
+    await t.pump();
+    final off = t.getTopLeft(find.text('row 0')).dy - 128; // скільки вмісту пішло вгору
+    expect(off, closeTo(-50, 2));
+    expect(hdrBottom(t), closeTo(120 + off, 2), reason: 'шапка зсунулась на стільки ж, нижче неї вміст без щілини');
+    // Повільне повернення до початку: шапка завжди прикриває відступ над вмістом
     await t.drag(find.byType(ListView), const Offset(0, -600));
     await t.pumpAndSettle();
     await t.fling(find.byType(ListView), const Offset(0, 4000), 4000);
@@ -58,14 +74,62 @@ void main() {
     expect(hdrBottom(t), 120, reason: 'на самому верху шапка завжди з\'являється');
   });
 
-  testWidgets('дрібний рух угору шапку не повертає', (t) async {
-    await t.pumpWidget(app(items: 300));
+  testWidgets('щілини немає на жодній позиції прокрутки: шапка закриває відступ над вмістом', (t) async {
+    final c = ScrollController();
+    await t.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: HikkaCollapsingHeader(
+          header: const SizedBox(key: ValueKey('hdr'), height: 120, child: Text('Шапка')),
+          body: Builder(
+            builder: (context) => ListView.builder(
+              controller: c,
+              padding: EdgeInsets.only(top: AppHeaderInset.of(context)),
+              itemCount: 300,
+              itemBuilder: (_, i) => SizedBox(height: 60, child: Text('row $i')),
+            ),
+          ),
+        ),
+      ),
+    ));
     await t.pumpAndSettle();
     await t.drag(find.byType(ListView), const Offset(0, -600));
     await t.pumpAndSettle();
-    await t.drag(find.byType(ListView), const Offset(0, 100));
+    for (var i = 0; i < 25; i++) {
+      await t.drag(find.byType(ListView), const Offset(0, 30));
+      await t.pump();
+      final gapEnd = 128 - c.offset; // де закінчується порожній відступ над першим рядком
+      if (gapEnd > 0) expect(hdrBottom(t) + 8, greaterThanOrEqualTo(gapEnd - 0.5), reason: 'на offset ${c.offset}');
+    }
+    c.dispose();
+  });
+
+  testWidgets('вкладений список усередині сторінки шапку не рухає', (t) async {
+    await t.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: HikkaCollapsingHeader(
+          header: const SizedBox(key: ValueKey('hdr'), height: 120, child: Text('Шапка')),
+          body: Builder(
+            builder: (context) => ListView(
+              padding: EdgeInsets.only(top: AppHeaderInset.of(context)),
+              children: [
+                SizedBox(
+                  key: const ValueKey('inner'),
+                  height: 300,
+                  child: ListView.builder(itemCount: 100, itemBuilder: (_, i) => SizedBox(height: 50, child: Text('inner $i'))),
+                ),
+                for (var i = 0; i < 30; i++) SizedBox(height: 60, child: Text('outer $i')),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ));
     await t.pumpAndSettle();
-    expect(hdrBottom(t), lessThanOrEqualTo(0));
+    expect(hdrBottom(t), 120);
+    await t.drag(find.byKey(const ValueKey('inner')), const Offset(0, -200));
+    await t.pumpAndSettle();
+    expect(find.text('inner 0').evaluate(), isEmpty, reason: 'вкладений список прокрутився');
+    expect(hdrBottom(t), 120, reason: 'шапка лишилась');
   });
 
   testWidgets('короткий вміст не ховає шапку (інакше її не повернути)', (t) async {
@@ -74,34 +138,6 @@ void main() {
     await t.drag(find.byType(ListView), const Offset(0, -300));
     await t.pumpAndSettle();
     expect(hdrBottom(t), 120);
-  });
-
-  testWidgets('повільний рух угору показує шапку пізніше, швидкий — раніше', (t) async {
-    await t.pumpWidget(app(items: 300));
-    await t.pumpAndSettle();
-    await t.drag(find.byType(ListView), const Offset(0, -600));
-    await t.pumpAndSettle();
-    expect(hdrBottom(t), lessThanOrEqualTo(0));
-    var g = await t.startGesture(const Offset(200, 300));
-    var ts = 0;
-    for (var i = 0; i < 40; i++) {
-      ts += 100;
-      await g.moveBy(const Offset(0, 6), timeStamp: Duration(milliseconds: ts));
-      await t.pump(const Duration(milliseconds: 10));
-    }
-    await g.up();
-    await t.pumpAndSettle();
-    expect(hdrBottom(t), lessThanOrEqualTo(0), reason: 'повільно: шапка ще прихована');
-    g = await t.startGesture(const Offset(200, 300));
-    ts = 0;
-    for (var i = 0; i < 9; i++) {
-      ts += 10;
-      await g.moveBy(const Offset(0, 20), timeStamp: Duration(milliseconds: ts));
-      await t.pump(const Duration(milliseconds: 5));
-    }
-    await g.up();
-    await t.pumpAndSettle();
-    expect(hdrBottom(t), 120, reason: 'швидко: шапка з\'явилась');
   });
 
   testWidgets('вкладена шапка сидить під зовнішньою', (t) async {
@@ -138,6 +174,8 @@ void main() {
     ));
     expect(find.byType(StretchingOverscrollIndicator), findsWidgets);
     expect(find.byType(GlowingOverscrollIndicator), findsNothing);
+    expect(find.byType(RawScrollbar), findsNothing, reason: 'смуги прокрутки в застосунку немає');
+    expect(find.byType(Scrollbar), findsNothing);
     c.dispose();
   });
 

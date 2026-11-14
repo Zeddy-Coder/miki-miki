@@ -5,7 +5,8 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import '../../services/source_prefs.dart';
 import '../../services/source_registry.dart';
-import '../../services/sources/anime_source.dart';
+import '../../services/storage_service.dart';
+import '../../services/sources/ua/mikai_source.dart';
 import '../../services/ui_theme_service.dart';
 import '../app_animation_kit.dart';
 import '../app_ui_kit.dart';
@@ -55,41 +56,174 @@ class SourcesSettings extends StatefulWidget {
 }
 
 class _SourcesSettingsState extends State<SourcesSettings> {
-  late final TextEditingController _key = TextEditingController(text: _prefs.mikaiKey);
-  late final TextEditingController _moonKey = TextEditingController(text: _prefs.moonKey);
-  Timer? _keyTimer;
+  late List<String> _priority = StorageService.getWatchTeamPriority();
+
+  /// Усі команди озвучення Mikai (зі збереженого на диску списку, оновлюється раз на добу)
+  List<MikaiTeam> _remote = const [];
+  bool _teamsLoading = true;
 
   double get _scale => widget.scale;
   SourcePrefs get _prefs => widget.registry.prefs;
 
   @override
   void dispose() {
-    _keyTimer?.cancel();
-    _commitKey();
-    _moonKey.dispose();
-    _key.dispose();
     super.dispose();
   }
 
-  void _keyChanged(String _) {
-    _keyTimer?.cancel();
-    _keyTimer = Timer(const Duration(milliseconds: 600), _commitKey);
+  @override
+  void initState() {
+    super.initState();
+    _loadTeams();
   }
 
-  void _commitKey() {
-    final v = _key.text.trim();
-    if (v != _prefs.mikaiKey) _prefs.mikaiKey = v;
-    final m = _moonKey.text.trim();
-    if (m != _prefs.moonKey) _prefs.moonKey = m;
+
+  Future<void> _loadTeams() async {
+    final mikai = widget.registry.all.whereType<MikaiSource>().firstOrNull;
+    if (mikai == null) {
+      setState(() => _teamsLoading = false);
+      return;
+    }
+    try {
+      final list = await mikai.allTeams();
+      if (!mounted) return;
+      setState(() {
+        _remote = list;
+        _teamsLoading = false;
+      });
+    } catch (_) {
+      // немає мережі й збереженого списку: лишаються знайомі команди й ручний ввід
+      if (mounted) setState(() => _teamsLoading = false);
+    }
   }
 
-  /// Підказка до сайту: порада й опис із самого джерела
-  String _hint(AnimeSource s) {
-    final lead = switch (s.id) {
-      'mikai' => 'Основне джерело: знає команди озвучення й серії. ',
-      _ => '',
-    };
-    return '$lead${s.about}'.trim();
+  void _setPriority(List<String> v) {
+    setState(() => _priority = v);
+    StorageService.saveWatchTeamPriority(v);
+  }
+
+
+  void _moveTeam(int i, int d) {
+    final j = i + d;
+    if (j < 0 || j >= _priority.length) return;
+    final l = [..._priority];
+    final x = l.removeAt(i);
+    l.insert(j, x);
+    _setPriority(l);
+  }
+
+  Widget _watchedBlock(double scale) {
+    final pct = StorageService.getWatchedPercent();
+    const options = [70, 80, 85, 90, 95, 100];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _title('Серія вважається переглянутою після', hint: 'Тоді ж прогрес передається на Hikka'),
+        AppSegmentedBar<int>(
+          scale: scale,
+          selectedValue: options.contains(pct) ? pct : 85,
+          options: [for (final o in options) AppSegmentOption(value: o, label: '$o%')],
+          onSelected: (v) => setState(() => StorageService.saveWatchedPercent(v)),
+        ),
+        SizedBox(height: 10 * scale),
+        HikkaToggleRow(
+          scale: scale,
+          title: 'Зараховувати за ендінґом',
+          subtitle: 'Якщо в озвучці є мітка ендінґу, серія вважається переглянутою з його початку',
+          value: StorageService.getWatchedByEnding(),
+          onChanged: (v) => setState(() => StorageService.saveWatchedByEnding(v)),
+        ),
+      ],
+    );
+  }
+
+  /// Аватарка команди за назвою (лише для команд Mikai)
+  String? _avatarOf(String name) {
+    final n = name.toLowerCase();
+    for (final t in _remote) {
+      if (t.name.toLowerCase() == n) return t.avatarUrl;
+    }
+    return null;
+  }
+
+  /// Усі відомі команди: з Mikai (за популярністю), знайомі з інших сайтів і вже додані вручну; без повторів
+  List<(String, String?)> get _allTeams {
+    final all = <(String, String?)>[
+      for (final t in _remote) (t.name, t.avatarUrl),
+      for (final t in StorageService.getKnownTeams()) (t, null),
+      for (final t in _priority) (t, null),
+    ];
+    final seen = <String>{};
+    return [for (final t in all) if (seen.add(t.$1.toLowerCase())) (t.$1, t.$2 ?? _avatarOf(t.$1))];
+  }
+
+  /// Додає команду в кінець пріоритету або прибирає, якщо вона вже там
+  void _toggleTeam(String name) {
+    final i = _priority.indexWhere((x) => x.toLowerCase() == name.toLowerCase());
+    _setPriority(i < 0 ? [..._priority, name] : ([..._priority]..removeAt(i)));
+  }
+
+  Widget _priorityBlock(double scale) {
+    Widget btn(IconData icon, String tip, VoidCallback? onTap) => IconButton(
+          tooltip: tip,
+          visualDensity: VisualDensity.compact,
+          iconSize: 20 * scale,
+          color: uiTheme.textMuted,
+          onPressed: onTap,
+          icon: Icon(icon),
+        );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _title('Пріоритет команд озвучення', hint: 'Зверху — найвищий пріоритет. Для кнопки «Дивитись» вибирається найвища команда, у якої є потрібна серія'),
+        HikkaToggleRow(
+          scale: scale,
+          title: 'Спершу повні озвучення',
+          subtitle: 'Озвучення без початку, без кінця чи з пропусками стоять нижче за повні незалежно від пріоритету',
+          value: StorageService.getPreferFullDub(),
+          onChanged: (v) => setState(() => StorageService.savePreferFullDub(v)),
+        ),
+        SizedBox(height: 10 * scale),
+        for (var i = 0; i < _priority.length; i++)
+          Padding(
+            padding: EdgeInsets.only(bottom: 4 * scale),
+            child: Row(
+              children: [
+                SizedBox(width: 24 * scale, child: Text('${i + 1}', style: hikkaStyle(12.5 * scale, color: uiTheme.textMuted))),
+                SizedBox(width: 34 * scale, child: HikkaPoster(url: _avatarOf(_priority[i]), scale: scale, aspect: 1, radius: 17, icon: Symbols.groups_rounded)),
+                SizedBox(width: 10 * scale),
+                Expanded(child: Text(_priority[i], style: hikkaStyle(13 * scale), overflow: TextOverflow.ellipsis)),
+                btn(Symbols.arrow_upward_rounded, 'Вище', i == 0 ? null : () => _moveTeam(i, -1)),
+                btn(Symbols.arrow_downward_rounded, 'Нижче', i == _priority.length - 1 ? null : () => _moveTeam(i, 1)),
+                btn(Symbols.close_rounded, 'Прибрати', () => _setPriority([..._priority]..removeAt(i))),
+              ],
+            ),
+          ),
+        SizedBox(height: 8 * scale),
+        Builder(builder: (context) {
+          final teams = _allTeams;
+          final chosen = {for (final t in teams) if (_priority.any((x) => x.toLowerCase() == t.$1.toLowerCase())) t.$1};
+          return AppSearchDropdown<String>(
+            scale: scale,
+            value: '',
+            multiSelected: chosen,
+            placeholder: _teamsLoading && teams.isEmpty ? 'Завантаження команд…' : 'Команди озвучення',
+            searchHint: 'Назва команди',
+            options: [
+              for (final t in teams)
+                AppDropdownOption<String>(
+                  value: t.$1,
+                  label: t.$1,
+                  leading: SizedBox(width: 28 * scale, child: HikkaPoster(url: t.$2, scale: scale, aspect: 1, radius: 14, icon: Symbols.groups_rounded)),
+                ),
+            ],
+            onChanged: _toggleTeam,
+            onAddCustom: (name) {
+              if (!_priority.any((x) => x.toLowerCase() == name.toLowerCase())) _setPriority([..._priority, name]);
+            },
+          );
+        }),
+      ],
+    );
   }
 
   Widget _title(String text, {String? hint}) {
@@ -118,19 +252,22 @@ class _SourcesSettingsState extends State<SourcesSettings> {
         builder: (context, _) => Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (widget.heading) _title('Сайти', hint: 'Де шукати українські озвучки й субтитри. Вимкнені сайти не опитуються.'),
-            for (final s in widget.registry.all) ...[
-              HikkaToggleRow(
-                scale: scale,
-                title: s.name,
-                subtitle: _hint(s),
-                value: _prefs.isEnabled(s.id),
-                onChanged: (v) => _prefs.setEnabled(s.id, v),
-              ),
-              SizedBox(height: 14 * scale),
+            // Перемикачі сайтів потрібні, лише коли джерел кілька (зараз є тільки Mikai)
+            if (widget.registry.all.length > 1) ...[
+              if (widget.heading) _title('Сайти', hint: 'Де шукати українські озвучки й субтитри. Вимкнені сайти не опитуються.'),
+              for (final s in widget.registry.all) ...[
+                HikkaToggleRow(
+                  scale: scale,
+                  title: s.name,
+                  subtitle: '${s.id == 'mikai' ? 'Основне джерело: знає команди озвучення й серії. ' : ''}${s.about}'.trim(),
+                  value: _prefs.isEnabled(s.id),
+                  onChanged: (v) => _prefs.setEnabled(s.id, v),
+                ),
+                SizedBox(height: 14 * scale),
+              ],
+              SizedBox(height: 8 * scale),
             ],
-            SizedBox(height: 8 * scale),
-            _title('Якість відео', hint: 'Автоматично вибирається не вище за цю. Змінити можна й під час перегляду.'),
+            _title('Максимальна якість відео', hint: 'Можна змінити й під час перегляду'),
             AppSegmentedBar<int>(
               scale: scale,
               selectedValue: _prefs.maxHeight,
@@ -138,7 +275,7 @@ class _SourcesSettingsState extends State<SourcesSettings> {
               onSelected: (v) => _prefs.maxHeight = v,
             ),
             SizedBox(height: 22 * scale),
-            _title('Плеєр за замовчуванням', hint: 'Де в серії є Moon, інші плеєри (Ashdi) не пропонуються. Якщо Moon немає, береться наявний.'),
+            _title('Плеєр за замовчуванням', hint: 'Якщо серія доступна в Moon, використовується він, інакше — інший наявний'),
             AppSegmentedBar<String>(
               scale: scale,
               selectedValue: SourcesDialog.hosters.contains(_prefs.hoster) ? _prefs.hoster : '',
@@ -146,23 +283,9 @@ class _SourcesSettingsState extends State<SourcesSettings> {
               onSelected: (v) => _prefs.hoster = v,
             ),
             SizedBox(height: 22 * scale),
-            _title('Ключ Mikai API', hint: 'Необов’язково. З ключем — 300 запитів на хвилину замість 60; без нього все працює.'),
-            AppSearchField(
-              scale: scale,
-              controller: _key,
-              icon: Symbols.key_rounded,
-              hint: 'Вставте ключ, якщо він є',
-              onChanged: _keyChanged,
-            ),
+            _watchedBlock(scale),
             SizedBox(height: 22 * scale),
-            _title('Свій ключ Moon API', hint: 'Необов’язково: за замовчуванням відео Moon беруться з офіційного API безкоштовним ключем зі служби застосунку. Свій ключ (наприклад, Premium) діятиме замість нього; при збої API — розбір сторінки плеєра.'),
-            AppSearchField(
-              scale: scale,
-              controller: _moonKey,
-              icon: Symbols.key_rounded,
-              hint: 'Premium-ключ MoonAnime (за потреби)',
-              onChanged: _keyChanged,
-            ),
+            _priorityBlock(scale),
             SizedBox(height: 4 * scale),
           ],
         ),

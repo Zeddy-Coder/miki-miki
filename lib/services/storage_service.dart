@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart' show ValueListenable, ValueNotifier;
+import 'package:flutter/foundation.dart' show ValueListenable, ValueNotifier, visibleForTesting;
 
 import '../constants/app_identity.dart';
 import '../utils/platform_info.dart';
@@ -218,6 +218,45 @@ class StorageService {
   static void saveHikkaShowSecondary(bool val) { _cache['hikka_show_secondary'] = val; _isDirty = true; }
   static String getHikkaSecondaryLang({String fallback = 'en'}) => _cache['hikka_secondary_lang'] as String? ?? fallback;
   static void saveHikkaSecondaryLang(String lang) { _cache['hikka_secondary_lang'] = lang; _isDirty = true; }
+
+  /// Пріоритет команд озвучення: назви (як на сайтах), найпотрібніша першою; за ними вибирається варіант за кнопкою «Дивитись»
+  static List<String> getWatchTeamPriority() => [for (final x in (_cache['watch_team_priority'] as List? ?? const [])) '$x'];
+  static void saveWatchTeamPriority(List<String> v) { _cache['watch_team_priority'] = v; _isDirty = true; }
+
+  /// Віддавати перевагу повним озвученням (з 1-ї серії, без пропусків і не коротшим за інші): у списку та за кнопкою
+  /// «Продовжити» вони вищі за неповні, хоч би де ті стояли в пріоритеті. Вимкнено — вирішує лише пріоритет команд
+  /// і те, чи є в озвученні потрібна серія
+  static bool getPreferFullDub({bool fallback = false}) => _cache['prefer_full_dub'] as bool? ?? fallback;
+  static void savePreferFullDub(bool v) { _cache['prefer_full_dub'] = v; _isDirty = true; }
+
+  /// Після якої частки серії (у відсотках) вона вважається переглянутою; за замовчуванням 85
+  static int getWatchedPercent({int fallback = 85}) => ((_cache['watched_percent'] as num?)?.toInt() ?? fallback).clamp(50, 100);
+  static void saveWatchedPercent(int v) { _cache['watched_percent'] = v.clamp(50, 100); _isDirty = true; }
+
+  /// Вважати серію переглянутою й раніше, коли дійшли до ендінґу (за мітками часу озвучки)
+  static bool getWatchedByEnding({bool fallback = true}) => _cache['watched_by_ending'] as bool? ?? fallback;
+  static void saveWatchedByEnding(bool v) { _cache['watched_by_ending'] = v; _isDirty = true; }
+
+  /// Команди озвучення, які застосунок уже бачив на сайтах (найновіші першими): з них у налаштуваннях можна обрати пріоритет
+  static List<String> getKnownTeams() => [for (final x in (_cache['known_teams'] as List? ?? const [])) '$x'];
+  @visibleForTesting
+  static void clearKnownTeams() { _cache.remove('known_teams'); }
+  static void rememberTeams(Iterable<String> names) {
+    final list = getKnownTeams();
+    var changed = false;
+    for (final raw in names) {
+      final n = raw.trim();
+      if (n.isEmpty) continue;
+      final i = list.indexWhere((x) => x.toLowerCase() == n.toLowerCase());
+      if (i == 0) continue;
+      if (i > 0) list.removeAt(i);
+      list.insert(0, n);
+      changed = true;
+    }
+    if (!changed) return;
+    _cache['known_teams'] = list.take(300).toList();
+    _isDirty = true;
+  }
 
   /// Показувати контент 18+ (хентай); за замовчуванням ні
   static bool getHikkaAllowAdult({bool fallback = false}) => _cache['hikka_allow_adult'] as bool? ?? fallback;

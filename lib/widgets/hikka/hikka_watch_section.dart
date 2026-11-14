@@ -1,8 +1,12 @@
+import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../../models/hikka_models.dart';
 import '../../services/episode_check.dart';
+import '../../services/hikka_lists.dart';
 import '../../services/hikka_nav.dart';
 import '../../services/hikka_prefs.dart';
 import '../../services/remote_playback.dart';
@@ -57,12 +61,21 @@ class _HikkaWatchSectionState extends State<HikkaWatchSection> {
     _load = memo is WatchLoad ? memo : _begin();
     _load.addListener(_changed);
     _store.addListener(_changed);
+    // Скільки серій відмічено на Hikka: «Дивитись» пропонує наступну після них
+    HikkaMyList.instance.addListener(_changed);
+    unawaited(HikkaMyList.instance.entry(widget.anime.slug, refresh: true).then((_) {}, onError: (_) {}));
   }
+
+  /// Скільки серій уже переглянуто (більше з історії застосунку й Hikka)
+  int get _seen => math.max(_hikkaEpisodes, _store.watched(_load.title.animeKey).length);
+
+  int get _hikkaEpisodes => HikkaMyList.instance.cached(widget.anime.slug)?.episodes ?? 0;
 
   @override
   void dispose() {
     _load.removeListener(_changed);
     _store.removeListener(_changed);
+    HikkaMyList.instance.removeListener(_changed);
     super.dispose();
   }
 
@@ -93,14 +106,23 @@ class _HikkaWatchSectionState extends State<HikkaWatchSection> {
   /// Звідки й з якою озвучкою почати: «Продовжити» або перша серія; `null` — поки нічого не знайдено
   ({WatchTitle title, WatchGroup group, ContinuePoint point})? _target() {
     final t = _load.title;
-    final g = _load.defaultGroup(_store);
+    final g = _load.defaultGroup(_store, seen: _seen);
     if (g == null) return null;
-    final point = continuePoint(episodeKeysOf(g), _store.watched(t.animeKey), _store.last(t.animeKey)?.epKey);
+    final point = continuePoint(episodeKeysOf(g), _store.watched(t.animeKey), _store.last(t.animeKey)?.epKey, hikkaEpisodes: _hikkaEpisodes);
     return (title: t, group: g, point: point);
   }
 
   Future<void> _play(WatchTitle t, WatchGroup g, String epKey) async {
     final a = widget.anime;
+    // Обрана вручну озвучка не має наступної серії: питаємо, куди перейти
+    final plan = _load.missingNext(_store, seen: _seen);
+    if (plan != null) {
+      final picked = await WatchDialogs.missingNext(context, scale: _scale, plan: plan, next: _seen + 1);
+      if (picked == null || !mounted) return;
+      _store.clearPinnedGroup(t.animeKey);
+      g = picked;
+      epKey = continuePoint(episodeKeysOf(g), _store.watched(t.animeKey), _store.last(t.animeKey)?.epKey, hikkaEpisodes: _hikkaEpisodes).epKey;
+    }
     final started = await WatchLauncher.play(
       RemoteLaunch(title: t, group: g, animeTitle: a.title(HikkaPrefs.instance.titleLang), epKey: epKey, poster: a.image, hikka: _load.hikka),
     );
@@ -162,9 +184,9 @@ class _HikkaWatchSectionState extends State<HikkaWatchSection> {
     if (groups.isEmpty) {
       play = AppAccentButton(scale: scale, solid: true, expand: true, icon: Symbols.play_arrow_rounded, label: 'Дивитись', onTap: _noTarget);
     } else {
-      final g = _load.defaultGroup(_store) ?? groups.first;
+      final g = _load.defaultGroup(_store, seen: _seen) ?? groups.first;
       final keys = episodeKeysOf(g);
-      final p = continuePoint(keys, _store.watched(t.animeKey), _store.last(t.animeKey)?.epKey);
+      final p = continuePoint(keys, _store.watched(t.animeKey), _store.last(t.animeKey)?.epKey, hikkaEpisodes: _hikkaEpisodes);
       final label = p.allWatched ? 'Дивитись знову' : '${p.started ? 'Продовжити' : 'Дивитись'} · серія ${episodeLabel(g.episodes[p.index], p.index)}';
       play = AppAccentButton(scale: scale, solid: true, expand: true, icon: Symbols.play_arrow_rounded, label: label, onTap: () => _play(t, g, p.epKey));
     }
@@ -403,12 +425,12 @@ class _HikkaWatchSectionState extends State<HikkaWatchSection> {
   // Основний вміст --------------------------------------------------------------
 
   Widget _content(WatchTitle t, List<WatchGroup> groups) {
-    final g = _load.defaultGroup(_store) ?? groups.first;
+    final g = _load.defaultGroup(_store, seen: _seen) ?? groups.first;
     final check = _load.checkOf(g);
     final scale = _scale;
     final keys = episodeKeysOf(g);
     final watched = _store.watched(t.animeKey);
-    final point = continuePoint(keys, watched, _store.last(t.animeKey)?.epKey);
+    final point = continuePoint(keys, watched, _store.last(t.animeKey)?.epKey, hikkaEpisodes: _hikkaEpisodes);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -436,6 +458,7 @@ class _HikkaWatchSectionState extends State<HikkaWatchSection> {
         final v = byId[id];
         if (v == null) return;
         _store.setPreferredGroup(t.animeKey, v.id);
+        _store.setPinnedGroup(t.animeKey, v.id);
         _store.setFavoriteChoice(choiceKeyOf(v));
       },
     );
@@ -448,7 +471,7 @@ class _HikkaWatchSectionState extends State<HikkaWatchSection> {
     final upd = v.updatedAt;
     final now = DateTime.now();
     final parts = [
-      '${check.summary} сер.',
+      '${v.coverage} сер.',
       if (upd != null) 'оновлено ${upd.day.toString().padLeft(2, '0')}.${upd.month.toString().padLeft(2, '0')}${upd.year != now.year ? '.${upd.year}' : ''}',
     ];
     return AppDropdownOption<String>(
@@ -591,7 +614,7 @@ class _HikkaWatchSectionState extends State<HikkaWatchSection> {
   /// Усе другорядне: серії, команда, джерела (з якістю й плеєром за замовчуванням), оновлення, сайт
   Future<void> _openMenu(WatchTitle t, List<WatchGroup> groups) async {
     final scale = _scale;
-    final g = groups.isEmpty ? null : (_load.defaultGroup(_store) ?? groups.first);
+    final g = groups.isEmpty ? null : (_load.defaultGroup(_store, seen: _seen) ?? groups.first);
     final offer = g == null ? null : t.offerOfGroup(g);
     final keys = g == null ? const <String>[] : episodeKeysOf(g);
     final seen = keys.where(_store.watched(t.animeKey).contains).length;
@@ -645,7 +668,7 @@ class _HikkaWatchSectionState extends State<HikkaWatchSection> {
             builder: (ctx3, _) {
               final keys = episodeKeysOf(g);
               final watched = _store.watched(t.animeKey);
-              final point = continuePoint(keys, watched, _store.last(t.animeKey)?.epKey);
+              final point = continuePoint(keys, watched, _store.last(t.animeKey)?.epKey, hikkaEpisodes: _hikkaEpisodes);
               return _episodes(t, g, keys, watched, point, onStart: () => Navigator.of(ctx).pop(), refresh: () => setDialog(() {}));
             },
           ),

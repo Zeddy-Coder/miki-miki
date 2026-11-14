@@ -13,7 +13,21 @@ import 'sources/source_http.dart';
 import 'sources/title_match.dart';
 import 'sources/ua/mikai_source.dart';
 import 'watch_models.dart';
+import 'storage_service.dart';
 import 'watch_store.dart';
+
+/// Що запропонувати, коли в обраній вручну озвучці немає наступної серії
+class MissingNext {
+  final WatchGroup pinned;
+
+  /// Перша за пріоритетом озвучка, де наступна серія є
+  final WatchGroup byPriority;
+
+  /// Повна озвучка з наступною серією, якщо вона інша, ніж [byPriority]
+  final WatchGroup? full;
+
+  const MissingNext({required this.pinned, required this.byPriority, this.full});
+}
 
 /// Хід завантаження для однієї сторінки аніме: пропозиції надходять у міру відповіді джерел
 class WatchLoad extends ChangeNotifier {
@@ -28,7 +42,10 @@ class WatchLoad extends ChangeNotifier {
   MikaiLicense? _license;
   bool _disposed = false;
 
-  WatchLoad({required this.animeKey, required this.hikka, required this.order});
+  /// Куди записувати, скільки серій у обраній озвучці (для «Нової серії» в «Продовжити перегляд»)
+  final WatchStore? store;
+
+  WatchLoad({required this.animeKey, required this.hikka, required this.order, this.store});
 
   WatchTitle get title => WatchTitle(
         animeKey: animeKey,
@@ -36,6 +53,7 @@ class WatchLoad extends ChangeNotifier {
         licensed: _licensed,
         license: _license,
         errors: Map.unmodifiable(_errors),
+        episodeLimit: (hikka.total ?? 0) > 0 ? hikka.total : null,
       );
 
   /// Джерела, які ще шукають
@@ -43,24 +61,89 @@ class WatchLoad extends ChangeNotifier {
 
   bool get busy => _pending.isNotEmpty;
 
+  @visibleForTesting
+  void addOfferForTest(WatchOffer o) => _offers.add(o);
+
   EpisodeCheck checkOf(WatchGroup g) => checkGroup(g, hikka);
 
-  /// Варіант за кнопкою «Дивитись» (див. [pickGroup]); `null`, поки нічого не знайдено
-  WatchGroup? defaultGroup(WatchStore store) {
+  /// Варіант за кнопкою «Дивитись»; `null`, поки нічого не знайдено.
+  ///
+  /// 1. Вручну обрана для тайтлу озвучка ([WatchStore.pinnedGroup]) — якщо в ній є наступна серія.
+  /// 2. Інакше автоматично ([_auto]): серед озвучок із наступною серією (за номером, а не за кількістю) — перша за
+  ///    пріоритетом команд, тож «Amanogawa 1–9» змінюється на «Далі Буде 10–19», щойно потрібна серія є лише там.
+  ///    З перемикачем [StorageService.getPreferFullDub] — спершу повні озвучки.
+  /// [seen] — скільки серій уже переглянуто (за історією чи Hikka).
+  WatchGroup? defaultGroup(WatchStore store, {int seen = 0}) {
     final groups = title.groups;
     if (groups.isEmpty) return null;
+    final pin = store.pinnedGroup(animeKey);
+    if (pin != null) {
+      for (final g in groups) {
+        if (g.id != pin) continue;
+        if (_tier(groups, seen).contains(g)) return g;
+      }
+    }
+    return _auto(store, seen);
+  }
+
+  /// Озвучки, з яких вибираємо: де є наступна серія, інакше де є хоч щось далі, інакше всі
+  List<WatchGroup> _tier(List<WatchGroup> groups, int seen) {
+    final withNext = [for (final g in groups) if (g.hasEpisode(seen + 1)) g];
+    if (withNext.isNotEmpty) return withNext;
+    final later = [for (final g in groups) if (g.hasEpisodeAfter(seen)) g];
+    return later.isNotEmpty ? later : groups;
+  }
+
+  WatchGroup _auto(WatchStore store, int seen, {bool? fullOnly}) {
+    final all = title.groups;
+    var groups = _tier(all, seen);
+    if (fullOnly ?? StorageService.getPreferFullDub()) {
+      final maxLast = maxEpisodeOf(all, limit: title.episodeLimit);
+      final full = [for (final g in groups) if (!g.isIncomplete(maxLast)) g];
+      if (full.isNotEmpty) groups = full;
+    }
     return pickGroup(
       groups,
-      preferredId: store.preferredGroup(animeKey),
       favorites: store.favoriteChoices,
+      priority: StorageService.getWatchTeamPriority(),
       safe: (g) => checkOf(g).syncSafe,
     );
+  }
+
+  /// Вручну обрана озвучка не має наступної серії, а в інших вона є: що запропонувати замість неї.
+  /// `null` — застерігати нема про що
+  MissingNext? missingNext(WatchStore store, {int seen = 0}) {
+    final pin = store.pinnedGroup(animeKey);
+    if (pin == null) return null;
+    final groups = title.groups;
+    final pinned = groups.where((g) => g.id == pin).firstOrNull;
+    if (pinned == null || pinned.hasEpisode(seen + 1)) return null;
+    if (!groups.any((g) => g.hasEpisode(seen + 1))) return null;
+    final byPriority = _auto(store, seen, fullOnly: false);
+    final full = _auto(store, seen, fullOnly: true);
+    return MissingNext(pinned: pinned, byPriority: byPriority, full: full.id == byPriority.id ? null : full);
   }
 
   @override
   void dispose() {
     _disposed = true;
     super.dispose();
+  }
+
+  /// Озвучка, яку людина обрала під час перегляду (інакше — обрана на сторінці): скільки в ній серій зараз
+  void _recordAvailability() {
+    final s = store;
+    if (s == null) return;
+    final last = s.last(animeKey)?.groupId ?? '';
+    final id = last.isNotEmpty ? last : s.preferredGroup(animeKey);
+    if (id == null || id.isEmpty) return;
+    for (final o in _offers) {
+      for (final g in o.groups) {
+        if (g.id != id) continue;
+        s.setAvailable(animeKey, g.id, g.teamLabel, g.lastNumber?.floor() ?? g.episodes.length);
+        return;
+      }
+    }
   }
 
   void _begin(String id) => _pending.add(id);
@@ -73,6 +156,10 @@ class WatchLoad extends ChangeNotifier {
         ..removeWhere((o) => o.source.id == id)
         ..add(offer)
         ..sort((a, b) => order.indexOf(a.source).compareTo(order.indexOf(b.source)));
+    }
+    if (offer != null) {
+      StorageService.rememberTeams([for (final g in offer.groups) ...(g.teams.isNotEmpty ? g.teams.map((t) => t.name) : [g.teamLabel])]);
+      _recordAvailability();
     }
     if (error != null) _errors[id] = error;
     if (licensed != null) {
@@ -125,7 +212,7 @@ class WatchService {
   /// Починає пошук у ввімкнених джерелах. Повертає одразу; підсумок поповнюється, а `WatchLoad` сповіщає.
   WatchLoad start(HikkaAnime a, {bool searchOthers = true}) {
     final sources = registry.enabled;
-    final load = WatchLoad(animeKey: keyOf(a), hikka: infoOf(a), order: registry.all);
+    final load = WatchLoad(animeKey: keyOf(a), hikka: infoOf(a), order: registry.all, store: store);
     for (final s in sources) {
       final isMikai = s is MikaiSource;
       if (!isMikai && !searchOthers) continue;
@@ -170,17 +257,11 @@ class WatchService {
         updatedAt: rel.updatedAt,
       ));
     }
-    // озвучення першими, а в межах виду — де серій більше
-    final indexed = groups.asMap().entries.toList()
-      ..sort((x, y) {
-        final k = (x.value.isSub ? 1 : 0).compareTo(y.value.isSub ? 1 : 0);
-        if (k != 0) return k;
-        final c = y.value.episodes.length.compareTo(x.value.episodes.length);
-        return c != 0 ? c : x.key.compareTo(y.key);
-      });
+    // порядок: пріоритет команд, озвучення першими, де серій більше, за алфавітом
+    final sorted = sortGroups(groups, priority: StorageService.getWatchTeamPriority(), fullFirst: StorageService.getPreferFullDub(), limit: (load.hikka.total ?? 0) > 0 ? load.hikka.total : null);
     load._done(
       m.id,
-      offer: WatchOffer(source: m, anime: anime, groups: [for (final e in indexed) e.value]),
+      offer: WatchOffer(source: m, anime: anime, groups: sorted),
       licensed: p.licensed,
       license: p.license,
     );

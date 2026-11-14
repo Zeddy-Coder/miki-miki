@@ -39,14 +39,15 @@
 - Орієнтація плеєра (телефон): `OrientationPolicy` (`services/orientation_policy.dart`) + налаштування `StorageService.getPlayerOrientation` (`PlayerOrientation`: system / landscape / portrait; «Налаштування → Відтворення → Орієнтація плеєра»). Поки відео на екрані (`!showHome`), діє налаштування; при виході на головну чи згортанні в міні-плеєр повертається те, що було до відкриття плеєра (`PlayerStateController._syncSystemUi` → `enterPlayer` / `leavePlayer`); кнопка повороту в плеєрі теж скидається при виході. `rotationLocked` — геттер політики.
 - Hikka API (`hikka_api.dart`): мережеві збої (`SocketException`, `HttpException`, TLS) повторюються до 3 спроб, тайм-аут і 5xx / 429 — до 2; після будь-якого збою транспорту спільний `HttpClient` відкидається (м'яке закриття: запити, що йдуть, доробляються, нові — на новому клієнті з чистим пулом з'єднань; мертві з'єднання з пулу давали «Немає зв'язку» через раз). Причина кожної спроби (`HikkaApi.describeError`: тип винятку, код ОС) і перевірка DNS після збою пишуться в `AppLog` (тег `hikka`).
 - Потік «Дивитись»: `WatchService.start(HikkaAnime)` → `WatchLoad` (ChangeNotifier: `title` — `WatchTitle` з `WatchOffer` на кожне джерело, `pending`, `busy`, `checkOf(group)`). Mikai шукається за slug Hikka (запасний шлях — MAL-id), решта сайтів — пошуком за назвами Hikka (`title_match.dart`: `bestAnimeMatch`; розбіжність сезону чи типу OVA / фільм різко знижує оцінку); знайдене запам’ятовує `WatchStore.setLink`. Серії групуються в `WatchGroup` (озвучення першими, далі субтитри; всередині — де серій більше). Налаштування — `SourcePrefs` (ввімкнені джерела, ключ API Mikai, бажана якість і плеєр), переглянуте й остання серія — `WatchStore`; обидва зберігаються розділами `StorageService.getSection/saveSection`. Варіант за кнопкою «Дивитись» — `WatchLoad.defaultGroup(store)` = `pickGroup(groups, preferredId: store.preferredGroup(animeKey), favorites: store.favoriteChoices, safe: checkOf(g).syncSafe)`: обраний (або останній переглянутий) для цього тайтлу → улюблена команда з інших тайтлів (`choiceKeyOf`: вид + id команд або `джерело:назва`; `WatchStore.setFavoriteChoice`, до 8, найновіші першими) → перший варіант без розбіжності нумерації → перший. Вибір людини завжди сильніший за «безпеку»: склеєний варіант («24 з 12») не нав'язується, але й не забороняється.
+- Вибір озвучення для «Дивитись / Продовжити» (`watch_service.dart`, `watch_models.dart`): `WatchLoad.defaultGroup(store, {seen})` — спершу озвучення, закріплене вручну для тайтла (`WatchStore.pinnedGroup`, ставиться з вибору в блоці «Дивитись» і `RemoteDriver.switchGroup`), якщо воно має серію `seen + 1`; далі групи, що мають цю серію; далі групи з пізнішими серіями; далі всі. У межах шару за `StorageService.getPreferFullDub` повні озвучення (`!WatchGroup.isPartial`) стоять вище, а далі діє пріоритет команд (`pickGroup`). `seen` = більше з відміток Hikka (`HikkaMyList.entry`, свіжий запит при «Дивитись») і історії застосунку. Якщо закріплена група не має наступної серії, `WatchLoad.missingNext(store, {seen})` повертає `MissingNext` (закріплена / наступна за пріоритетом / повна), а `WatchDialogs.missingNext` питає, куди перейти (вибір знімає закріплення). Охоплення серій для підписів — `WatchGroup.coverage` («1–5, 7–19»; `ranges({limit})` ігнорує зайві серії за `looksLikeExtra` і номери понад `WatchTitle.episodeLimit` = кількість серій на Hikka); `sortGroups(..., fullFirst, limit)`. Відмітка на Hikka: `HikkaMyList.episodeNumber({number, position, total, trustNumber})` — номер серії з плеєра, не більший за `total`; `RemoteDriver._syncToHikka` довіряє номеру, лише якщо мінімальний номер варіанта не перевищує `total` (інакше нумерація наскрізна й береться позиція).
 - Звірка з Hikka (`episode_check.dart`, `checkEpisodes(episodes, HikkaEpisodeInfo)`): рівні `match / unknown / lag / incomplete / lead / extra / mismatch`. Розбіжність нумерації — злиті частини («24 з 12»), наскрізна 13–24, повтори номерів, OVA посеред сезону, пропуски, кілька сезонів, серії без номерів — це `mismatch`: показати дисклеймер і не синхронізувати «переглянуто» з Hikka (`syncSafe == false`). OVA лише в кінці → `extra` із `syncLimit` (синхронізувати до цього номера). «0 з N» (сторінка є, серій немає) → `incomplete` / `lag`. `looksLikeExtra(name)` визнає OVA лише за позначкою на початку назви чи в дужках («Серія 12. Special Training» — звичайна серія).
-- Тести (`test/`; запуск: `flutter test test/sources_*_test.dart test/watch_services_test.dart test/watch_pick_test.dart test/track_defaults_test.dart test/hls_proxy_test.dart test/app_log_test.dart test/orientation_policy_test.dart test/player_diagnostics_test.dart test/remote_playback_test.dart test/remote_driver_test.dart test/hikka_core_test.dart test/identity_test.dart test/hikka_community_test.dart test/hikka_slate_test.dart test/home_services_test.dart test/hikka_franchise_test.dart test/hikka_markdown_test.dart test/touch_hide_timer_test.dart test/anime4k_test.dart`): детерміновані, без мережі (сторінки сайтів — `test/data/sources/*`, відповіді Hikka — `test/support/hikka_fakes.dart`). `sources_live_test.dart` ходить у справжні сайти (UFDub, Mikai, UAKino) лише з `LIVE=1` (транспорт застосунку; з `LIVE_CURL=1` — через `curl`, `test/support/curl_sender.dart`, для пісочниць без прямого `dart:io`). Драйвер перегляду — `remote_driver_test.dart` (`test/support/remote_fakes.dart`: `FakeEngine`, `FakeSource`, `Rig` — стенд із драйвером, сховищем у пам'яті й керованими плеєрами). Віджетні тести (`remote_ui_test.dart`, `hikka_watch_ui_test.dart`, `hikka_ui_test.dart` та інші з `loadTestFonts()` з `test/support/fakes.dart`) прив'язані до шляхів шрифтів середовища, де їх писали, і до теки користувача не потрапляють. `watch_pick_test.dart` — який варіант відкриває «Дивитись» (`pickGroup`, `choiceKeyOf`, улюблені); `track_defaults_test.dart` — мови доріжок (`LangMatch`) і автовибір субтитрів та звуку (`TrackDefaults`). `Rig` у `remote_fakes.dart` має параметр `subLangs` (пріоритет мов субтитрів). `app_log_test.dart` — журнал (рівні, згортання повторів, маскування, файл, ротація, звіт) і збереження у файл (`LogExport`); `orientation_policy_test.dart` — орієнтація плеєра; `player_diagnostics_test.dart` — `analyzeSync`. У `hikka_core_test.dart` — повтори мережевих збоїв. `identity_test.dart` — `AppIdentity` (назви, `userAgent`, перенос даних зі старої теки); `hikka_community_test.dart` — колекції й статті Hikka (моделі, `HikkaApi`, Slate, посилання); `hikka_slate_test.dart` — текст статей (`HikkaSlateView`): розмітка, списки, цитати, посилання (власний обробник, каталог, браузер), спойлери, картинки й перегляд на весь екран. `home_services_test.dart` — `HikkaText.compact`, `HikkaAiring.of`, `ContinueWatching`, `AniListBanners` / `TmdbBackdrops` / `BannerArt` (кеш, TTL, запасний пошук). `HikkaTestEnv` (`test/support/hikka_fakes.dart`) — готовий стенд для віджетних тестів Hikka: підмінює `HikkaApi` (`FakeHikka`), зображення, `HikkaPrefs`, `WatchService`, `BannerArt` (AniList віддає банер лише для парних MAL-id; TMDB без ключа) і `HikkaNav` (`opened` — записані зовнішні посилання); `dispose()` повертає все назад. Віджетні тести `hikka_ui_test.dart` (десктоп, банери, телефон, оболонка `HomeHub`, стани, вузьке вікно) і `mobile_test.dart` використовують його. `FakeHikka.interceptor` — власні відповіді поверх записаних; `HikkaTestEnv` підставляє `HikkaAuth` (гість, без локального сервера, браузер — лише журнал `opened`) і `HikkaMyList`. Акаунт: `hikka_auth_test.dart` (потік входу, локальний сервер, запасне вставлення адреси, токен, вихід), `hikka_lists_test.dart` (запис, збереження без втрати полів, улюблене, синхронізація прогресу), `hikka_lists_ui_test.dart` (вхід у вікні, «Списки» зі статусами, «Мій список» на сторінці аніме, профіль; `FakeAccountServer` — стан акаунта, що змінюється запитами); підроблений сервер входу й списків для сервісних тестів — `test/support/hikka_account_fakes.dart`.
+- Тести (`test/`; запуск: `flutter test test/sources_*_test.dart test/watch_services_test.dart test/watch_pick_test.dart test/continue_dub_test.dart test/update_prompt_test.dart test/track_defaults_test.dart test/hls_proxy_test.dart test/app_log_test.dart test/orientation_policy_test.dart test/player_diagnostics_test.dart test/remote_playback_test.dart test/remote_driver_test.dart test/hikka_core_test.dart test/identity_test.dart test/hikka_community_test.dart test/hikka_slate_test.dart test/home_services_test.dart test/hikka_franchise_test.dart test/hikka_markdown_test.dart test/touch_hide_timer_test.dart test/anime4k_test.dart`): детерміновані, без мережі (сторінки сайтів — `test/data/sources/*`, відповіді Hikka — `test/support/hikka_fakes.dart`). `sources_live_test.dart` ходить у справжні сайти (UFDub, Mikai, UAKino) лише з `LIVE=1` (транспорт застосунку; з `LIVE_CURL=1` — через `curl`, `test/support/curl_sender.dart`, для пісочниць без прямого `dart:io`). Драйвер перегляду — `remote_driver_test.dart` (`test/support/remote_fakes.dart`: `FakeEngine`, `FakeSource`, `Rig` — стенд із драйвером, сховищем у пам'яті й керованими плеєрами). Віджетні тести (`remote_ui_test.dart`, `hikka_watch_ui_test.dart`, `hikka_ui_test.dart` та інші з `loadTestFonts()` з `test/support/fakes.dart`) прив'язані до шляхів шрифтів середовища, де їх писали, і до теки користувача не потрапляють. `watch_pick_test.dart` — який варіант відкриває «Дивитись» (`pickGroup`, `choiceKeyOf`, улюблені); `track_defaults_test.dart` — мови доріжок (`LangMatch`) і автовибір субтитрів та звуку (`TrackDefaults`). `Rig` у `remote_fakes.dart` має параметр `subLangs` (пріоритет мов субтитрів). `app_log_test.dart` — журнал (рівні, згортання повторів, маскування, файл, ротація, звіт) і збереження у файл (`LogExport`); `orientation_policy_test.dart` — орієнтація плеєра; `player_diagnostics_test.dart` — `analyzeSync`. У `hikka_core_test.dart` — повтори мережевих збоїв. `identity_test.dart` — `AppIdentity` (назви, `userAgent`, перенос даних зі старої теки); `hikka_community_test.dart` — колекції й статті Hikka (моделі, `HikkaApi`, Slate, посилання); `hikka_slate_test.dart` — текст статей (`HikkaSlateView`): розмітка, списки, цитати, посилання (власний обробник, каталог, браузер), спойлери, картинки й перегляд на весь екран. `home_services_test.dart` — `HikkaText.compact`, `HikkaAiring.of`, `ContinueWatching`, `AniListBanners` / `TmdbBackdrops` / `BannerArt` (кеш, TTL, запасний пошук). `HikkaTestEnv` (`test/support/hikka_fakes.dart`) — готовий стенд для віджетних тестів Hikka: підмінює `HikkaApi` (`FakeHikka`), зображення, `HikkaPrefs`, `WatchService`, `BannerArt` (AniList віддає банер лише для парних MAL-id; TMDB без ключа) і `HikkaNav` (`opened` — записані зовнішні посилання); `dispose()` повертає все назад. Віджетні тести `hikka_ui_test.dart` (десктоп, банери, телефон, оболонка `HomeHub`, стани, вузьке вікно) і `mobile_test.dart` використовують його. `FakeHikka.interceptor` — власні відповіді поверх записаних; `HikkaTestEnv` підставляє `HikkaAuth` (гість, без локального сервера, браузер — лише журнал `opened`) і `HikkaMyList`. Акаунт: `hikka_auth_test.dart` (потік входу, локальний сервер, запасне вставлення адреси, токен, вихід), `hikka_lists_test.dart` (запис, збереження без втрати полів, улюблене, синхронізація прогресу), `hikka_lists_ui_test.dart` (вхід у вікні, «Списки» зі статусами, «Мій список» на сторінці аніме, профіль; `FakeAccountServer` — стан акаунта, що змінюється запитами); підроблений сервер входу й списків для сервісних тестів — `test/support/hikka_account_fakes.dart`.
 - Серії з сайтів у плеєрі: кнопки блоку «Дивитись» викликають `WatchLauncher.play(RemoteLaunch)` (`remote_playback.dart`); `PlayerScreen` підписується через `WatchLauncher.attach(state.openRemote)` (відписка в `dispose`) → `PlayerStateController.openRemote(launch)` → `RemoteDriver.start`. `RemoteDriver` (`lib/services/remote_driver.dart`) — чиста логіка без media_kit і віджетів: плеєр для нього — інтерфейс `RemoteEngine` (у застосунку `MpvRemoteEngine`, `remote_engine.dart`; у тестах `FakeEngine`). Фази `RemotePhase` (idle / resolving / opening / playing / failed). Посилання на потік шукається в момент відтворення (`StreamResolver`; живе кілька годин), місце початку передається опцією `Media.start`, позиція зберігається через `StorageService.savePlaybackPosition` (ключ запису `hikka:<slug>#<серія>`), «переглянуто» — за `episodeSeen` (≥ 85 % або ендінґ), автоперехід — за `StorageService.getAutoplayNext()`. Сторож запуску: 30 с (`openTimeout`) і 6 с після помилки mpv (`errorGrace`; помилки бувають дрібні) → наступний не пробований плеєр → «Не вдалося» з «Повторити»; якщо потік завис посеред перегляду — нове посилання з того ж місця (`_recover`, не частіше ніж раз на 30 с).
 - Чого не можна робити із серіями з сайтів: у mpv відкрите лише одне відео, тому в `player.playlist` лежать «синтетичні» елементи `remote://<ключ>` (щоб працювали черга, `currentPlaylistIndex` і заголовок) — `player.next()/previous()`, `reorderQueue` / `removeFromQueue` / `persistQueue` для них не викликати: «Наступна / Попередня» — це `PlayerStateController.playNext()/playPrevious()` (самі розрізняють файли й серії; їх передають у `BottomDock` / `MobileControls` через `onNext` / `onPrevious`), вибір серії — `selectEpisode(i)` (веде в драйвер). `currentFilePath` для серії = ключ запису; `SeekPreviewService.supports()` відхиляє адреси `схема://` (наведення на смужку не показує прев'ю потоку); `remote.stop()` викликають усі `open*` і `returnToHome`.
 - Інтерфейс серій: `RemoteStatusOverlay` (`widgets/remote_status_overlay.dart`: «Шукаю відео…», помилка з діями «Спробувати ще / Інший плеєр / Озвучки та плеєри / Наступна серія / Закрити»; під час стану на телефоні ховається перемотка — `MobileControls.showTransport`), `RemotePanelBody` (`widgets/remote_panel.dart`: вкладки «Серії» / «Озвучка» / «Плеєр» (плеєр і якість) — перемикання на льоту з того ж місця). Бічна панель і шторка на телефоні показують його замість черги файлів, коли `state.remote.active` (`SidePanel(remote:)`, `SidePanelDrawer(remote:)`); «Інформація» показує серію, озвучку й плеєр (адресу потоку не показуємо). Розділи беруться з таймкодів Moon (`chaptersFromTimestamps`), тож «Пропустити опенінг» працює звичайним `SkipButton`.
 - Блок «Дивитись» (`widgets/hikka/hikka_watch_section.dart`) стоїть під шапкою сторінки аніме (`HikkaAnimePage._top`: шапка → `_scores` (компактні оцінки) → `_watch()` → жанри → опис). Головна кнопка `_mainButton` — суцільна `AppAccentButton(solid, expand)`, видна з першої миті («Дивитись / Продовжити · серія N / Дивитись знову»), праворуч «⋮» (tooltip «Ще») → модалка `_openMenu`: «Серії» (модалка `_openEpisodes` із сіткою серій; тап запускає й закриває, утримання/права кнопка — позначка «переглянуто», понад 48 серій — «Показати всі»), «Про команду(и)», «Джерела, якість і плеєр» (`SourcesDialog`), «Оновити пошук», «Відкрити на сайті»; унизу — помилки/зауваження джерел (`_offerNotes`). Пошук ще нічого не дав → тап по головній кнопці: джерела вимкнено — модалка `WatchDialogs.noSources`, інакше підпис під кнопкою. Озвучку обирають перед стартом у випадному списку `AppDropdown` (`_variants`/`_option`: аватарка команди, назва, іконка виду, «N з M сер.», «оновлено ДД.ММ» з `WatchGroup.updatedAt`; жовтий — `episodeCheckWarns`); вибір → `WatchStore.setPreferredGroup` + `setFavoriteChoice`, так само перемикання в плеєрі. Під списком: `EpisodeNote` (лише за потреби), «З першої серії» й «Переглянуто N з M». Ліцензовано → картка «Ліцензовано в Україні» → «Все одно дивитись» → `WatchDialogs.confirmLicensed` (`_ack` лише на цей показ). Стан — `HikkaRoute.memo['watch']` (`WatchLoad`). Діалоги — `widgets/hikka/hikka_watch_dialogs.dart`.
 - Прокрутка й карусель (v34): `main.dart` → `_AppScrollBehavior` (на краю — `StretchingOverscrollIndicator`, як в Android 12+, а не світіння); `AppScrollbar`/усі `RawScrollbar` — `thumbVisibility: false` + згасання за ~0,9 с (на ПК `interactive`); `HikkaBannerCarousel` на вузьких екранах безкінечна (`_loops` віртуальних кіл, `_loopMode`, перецентрування в `_tick`), на широких — зі стрибком на початок; `AppDropdownOption` має `leading/title/subtitle/subtitleIcon` (розширений вигляд пункту), `AppAccentButton.solid` — головна дія сторінки.
-- Налаштування джерел перегляду — `SourcesDialog` (`widgets/hikka/sources_dialog.dart`): сайти, найбільша якість, плеєр за замовчуванням (Авто / Moon / Ashdi), ключ Mikai API; відкривається з блоку «Дивитись» (кнопка «Джерела») і з налаштувань каталогу (розділ «Перегляд»).
+- Налаштування джерел перегляду — `SourcesDialog` (`widgets/hikka/sources_dialog.dart`): найбільша якість, плеєр за замовчуванням (Авто / Moon / Ashdi), поріг «Серія вважається переглянутою після» і «Зараховувати за ендінґом», пріоритет команд озвучення (`StorageService.get/saveWatchTeamPriority`; список команд — випадний `AppSearchDropdown` у режимі `multiSelected` із пошуком і `onAddCustom`; команди беруться з `MikaiSource.allTeams()` + `StorageService.getKnownTeams()`) і перемикач «Спершу повні озвучення» (`getPreferFullDub`). Сайтів і ключів тут немає: перемикач сайтів зник (`SourceRegistry.isEnabled` ігнорує вимкнення єдиного джерела), ключі API та власний клієнт Hikka — у налаштуваннях, вкладка «Розробник». Відкривається з блоку «Дивитись» (кнопка «Джерела») і з налаштувань каталогу (розділ «Перегляд»).
 - Ще не зроблено для перегляду: обхід Cloudflare для UAKino (куки з прихованого WebView, як у Mihon / Aniyomi; у вікні «Джерела» вже є попередження), «репозиторії» (спершу домовитись із користувачем). Синхронізація «переглянуто» з Hikka вже є (правило «Акаунт Hikka»).
 - Субтитри й доріжки: libass на Android не має жодного системного шрифту — без власного він не малює субтитри взагалі, тому `assets/fonts/subtitle.ttf` (Liberation Sans, SIL OFL; текст ліцензії поруч) передається в `PlayerConfiguration(libassAndroidFont, libassAndroidFontName)` (`MpvConfig.androidSubtitleFontAsset` / `androidSubtitleFontName`); `MpvConfig.applySubtitleStyles` на Android НЕ виставляє `sub-font` і `sub-fonts-dir` (вони б перебили вбудований шрифт). Автовибір доріжок за мовою з налаштувань: `PlayerStateController._applyTrackDefaults` (на кожен новий перелік доріжок) → `TrackDefaults.plan` (`lib/services/track_defaults.dart`; мова — `LangMatch`, `lib/services/lang_match.dart`: мітка доріжки, а без неї її назва): перша мова зі списку «Пріоритет мов субтитрів / аудіодоріжок», повні субтитри перед «Signs & Songs», текстові перед PGS; «Автоматично завантажувати субтитри» вимкнено → субтитри вимикаються; ручний вибір (`setSubtitleTrack` / `setAudioTrack`) зупиняє автовибір до наступного файлу; при автовмиканні показується OSD «Субтитри». Зовнішні субтитри: перетягнути `.srt` / `.ass` / `.vtt` … на вікно (`handleDroppedFiles`) або «Додати файл субтитрів…» у меню субтитрів (`pickSubtitleFile`). Серії із сайтів автовибір контролера пропускає: їхні субтитри вмикає драйвер (`LangMatch.pickByLabel`). Змінилося: аудіодоріжка тепер вибирається за «Пріоритетом мов аудіодоріжок» (типово ja, uk, en), раніше це налаштування не діяло.
 - Гарячі клавіші: єдине джерело — `ShortcutCatalog.all` (`lib/services/shortcut_catalog.dart`); з нього працюють і обробник (`KeyboardShortcuts`), і довідка (`ShortcutsView`/`ShortcutsDialog`). Нова комбінація = запис у каталозі + замикання з тим самим id у `PlayerActions` (`_buildTable`). Схеми `KeyScheme.standard` / `KeyScheme.mpv` (`PlayerStateController.keyScheme`, зберігається в `StorageService`); комбінації, що різняться в схемах, мають `KeyScope`.
@@ -127,14 +128,14 @@
   - `copyWith()` р.957
   - `toBody()` р.1008
 
-### `lib/models/hikka_user_models.dart` (175 р.)
+### `lib/models/hikka_user_models.dart` (172 р.)
 Моделі акаунта Hikka: `HikkaWatchStatus` (watching «Дивлюсь», planned «У планах», completed «Переглянуто», onHold «Відкладено», dropped «Кинуто»; `api` — значення API, `label` — підпис, `fromApi`), `HikkaToken` (`secret`, `created`, `expiration`), `HikkaMe` (профіль без пошти; `toJson` для сховища), `HikkaWatchEntry` (`status`, `episodes`, `score`, `note`, `rewatches`, дати, `anime`; `copyWith`, `toArgs()` — повний запис для `PUT /watch/{slug}` без втрати полів), `HikkaWatchStats` (лічильники за статусами, `of(status)`, `total`).
 
 - **HikkaWatchStatus** (р.7)
 - **HikkaToken** (р.28)
 - **HikkaMe** (р.43)
 - **HikkaWatchEntry** (р.73)
-- **HikkaWatchStats** (р.149)
+- **HikkaWatchStats** (р.146)
 
 ### `lib/models/media_models.dart` (74 р.)
 Моделі даних (файли, історія, глави). `VolumeState` — гучність + mute одним значенням (для `PlayerStateController.volumeState`).
@@ -197,21 +198,21 @@
   - `clear()` р.207
   - `looksLikeShaderFailure()` р.214
 
-### `lib/services/app_diagnostics.dart` (252 р.)
+### `lib/services/app_diagnostics.dart` (256 р.)
 Глобальна діагностика: `AppDiagnostics.instance.install()` (помилки Flutter й асинхронні, життєвий цикл, зміни розмірів, повільні кадри >40 мс у вікні 5 с, памʼять / стан пристрою раз на 15 с), `logEnvironment()` (шапка звіту), `describeAudioRoute()`, `AppDiagnostics.build` (позначка збірки); `AppNavObserver` — відкриття / закриття діалогів і панелей.
 
 - **AppDiagnostics** (р.18)
   - `install()` р.42
-  - `logEnvironment()` р.71
+  - `logEnvironment()` р.65
   - `describeAudioRoute()` р.120
   - `didChangeAppLifecycleState()` р.134
-  - `didHaveMemoryPressure()` р.140
-  - `didChangeMetrics()` р.146
-- **AppNavObserver** (р.226)
-  - `didPush()` р.228
-  - `didPop()` р.233
-  - `didRemove()` р.238
-  - `didReplace()` р.243
+  - `didHaveMemoryPressure()` р.144
+  - `didChangeMetrics()` р.150
+- **AppNavObserver** (р.230)
+  - `didPush()` р.232
+  - `didPop()` р.237
+  - `didRemove()` р.242
+  - `didReplace()` р.247
 
 ### `lib/services/app_log.dart` (545 р.)
 Єдиний журнал: `AppLog.i/w/e/d(тег, текст)`, `AppLog.on`, `AppLog.instance` (`init(directory, detailed)`, `setDetailed`, `flushNow`, `files()`, `totalBytes()`, `clear()`, `sessionText()`, `previousSessionText()`, `buildReport(extra:)`, `environment`), `LogEntry` / `LogLevel`; кільце в памʼяті + файл сесії з ротацією, `AppLog.sanitize` (токени, ключі, паролі, cookie), згортання однакових рядків, `AppLog.stamp`, `AppLog.bytesLabel`. Не кидає винятків. Файли журналу — `miki_miki_<дата>_<час>.log` (`filePrefix`); під старою назвою (`legacyFilePrefix` = `my_player_`) теж читаються й ротуються (`_orderKey` сортує за часом сесії, а не за буквами).
@@ -252,15 +253,15 @@
 - **BannerArt** (р.173)
   - `load()` р.223
 
-### `lib/services/continue_watching.dart` (95 р.)
+### `lib/services/continue_watching.dart` (227 р.)
 «Продовжити перегляд»: `ContinueWatching.recent({store, limit})` — тайтли Hikka (ключ `hikka:<slug>` у `WatchStore`) з останньою відкритою серією, найновіші першими; `load({store, api, limit, allowAdult})` → `ContinueItem` (`anime`, `episodeKey`, `at`, `episodeLabel` «Серія 3» / «Сезон 2 · серія 5», `episodeShort` «С2 · Е5»): запити до Hikka йдуть паралельно, збійні, 18+ (без дозволу) і завершені, повністю переглянуті тайтли пропускаються; `episodeCaption` / `episodeShort` — підписи за ключем серії.
 
-- **ContinueItem** (р.11)
-- **ContinueWatching** (р.27)
-  - `episodeCaption()` р.34
-  - `episodeShort()` р.42
-  - `recent()` р.53
-  - `load()` р.69
+- **ContinueItem** (р.17)
+- **ContinueWatching** (р.51)
+  - `episodeCaption()` р.58
+  - `episodeShort()` р.66
+  - `recent()` р.77
+  - `load()` р.150
 
 ### `lib/services/episode_check.dart` (246 р.)
 Звірка серій варіанта з Hikka (див. правило «Звірка з Hikka»): `checkEpisodes(episodes, HikkaEpisodeInfo)` / `checkGroup` → `EpisodeCheck` (`level`, `count`, `expected`, `summary` «24 з 12», `note` — текст дисклеймера, `hasNote`, `isWarning`, `syncSafe`, `syncLimit`), `looksLikeExtra(name)`.
@@ -270,7 +271,7 @@
 - **EpisodeCheck** (р.53)
   - `mismatch()` р.145
   - `extraNote()` р.214
-  - `EpisodeCheck()` р.235
+  - `EpisodeCheck()` р.69
 
 ### `lib/services/hikka_api.dart` (639 р.)
 Клієнт api.hikka.io (див. правило про дані Hikka; запити акаунта — `auth: true`, токен у заголовку `auth`, див. правило «Акаунт Hikka»): `HikkaApi.instance`, підставний `sender` / `retryDelay` для тестів, `networkCalls`, `clearCache()`; `HikkaException(kind, …)` з українським `message` (мережа / не знайдено / сервер / відповідь). Транспорт `_IoTransport` відкидає `HttpClient` після збою (м'яке закриття) і перевіряє DNS; `HikkaApi.describeError(e)`; повтори: мережа до 3 спроб, тайм-аут і 5xx / 429 — до 2; усе пишеться в `AppLog` (тег `hikka`). Колекції й статті: `collections({contentType, sort: 'popular' | 'new', page, size, allowAdult})` (колекції 18+ відкидаються, якщо `allowAdult` вимкнено), `collection(reference)`, `articles({category, sort: 'new' | 'top', page, size})`, `article(slug)`; `User-Agent` — `AppIdentity.userAgent`.
@@ -364,18 +365,18 @@
   - `clear()` р.210
 - **HikkaImage** (р.258)
 
-### `lib/services/hikka_lists.dart` (196 р.)
+### `lib/services/hikka_lists.dart` (312 р.)
 Мої списки Hikka й прогрес із плеєра (правило «Акаунт Hikka»): `HikkaMyList` (ChangeNotifier; `instance`; кеш записів і улюбленого в памʼяті, скидається при вході/виході): `entry(slug)`, `cached`, `knows`, `save(slug, {status, episodes, score, total, anime})`, `remove`, `stats()`, `isFavourite`, `setFavourite`, `version`, `syncEpisode(slug, серія, {total})` (черга на тайтл, тихі збої), статичний `episodeNumber(number, position, total)`.
 
-- **HikkaMyList** (р.15)
-  - `entry()` р.74
-  - `save()` р.87
-  - `remove()` р.109
-  - `stats()` р.117
-  - `isFavourite()` р.128
-  - `setFavourite()` р.135
-  - `episodeNumber()` р.146
-  - `syncEpisode()` р.158
+- **HikkaMyList** (р.16)
+  - `entry()` р.186
+  - `save()` р.199
+  - `remove()` р.193
+  - `stats()` р.233
+  - `isFavourite()` р.244
+  - `setFavourite()` р.251
+  - `episodeNumber()` р.262
+  - `syncEpisode()` р.273
 
 ### `lib/services/hikka_markdown.dart` (613 р.)
 Розбір Markdown з Hikka у прості блоки (абзаци, списки, цитати, спойлери `:::spoiler`; посилання, жирний, курсив; HTML-сутності, нульова ширина): `HikkaMarkdown.parse` / `plain`, `HikkaMarkdown.classify(url)` → `HikkaLinkTarget` (аніме / персонаж каталогу чи зовнішнє посилання). Без Flutter — покрито тестами. `HikkaLinkKind` тепер ще й `collection` / `article`: `hikka.io/collections/<id>` і `hikka.io/articles/<slug>` відкриваються всередині застосунку.
@@ -589,27 +590,27 @@
 
 - **PlaylistService** (р.6)
 
-### `lib/services/remote_driver.dart` (564 р.)
+### `lib/services/remote_driver.dart` (569 р.)
 Драйвер перегляду серій із сайтів (чиста логіка; правило «Серії з сайтів у плеєрі»). `_markWatched` для `hikka:<slug>` ще й передає серію в списки Hikka (`_syncToHikka` → `HikkaMyList.syncEpisode`, правило «Акаунт Hikka»). `RemoteEngine` — що потрібно від плеєра (`openVideo(video, {start})`, `position`, `duration`, `playing`, `addSubtitle` / `addAudio`), `RemotePhase` (idle / resolving / opening / playing / failed). `RemoteDriver` (ChangeNotifier): `start(RemoteLaunch)`, `open(i, {hoster, height, startAt, saveCurrent})`, `next()` / `previous()`, `retry()`, `switchGroup` / `switchHoster` / `switchQuality`, `stop({save})`; події плеєра `onDuration`, `tick`, `onCompleted`, `onPlayerError`; стан: `phase`, `error`, `session`, `title`, `groupId`, `group`, `isSub`, `index`, `entry`, `stream`, `video`, `hoster`, `chapters`, `attempt`, `hasNext` / `hasPrevious`, `active`, `showsStatus` (екран стану поверх відео), `alternativeHoster`, `nowPlaying({withKind})`; зворотні виклики контролера `onEntry`, `onSession`, `onMessage`. Токен (`_token`) відсікає відповіді застарілих запитів; між запитом посилання й початком відео стоїть таймер-сторож; повторне відкриття серії, що закінчилась одразу після старту з середини, починає її спочатку. Також: `checkOf(group)` (звірка варіанта з Hikka за `RemoteLaunch.hikka`); `switchGroup` запам'ятовує вибір (`setPreferredGroup` для тайтлу + `setFavoriteChoice(choiceKeyOf(g))` для нових); зовнішні субтитри варіанта «Субтитри» вмикаються за мовою з налаштувань (`LangMatch.pickByLabel`, інʼєкція `subPriorities`), а не просто перша доріжка.
 
-- **RemoteEngine** (р.25)
-- **RemotePhase** (р.43)
-- **RemoteDriver** (р.60)
-  - `nowPlaying()` р.175
-  - `checkOf()` р.199
-  - `start()` р.202
-  - `open()` р.216
-  - `next()` р.237
-  - `previous()` р.243
-  - `retry()` р.250
-  - `switchGroup()` р.259
-  - `switchHoster()` р.280
-  - `switchQuality()` р.288
-  - `onDuration()` р.301
-  - `tick()` р.313
-  - `onCompleted()` р.323
-  - `onPlayerError()` р.348
-  - `stop()` р.376
+- **RemoteEngine** (р.26)
+- **RemotePhase** (р.44)
+- **RemoteDriver** (р.61)
+  - `nowPlaying()` р.176
+  - `checkOf()` р.200
+  - `start()` р.203
+  - `open()` р.213
+  - `next()` р.238
+  - `previous()` р.244
+  - `retry()` р.251
+  - `switchGroup()` р.260
+  - `switchHoster()` р.282
+  - `switchQuality()` р.290
+  - `onDuration()` р.303
+  - `tick()` р.315
+  - `onCompleted()` р.325
+  - `onPlayerError()` р.350
+  - `stop()` р.378
 
 ### `lib/services/remote_engine.dart` (54 р.)
 `MpvRemoteEngine implements RemoteEngine` — міст між драйвером і media_kit: `openVideo` відкриває `Media(url, httpHeaders:, start:)` (заголовки й місце початку — до завантаження, без «стрибка»), `addSubtitle` / `addAudio` — команди mpv `sub-add` / `audio-add` (мова коротким кодом, довільний підпис іде в назву). Приймає `Player` і функцію команд mpv (`PlayerStateController.mpv`); імпортує media_kit лише `show Media, Player` (інакше `Track` / `Video` конфліктують з `source_models.dart`).
@@ -619,14 +620,14 @@
   - `addSubtitle()` р.40
   - `addAudio()` р.44
 
-### `lib/services/remote_playback.dart` (138 р.)
+### `lib/services/remote_playback.dart` (139 р.)
 Чиста логіка відтворення серій із сайтів: `chaptersFromTimestamps(stamps, total)` (розділи з таймкодів Moon; проміжки — розділи «Episode», що не пропонуються до пропуску), `episodeSeen(position, total, stamps)` (≥ 85 % або дійшли до ендінґа), `RemoteLaunch` (озвучка, серія, назва, постер → `session`, `startIndex`) і `WatchLauncher` (`attach` / `detach` / `play`) — міст між сторінками застосунку й плеєром. `RemoteLaunch.hikka` (`HikkaEpisodeInfo?`) — що Hikka каже про кількість серій: за цим плеєр показує, де нумерація може не збігатися.
 
-- **RemoteLaunch** (р.78)
-- **WatchLauncher** (р.118)
-  - `attach()` р.123
-  - `detach()` р.125
-  - `play()` р.132
+- **RemoteLaunch** (р.79)
+- **WatchLauncher** (р.119)
+  - `attach()` р.124
+  - `detach()` р.126
+  - `play()` р.133
 
 ### `lib/services/seek_preview_service.dart` (298 р.)
 Прев'ю для перемотки: окремий «безголовий» плеєр робить малі кадри під курсором на смужці прогресу, кеш по «кошиках» часу. Плеєр звільняється після 30 с простою (кадри в кеші лишаються), `supports()` запам'ятовує перевірку файлу. Лог [SeekPrev].
@@ -663,12 +664,12 @@
   - `hoster()` р.66
   - `heightLabel()` р.68
 
-### `lib/services/source_registry.dart` (71 р.)
+### `lib/services/source_registry.dart` (68 р.)
 Реєстр джерел: `SourceRegistry.standard()` (Mikai, UFDub, UAKino зі спільним `SourceHttp`), `all`, `enabled`, `byId`, `mikai`; ключ Mikai підхоплюється з `SourcePrefs`. `SourceRegistry.instance`.
 
-- **SourceRegistry** (р.14)
-  - `byId()` р.59
-  - `isEnabled()` р.68
+- **SourceRegistry** (р.12)
+  - `byId()` р.55
+  - `isEnabled()` р.65
 
 ### `lib/services/sources/anime_source.dart` (94 р.)
 Контракт джерела (`AnimeSource`: `id`, `name`, `lang`, `baseUrl`, `about`, `supportsLatest`, `nsfw`; `popular / latest / search / details / episodes / hosters / hosterVideos / videos`, `animeWebUrl`) і база для сайтів на HTML (`HttpAnimeSource`: `absoluteUrl`, `urlWithoutDomain`, `document`, `parseList`).
@@ -768,38 +769,38 @@ HTTP для джерел: `SourceHttp` (`get`, `postForm`, ручні редир
 - **_Norm** (р.34)
 - **TitleMatch** (р.98)
 
-### `lib/services/sources/ua/mikai_source.dart` (475 р.)
+### `lib/services/sources/ua/mikai_source.dart` (547 р.)
 Mikai (api.mikai.me/public/v1, без ключа 60 запитів/хв; ключ — заголовок `X-API-Key`): каталог (`popular` / `latest` / `search`), `byHikka(slug)` / `byMal(id)`, `player(anime)` → `MikaiPlayer` (релізи `MikaiRelease` по командах `MikaiTeam`, озвучення чи субтитри, `licensed` + `MikaiLicense`), `episodesOfRelease(release)` (серії лише з підтримуваними плеєрами; `voice` = підпис релізу), `teamInfo(team)` (опис і посилання команди). Кеш відповідей з TTL, 429 → `rateLimited`. `User-Agent` — `AppIdentity.userAgent`.
 
-- **MikaiTeam** (р.14)
-- **MikaiTeamInfo** (р.24)
-- **MikaiEmbed** (р.50)
-- **MikaiEpisode** (р.57)
-- **MikaiRelease** (р.70)
-- **MikaiLicense** (р.98)
-- **MikaiPlayer** (р.105)
-- **_Cached** (р.113)
-- **MikaiSource** (р.119)
-  - `clearCache()` р.146
-  - `api()` р.148
-  - `animeFromJson()` р.225
-  - `teamFromJson()` р.258
-  - `playerFromJson()` р.267
-  - `popular()` р.345
-  - `latest()` р.348
-  - `search()` р.351
-  - `details()` р.354
-  - `byHikka()` р.362
-  - `byMal()` р.375
-  - `animeWebUrl()` р.387
-  - `teamInfo()` р.391
-  - `player()` р.417
-  - `episodesOfRelease()` р.433
-  - `flatten()` р.453
-  - `episodes()` р.456
-  - `hosters()` р.467
-  - `hosterVideos()` р.470
-  - `videos()` р.474
+- **MikaiTeam** (р.15)
+- **MikaiTeamInfo** (р.25)
+- **MikaiEmbed** (р.51)
+- **MikaiEpisode** (р.58)
+- **MikaiRelease** (р.71)
+- **MikaiLicense** (р.99)
+- **MikaiPlayer** (р.106)
+- **_Cached** (р.114)
+- **MikaiSource** (р.120)
+  - `clearCache()` р.147
+  - `api()` р.149
+  - `animeFromJson()` р.226
+  - `teamFromJson()` р.259
+  - `playerFromJson()` р.268
+  - `popular()` р.346
+  - `latest()` р.349
+  - `search()` р.352
+  - `details()` р.355
+  - `byHikka()` р.363
+  - `byMal()` р.376
+  - `animeWebUrl()` р.388
+  - `teamInfo()` р.463
+  - `player()` р.489
+  - `episodesOfRelease()` р.505
+  - `flatten()` р.525
+  - `episodes()` р.528
+  - `hosters()` р.539
+  - `hosterVideos()` р.542
+  - `videos()` р.546
 
 ### `lib/services/sources/ua/uakino_source.dart` (258 р.)
 UAKino (uakino.best, DLE): список / пошук, сторінка аніме, плейлист серій AJAX `playlists.php` (озвучки через `data-voice`), серіали Ashdi (JSON «озвучка → сезон → серія»), одиночні фільми з `iframe#pre`. За Cloudflare з деяких IP відповідає блокуванням (потрібне проходження перевірки в WebView — ще не зроблено); перевірено лише на збережених сторінках.
@@ -834,108 +835,108 @@ UFDub (ufdub.com, DLE): список / пошук POST-формою, сторі�
   - `episodes()` р.210
   - `videos()` р.221
 
-### `lib/services/storage_service.dart` (384 р.)
+### `lib/services/storage_service.dart` (461 р.)
 Збереження налаштувань, історії, позицій відтворення, черги й плейлистів. Ключі Anime4K: `getAnime4kEnabled/Mode/Quality/SkipHeight` + `save…`; схема клавіш: `getKeyScheme/saveKeyScheme`; `getHwdec()` за замовчуванням бере `AppPlatform.defaultHwdec`. Файл стану: Windows — `%APPDATA%/MikiMiki`, Android — `files/MikiMiki` (правило «Назва застосунку»). Каталог Hikka: `getHikkaTitleLang/saveHikkaTitleLang` (мова назв: ua / en / ja), `getHikkaAllowAdult/saveHikkaAllowAdult` (18+, типово вимкнено). Розділи для даних джерел перегляду: `getSection(key)` / `saveSection(key, map)` (типи `SectionLoader` / `SectionSaver`); їх використовують `SourcePrefs` і `WatchStore`. `getPlayerOrientation` / `savePlayerOrientation` ('system' | 'landscape' | 'portrait'), `getDetailedLog` / `saveDetailedLog` (типово true). Перейменування: теки даних — `AppIdentity.dataDirName` (`_basePathFor`), на ПК при старті `AppIdentity.migrateLegacyData` переносить `MyPlayerFork` → `MikiMiki`. Банери: `getTmdbKey` / `saveTmdbKey` (ключ TheMovieDB; запасне значення — `--dart-define=TMDB_KEY`). Приховане: `getLocalLibrary` / `saveLocalLibrary` / `localLibraryListenable` (локальна медіатека). Кнопки перемотки на телефоні: `getMobileSeekButtons/saveMobileSeekButtons` (ключ `mobile_seek_buttons`, типово true; вимикач у Налаштування → Відтворення, `MobileControls.seekButtons`). Затримка звуку твору: `getAudioDelay/saveAudioDelay(key, ms)` (мапа `audio_delays`, нуль видаляє запис).
 
 - **SectionLoader** (р.10)
 - **SectionSaver** (р.11)
 - **StorageService** (р.13)
   - `init()` р.19
-  - `flush()` р.69
-  - `getPlaybackPosition()` р.79
-  - `savePlaybackPosition()` р.84
-  - `getSection()` р.97
-  - `saveSection()` р.102
-  - `getTmdbKey()` р.110
-  - `saveTmdbKey()` р.112
-  - `getLocalLibrary()` р.116
-  - `saveLocalLibrary()` р.117
-  - `getThemeMode()` р.129
-  - `saveThemeMode()` р.130
-  - `getAccentColorHex()` р.132
-  - `saveAccentColorHex()` р.133
-  - `getUiRadius()` р.135
-  - `saveUiRadius()` р.136
-  - `getAutoplayNext()` р.139
-  - `saveAutoplayNext()` р.140
-  - `getDefaultPlaybackSpeed()` р.142
-  - `saveDefaultPlaybackSpeed()` р.143
-  - `getSeekStep()` р.145
-  - `saveSeekStep()` р.146
-  - `getSeekButtons()` р.148
-  - `saveSeekButtons()` р.149
-  - `getDoubleTapSeek()` р.151
-  - `saveDoubleTapSeek()` р.152
-  - `getHoldToSpeedEnabled()` р.154
-  - `saveHoldToSpeedEnabled()` р.155
-  - `getHoldToSpeedRate()` р.157
-  - `saveHoldToSpeedRate()` р.158
-  - `getAutoSkipChapters()` р.160
-  - `saveAutoSkipChapters()` р.161
-  - `getAnime4kEnabled()` р.164
-  - `saveAnime4kEnabled()` р.165
-  - `getAnime4kMode()` р.168
-  - `saveAnime4kMode()` р.169
-  - `getAnime4kQuality()` р.172
-  - `saveAnime4kQuality()` р.173
-  - `getAnime4kSkipHeight()` р.176
-  - `saveAnime4kSkipHeight()` р.177
-  - `getHikkaTitleLang()` р.181
-  - `saveHikkaTitleLang()` р.182
-  - `getHikkaAllowAdult()` р.185
-  - `saveHikkaAllowAdult()` р.186
-  - `getKeyScheme()` р.190
-  - `saveKeyScheme()` р.191
-  - `getHwdec()` р.194
-  - `saveHwdec()` р.195
-  - `getVolume()` р.197
-  - `saveVolume()` р.198
-  - `getSpeed()` р.200
-  - `saveSpeed()` р.201
-  - `getPitchCorrection()` р.203
-  - `savePitchCorrection()` р.204
-  - `getPlayerOrientation()` р.207
-  - `savePlayerOrientation()` р.208
-  - `getDetailedLog()` р.211
-  - `saveDetailedLog()` р.212
-  - `getDefaultAudioLang()` р.214
-  - `saveDefaultAudioLang()` р.215
-  - `getAudioLangPriorities()` р.217
-  - `saveAudioLangPriorities()` р.225
-  - `getSubLangPriorities()` р.232
-  - `saveSubLangPriorities()` р.241
-  - `getDefaultSubLang()` р.247
-  - `saveDefaultSubLang()` р.248
-  - `getSubFont()` р.250
-  - `saveSubFont()` р.251
-  - `getSubFontSize()` р.253
-  - `saveSubFontSize()` р.254
-  - `getSubTextColor()` р.256
-  - `saveSubTextColor()` р.257
-  - `getSubBorderSize()` р.259
-  - `saveSubBorderSize()` р.260
-  - `getSubBorderColor()` р.262
-  - `saveSubBorderColor()` р.263
-  - `getSubShadowOffset()` р.265
-  - `saveSubShadowOffset()` р.266
-  - `getSubMarginY()` р.268
-  - `saveSubMarginY()` р.269
-  - `getSubBgOpacity()` р.271
-  - `saveSubBgOpacity()` р.272
-  - `getSubAssMode()` р.274
-  - `saveSubAssMode()` р.275
-  - `getCustomFonts()` р.277
-  - `addCustomFont()` р.278
-  - `getRecentFiles()` р.287
-  - `addRecentFile()` р.288
-  - `clearRecentFiles()` р.297
-  - `getLastQueue()` р.315
-  - `saveLastQueue()` р.324
-  - `clearLastQueue()` р.331
-  - `getPlaylists()` р.338
-  - `createPlaylist()` р.361
-  - `updatePlaylist()` р.370
-  - `deletePlaylist()` р.381
+  - `flush()` р.75
+  - `getPlaybackPosition()` р.103
+  - `savePlaybackPosition()` р.108
+  - `getSection()` р.121
+  - `saveSection()` р.126
+  - `getTmdbKey()` р.134
+  - `saveTmdbKey()` р.136
+  - `getLocalLibrary()` р.140
+  - `saveLocalLibrary()` р.141
+  - `getThemeMode()` р.153
+  - `saveThemeMode()` р.154
+  - `getAccentColorHex()` р.156
+  - `saveAccentColorHex()` р.157
+  - `getUiRadius()` р.159
+  - `saveUiRadius()` р.160
+  - `getAutoplayNext()` р.163
+  - `saveAutoplayNext()` р.164
+  - `getDefaultPlaybackSpeed()` р.166
+  - `saveDefaultPlaybackSpeed()` р.167
+  - `getSeekStep()` р.169
+  - `saveSeekStep()` р.170
+  - `getSeekButtons()` р.172
+  - `saveSeekButtons()` р.173
+  - `getDoubleTapSeek()` р.179
+  - `saveDoubleTapSeek()` р.180
+  - `getHoldToSpeedEnabled()` р.182
+  - `saveHoldToSpeedEnabled()` р.183
+  - `getHoldToSpeedRate()` р.185
+  - `saveHoldToSpeedRate()` р.186
+  - `getAutoSkipChapters()` р.188
+  - `saveAutoSkipChapters()` р.189
+  - `getAnime4kEnabled()` р.196
+  - `saveAnime4kEnabled()` р.197
+  - `getAnime4kMode()` р.200
+  - `saveAnime4kMode()` р.201
+  - `getAnime4kQuality()` р.204
+  - `saveAnime4kQuality()` р.205
+  - `getAnime4kSkipHeight()` р.208
+  - `saveAnime4kSkipHeight()` р.209
+  - `getHikkaTitleLang()` р.213
+  - `saveHikkaTitleLang()` р.214
+  - `getHikkaAllowAdult()` р.262
+  - `saveHikkaAllowAdult()` р.263
+  - `getKeyScheme()` р.267
+  - `saveKeyScheme()` р.268
+  - `getHwdec()` р.271
+  - `saveHwdec()` р.272
+  - `getVolume()` р.274
+  - `saveVolume()` р.275
+  - `getSpeed()` р.277
+  - `saveSpeed()` р.278
+  - `getPitchCorrection()` р.280
+  - `savePitchCorrection()` р.281
+  - `getPlayerOrientation()` р.284
+  - `savePlayerOrientation()` р.285
+  - `getDetailedLog()` р.288
+  - `saveDetailedLog()` р.289
+  - `getDefaultAudioLang()` р.291
+  - `saveDefaultAudioLang()` р.292
+  - `getAudioLangPriorities()` р.294
+  - `saveAudioLangPriorities()` р.302
+  - `getSubLangPriorities()` р.309
+  - `saveSubLangPriorities()` р.318
+  - `getDefaultSubLang()` р.324
+  - `saveDefaultSubLang()` р.325
+  - `getSubFont()` р.327
+  - `saveSubFont()` р.328
+  - `getSubFontSize()` р.330
+  - `saveSubFontSize()` р.331
+  - `getSubTextColor()` р.333
+  - `saveSubTextColor()` р.334
+  - `getSubBorderSize()` р.336
+  - `saveSubBorderSize()` р.337
+  - `getSubBorderColor()` р.339
+  - `saveSubBorderColor()` р.340
+  - `getSubShadowOffset()` р.342
+  - `saveSubShadowOffset()` р.343
+  - `getSubMarginY()` р.345
+  - `saveSubMarginY()` р.346
+  - `getSubBgOpacity()` р.348
+  - `saveSubBgOpacity()` р.349
+  - `getSubAssMode()` р.351
+  - `saveSubAssMode()` р.352
+  - `getCustomFonts()` р.354
+  - `addCustomFont()` р.355
+  - `getRecentFiles()` р.364
+  - `addRecentFile()` р.365
+  - `clearRecentFiles()` р.374
+  - `getLastQueue()` р.392
+  - `saveLastQueue()` р.401
+  - `clearLastQueue()` р.408
+  - `getPlaylists()` р.415
+  - `createPlaylist()` р.438
+  - `updatePlaylist()` р.447
+  - `deletePlaylist()` р.458
 
 ### `lib/services/stream_resolver.dart` (78 р.)
 Відео для серії в момент відтворення: `StreamResolver({maxHeight, preferredHoster}).resolve(source, episode, {hoster, height})` → `ResolvedStream` (відео, усі якості, обраний плеєр, усі плеєри); плеєри перебираються за порядком, перший робочий виграє, помилка зведена (один плеєр — його власна).
@@ -1016,55 +1017,55 @@ uiTheme (синглтон): палітри light/dark, акцент (adaptAccent
   - `setThemeMode()` р.268
   - `reset()` р.274
 
-### `lib/services/watch_models.dart` (269 р.)
+### `lib/services/watch_models.dart` (424 р.)
 Моделі «Дивитись»: `episodeKey(episode, index)` («3», «3.5», «s2e5», «i7»), `WatchGroup` (озвучка / субтитри: `id` = `джерело|аніме|реліз`, `label`, `isSub`, `teams`, `episodes`), `WatchOffer` (що знайшло джерело), `WatchTitle` (пропозиції + `licensed` / `license` + `errors`), `RemoteEntry` / `RemoteSession` (черга плеєра: ключ `hikka:<slug>#<серія>` для позиції й «переглянуто»; однакові номери в одному варіанті отримують суфікс `~2`). Також: `episodeLabel(episode, index)` (підпис кнопки серії), `episodeKeysOf(group)` (ключі серій варіанта; повтори отримують `~2`, `~3`), `ContinuePoint` + `continuePoint(keys, watched, lastKey)` (звідки продовжити: остання відкрита, а якщо вона переглянута — наступна; усе переглянуто → `allWatched`). Також: `WatchGroup.fullLabel` («Озвучення: Inari» / «Субтитри: Inari»), `choiceKeyOf(group)` (стійка ознака варіанта поза тайтлом: вид + команди), `pickGroup(groups, {preferredId, favorites, safe})` (який варіант відкриває «Дивитись»).
 
-- **WatchGroup** (р.25)
-- **WatchOffer** (р.102)
-- **WatchTitle** (р.113)
-  - `offerOf()` р.137
-  - `groupById()` р.144
-  - `offerOfGroup()` р.151
-- **RemoteEntry** (р.155)
-- **ContinuePoint** (р.194)
-- **RemoteSession** (р.223)
-  - `indexOfKey()` р.262
-  - `displayTitle()` р.265
+- **WatchGroup** (р.27)
+- **WatchOffer** (р.236)
+- **WatchTitle** (р.247)
+  - `offerOf()` р.276
+  - `groupById()` р.283
+  - `offerOfGroup()` р.290
+- **RemoteEntry** (р.294)
+- **ContinuePoint** (р.333)
+- **RemoteSession** (р.378)
+  - `indexOfKey()` р.417
+  - `displayTitle()` р.420
 
-### `lib/services/watch_service.dart` (257 р.)
+### `lib/services/watch_service.dart` (339 р.)
 `WatchService.start(HikkaAnime, {searchOthers})` → `WatchLoad` (див. правило «Потік Дивитись»); `searchOffer(source, anime)` (збережене зіставлення → пошук за назвами → `bestAnimeMatch`), `offerFor`, `groupEpisodes`, `titlesOf` / `queriesOf`, `infoOf` (дані Hikka для звірки), `keyOf`. `WatchLoad.defaultGroup(store)` — варіант за кнопкою «Дивитись» (`pickGroup`).
 
-- **WatchLoad** (р.19)
-  - `checkOf()` р.46
-  - `defaultGroup()` р.49
-- **WatchService** (р.86)
-  - `keyOf()` р.96
-  - `infoOf()` р.98
-  - `titlesOf()` р.105
-  - `queriesOf()` р.116
-  - `start()` р.126
-  - `searchOffer()` р.189
-  - `offerFor()` р.219
-  - `groupEpisodes()` р.225
+- **WatchLoad** (р.33)
+  - `checkOf()` р.67
+  - `defaultGroup()` р.76
+- **WatchService** (р.173)
+  - `keyOf()` р.183
+  - `infoOf()` р.185
+  - `titlesOf()` р.192
+  - `queriesOf()` р.203
+  - `start()` р.213
+  - `searchOffer()` р.271
+  - `offerFor()` р.275
+  - `groupEpisodes()` р.307
 
-### `lib/services/watch_store.dart` (154 р.)
+### `lib/services/watch_store.dart` (209 р.)
 Що переглянуто й де зупинилися (розділ `watch_store`): `watched` / `isWatched` / `setWatched` / `markUpTo(animeKey, order, upTo)`, `last` / `setLast` (до 400 тайтлів), `recentTitles`, `preferredGroup` / `setPreferredGroup`, зіставлення Hikka ↔ сайт `link` / `setLink`; ChangeNotifier, інʼєкція `load` / `save` для тестів. `favoriteChoices` / `setFavoriteChoice(key)` — озвучки й субтитри (`choiceKeyOf`), які людина свідомо обирала в плеєрі: до 8, найновіші першими.
 
 - **WatchLast** (р.11)
 - **WatchStore** (р.19)
-  - `reload()` р.43
-  - `watched()` р.57
-  - `isWatched()` р.59
-  - `setWatched()` р.61
-  - `markUpTo()` р.73
-  - `last()` р.83
-  - `setLast()` р.92
-  - `recentTitles()` р.106
-  - `preferredGroup()` р.112
-  - `setPreferredGroup()` р.114
-  - `setFavoriteChoice()` р.126
-  - `link()` р.140
-  - `setLink()` р.145
+  - `reload()` р.45
+  - `watched()` р.59
+  - `isWatched()` р.61
+  - `setWatched()` р.63
+  - `markUpTo()` р.75
+  - `last()` р.85
+  - `setLast()` р.94
+  - `recentTitles()` р.115
+  - `preferredGroup()` р.153
+  - `setPreferredGroup()` р.169
+  - `setFavoriteChoice()` р.181
+  - `link()` р.195
+  - `setLink()` р.200
 
 ### `lib/utils/formatters.dart` (219 р.)
 Форматування часу/розміру/назв. `translateChapterTitle` запам'ятовує результати (викликається часто).
@@ -1132,52 +1133,52 @@ AppMediaThumbnail(uri,…) — віджет прев'ю через ThumbnailServ
 - **AppMediaThumbnail** (р.10)
 - **_AppMediaThumbnailState** (р.40)
 
-### `lib/widgets/app_settings_dialog.dart` (2344 р.)
+### `lib/widgets/app_settings_dialog.dart` (2604 р.)
 Діалог налаштувань (має власні копії nav/section віджетів). Вкладки: Вигляд, Субтитри, Відтворення, Відео & GPU, Anime4K, Звук, Гарячі клавіші, Розробник, Про програму; чернетка з «Скасувати» / «Скинути» / «Застосувати». Телефон: на весь екран (портрет — рядок вкладок `_buildPhoneTabStrip`, альбомна — бічне меню), перемикачі й кнопки ≥ 48 dp, без розділу «Гарячі клавіші» та підказок клавіш. «Розробник»: секція «Журнал і діагностика» (`_setDetailedLog`, `_saveLogToFile` → `LogExport.save`, `_clearLogs`, `_buildLogStatusLine`); «Відтворення»: «Орієнтація плеєра» лише на телефоні (`_playerOrientation`, у знімку змін). `initialTab` / `tabDeveloper` (5) / `tabAbout` (6) — відкрити вікно відразу на потрібній вкладці (з «Профілю»); «Розробник» → «Приховані можливості» (перемикач «Локальна медіатека») і «Банери на головній» (ключ TheMovieDB, `_tmdbKey`); «Про програму» бере назву, версію й збірку з `AppIdentity` / `AppDiagnostics.build` і називає джерела (Hikka, AniList, TheMovieDB).
 
-- **AppSettingsDialog** (р.23)
-  - `show()` р.41
-- **_AppSettingsDialogState** (р.57)
+- **AppSettingsDialog** (р.32)
+  - `show()` р.55
+- **_AppSettingsDialogState** (р.71)
 
-### `lib/widgets/app_ui_kit.dart` (2354 р.)
+### `lib/widgets/app_ui_kit.dart` (2885 р.)
 UI KIT: AppOverlayButton, AppPanelSurface/Header, AppSelectableSurface, AppSelectableTile (з необов'язковими subtitle/trailing), AppSecondaryButton, AppEmptyState, AppModalShell, AppSidebar, AppNavItem, AppPaneHeader, AppSectionHeader, AppAccentButton, AppCard, AppStatTile, AppKeyCap / AppKeyCombo (кнопки клавіатури), AppSearchField, AppScrollEdgeFade, AppScrollbar + базові віджети. Нові UI будувати з цього. На телефоні сегменти `AppSegmentedBar` ≥ 48 dp, `AppOverlayButton` має `onLongPress`. `AppSearchField(icon:)` — з іншою іконкою й підказкою це звичайне однорядкове поле (ключ API).
 
-- **EdgeToEdgeSliderTrackShape** (р.8)
-- **DotSliderThumbShape** (р.25)
-- **AppSegmentOption** (р.65)
-- **AppSegmentedBar** (р.71)
-- **AppDropdownOption** (р.153)
-- **AppDropdown** (р.160)
-- **_AppDropdownState** (р.182)
-- **AppSearchDropdown** (р.349)
-- **_AppSearchDropdownState** (р.373)
-- **AppLanguagePriorityList** (р.652)
-- **_AppLanguagePriorityListState** (р.668)
-- **AppDragHandle** (р.994)
-- **AppRowIconButton** (р.1023)
-- **AppSelectableTile** (р.1060)
-- **AppOverlayButton** (р.1175)
-- **_AppOverlayButtonState** (р.1214)
-- **AppPanelSurface** (р.1300)
-- **AppPanelHeader** (р.1342)
-- **AppSelectableSurface** (р.1423)
-- **AppSecondaryButton** (р.1479)
-- **AppEmptyState** (р.1557)
-- **AppModalShell** (р.1592)
-- **AppSidebar** (р.1635)
-- **AppNavGroupLabel** (р.1675)
-- **AppNavItem** (р.1699)
-- **AppPaneHeader** (р.1782)
-- **AppSectionHeader** (р.1864)
-- **AppAccentButton** (р.1913)
-- **AppCard** (р.1984)
-- **AppStatTile** (р.2030)
-- **AppKeyCap** (р.2106)
-- **AppKeyCombo** (р.2147)
-- **AppSearchField** (р.2171)
-- **_AppSearchFieldState** (р.2193)
-- **AppScrollEdgeFade** (р.2292)
-- **AppScrollbar** (р.2332)
+- **EdgeToEdgeSliderTrackShape** (р.12)
+- **DotSliderThumbShape** (р.29)
+- **AppSegmentOption** (р.99)
+- **AppSegmentedBar** (р.105)
+- **AppDropdownOption** (р.187)
+- **AppDropdown** (р.255)
+- **_AppDropdownState** (р.277)
+- **AppSearchDropdown** (р.435)
+- **_AppSearchDropdownState** (р.472)
+- **AppLanguagePriorityList** (р.848)
+- **_AppLanguagePriorityListState** (р.864)
+- **AppDragHandle** (р.1190)
+- **AppRowIconButton** (р.1219)
+- **AppSelectableTile** (р.1256)
+- **AppOverlayButton** (р.1371)
+- **_AppOverlayButtonState** (р.1410)
+- **AppPanelSurface** (р.1496)
+- **AppPanelHeader** (р.1538)
+- **AppSelectableSurface** (р.1619)
+- **AppSecondaryButton** (р.1675)
+- **AppEmptyState** (р.1753)
+- **AppModalShell** (р.1867)
+- **AppSidebar** (р.1911)
+- **AppNavGroupLabel** (р.1951)
+- **AppNavItem** (р.1975)
+- **AppPaneHeader** (р.2058)
+- **AppSectionHeader** (р.2140)
+- **AppAccentButton** (р.2189)
+- **AppCard** (р.2264)
+- **AppStatTile** (р.2310)
+- **AppKeyCap** (р.2386)
+- **AppKeyCombo** (р.2427)
+- **AppSearchField** (р.2451)
+- **_AppSearchFieldState** (р.2473)
+- **AppScrollEdgeFade** (р.2572)
+- **AppScrollbar** (р.2613)
 
 ### `lib/widgets/bottom_dock.dart` (495 р.)
 Нижня панель керування (слайдер, кнопки; drawerOwner/isEpisodesOpen). Кнопка Anime4K: клік — меню режимів, права кнопка — вмикання/вимикання, крапка — активний. `live` (false — панель прихована: підписи часу, прогрес і розділ не стежать за відтворенням); `volume` — `ValueListenable<VolumeState>` (перебудовується лише повзунок гучності). Параметри `onPrevious` / `onNext` (типово — `player.previous/next`; для серій із сайту їх задає `PlayerStateController.playPrevious/playNext`).
@@ -1234,11 +1235,11 @@ UI KIT: AppOverlayButton, AppPanelSurface/Header, AppSelectableSurface, AppSelec
 - **HikkaAnimeCharactersPage** (р.13)
 - **_HikkaAnimeCharactersPageState** (р.24)
 
-### `lib/widgets/hikka/hikka_anime_page.dart` (653 р.)
+### `lib/widgets/hikka/hikka_anime_page.dart` (717 р.)
 Сторінка аніме: шапка зі списку одразу, повні дані з API; постер, назви, статус, жанри (→ каталог із жанром), оцінки MAL / Hikka, наступна серія, згортуваний опис, таблиця інформації, полиці персонажів / франшизи / рекомендацій, автори, посилання (дивитись — першими), відео, музика; заглушка 18+. Секція «Дивитись» (`HikkaWatchSection`) іде першою в `_sections`. Під оцінками (`_scores`) і над блоком «Дивитись» стоїть `_myList(a)` → `HikkaMyListBar` (мій статус, прогрес, оцінка, серце).
 
-- **HikkaAnimePage** (р.21)
-- **_HikkaAnimePageState** (р.32)
+- **HikkaAnimePage** (р.26)
+- **_HikkaAnimePageState** (р.37)
 
 ### `lib/widgets/hikka/hikka_article_page.dart` (162 р.)
 `HikkaArticlePage(scale, route, pad)` — стаття: категорія, назва, автор і дата, лічильники й текст (`HikkaSlateView`); шапка зʼявляється одразу з `route.seed`, повний текст вантажиться окремо (`HikkaApi.article`).
@@ -1350,14 +1351,14 @@ UI KIT: AppOverlayButton, AppPanelSurface/Header, AppSelectableSurface, AppSelec
 - **HikkaFranchisePage** (р.18)
 - **_HikkaFranchisePageState** (р.29)
 
-### `lib/widgets/hikka/hikka_home_page.dart` (263 р.)
+### `lib/widgets/hikka/hikka_home_page.dart` (272 р.)
 `HikkaHomePage(scale, bottomInset, onRefresh)` — «Головна»: `_TopBar` (рядок пошуку `_SearchPill` → `HikkaNav.openSearch`, «Оновити» на ПК, «Сповіщення» → `HikkaNotificationsDialog`), `HikkaAiringStrip`, `HikkaBannerCarousel` (банери — `BannerArt`; скелет `_BannerSkeleton`), полиці «Продовжити перегляд» (`ContinueWatching.load`, порожню не показує), «Рекомендації», «Зараз виходить», «Анонси», «Найпопулярніші», «Найкращі за оцінкою» (кнопка «Усі» → `HikkaNav.openCatalog` з готовими умовами); кожна полиця завантажується окремо (`HikkaShelfAsync`) і має «Повторити».
 
-- **HikkaHomePage** (р.23)
-- **_HikkaHomePageState** (р.42)
-- **_TopBar** (р.164)
-- **_SearchPill** (р.198)
-- **_BannerSkeleton** (р.241)
+- **HikkaHomePage** (р.26)
+- **_HikkaHomePageState** (р.45)
+- **_TopBar** (р.173)
+- **_SearchPill** (р.207)
+- **_BannerSkeleton** (р.250)
 
 ### `lib/widgets/hikka/hikka_hub.dart` (266 р.)
 `HikkaHub(scale, onOpenSettings, localLibraryBuilder, bottomInset)` — вміст застосунку: чотири головні вкладки (`_root(MainTab)`: `HikkaHomePage` / `HikkaDiscoverPage` / `HikkaListsPage` / `HikkaProfilePage`; ліниво, у `Offstage` + `TickerMode`, `_mounted`) і шар відкритих сторінок (`_page(HikkaRoute)`: аніме, персонаж, франшиза, персонажі аніме, колекція, стаття, локальна медіатека) з плавною зміною (`AppFadeSwitcher`) і `HikkaBackBar` (`_routeTitle` / `_routeSubtitle` / `_routeUrl`; «Оновити» → `_refreshRoute`, «Відкрити на hikka.io»; для локальної медіатеки без цих дій). `_refreshAll` / `_pullRefresh` перезавантажують вкладки (`_refresh`), `_forget` скидає запам'ятований стан сторінки (розкрите 18+ лишається — `memo['revealed']`), `_openCatalogSettings` → `HikkaSettingsDialog`. Мишача кнопка «Назад».
@@ -1396,12 +1397,12 @@ UI KIT: AppOverlayButton, AppPanelSurface/Header, AppSelectableSurface, AppSelec
 
 - **HikkaNotificationsDialog** (р.11)
 
-### `lib/widgets/hikka/hikka_page_kit.dart` (146 р.)
+### `lib/widgets/hikka/hikka_page_kit.dart` (466 р.)
 Каркас сторінок: `HikkaPageFrame` (поля, максимальна ширина, прокрутка), `HikkaSection` (заголовок + вміст), `hikkaHeaderPosterWidth`, `hikkaWideBreakpoint` (760), `hikkaReadableWidth`. `HikkaPageFrame.onRefresh` — оновлення потягом вниз (лише на телефоні; на ПК є кнопка «Оновити»); `HikkaTabHeader(scale, title, subtitle, actions)` — заголовок головних вкладок «Огляд» / «Списки» / «Профіль».
 
-- **HikkaPageFrame** (р.12)
-- **HikkaSection** (р.62)
-- **HikkaTabHeader** (р.112)
+- **HikkaPageFrame** (р.13)
+- **HikkaSection** (р.58)
+- **HikkaTabHeader** (р.108)
 - Сторінка тайтлу: нижні полиці (персонажі, франшиза, рекомендації, автори) монтуються ліниво — `HikkaLazy` (`hikka_page_kit.dart`, за ~700 px до екрана; до того їх запити не йдуть). Кнопка статусу «Мого списку» коротка (статус + олівець), оцінка — окрема жовта плашка поруч, кількості серій немає. Плашка «Не всі серії»/«озвучено не всі» прибрана (є в рядку озвучки); плашки нумерації/OVA лишились. Версія 1.1.1.
 - Посилання `miki://open/…`: `services/deep_links.dart` (`DeepLinks.handle`: `/anime|character|collection|article/<id>`, `/auth?reference=` лише поки вхід у Hikka триває). Android: intent-filter у AndroidManifest (`flutter_deeplinking_enabled=false`), `MainActivity` віддає `initialLink` і шле `deepLink`; сторінка loopback після входу веде назад `miki://open`. Вхід: `HikkaAuth.exchangeTimeout` (30 с), у вікні входу «В іншому браузері» (Android, `SystemControls.openUrl(chooser: true)`) і «Копіювати посилання». Підпис релізу: `android/key.properties` або env `KEYSTORE_*` (див. `build.gradle.kts`, `.github/workflows/release.yml`). Версія 1.1.1 (під час тестів міняємо лише номер збірки після `+`, versionName лишається 1.1.1).
 - DNS-обхід: `services/doh_resolver.dart` (`DohResolver.resolve`, DoH до 1.1.1.1/1.0.0.1/8.8.8.8/8.8.4.4 паралельно); `BackendClient._httpTransport` перевіряє системний DNS (4 с), а якщо хост не резолвиться — з'єднується за IP через `HttpClient.connectionFactory` (SNI й сертифікат лишаються для хоста), хости запам'ятовуються в `_dnsBroken`.
@@ -1409,7 +1410,7 @@ UI KIT: AppOverlayButton, AppPanelSurface/Header, AppSelectableSurface, AppSelec
 - Оновлення: на телефоні кнопки «Оновити» немає — потяг вниз (`RefreshIndicator`: Огляд, Списки, Головна, відкриті сторінки в `HikkaHub._withRouteRefresh`); на ПК кнопка в шапці. «Списки»: кнопка фільтра/сортування (`HikkaFilterSheet` з `sortOptions: HikkaSearchFilters.listSorts`, `defaultSort: defaultListSort='watch_updated'`), фільтри йдуть у `HikkaApi.watchList(filters:)`; на «Улюблене» не діють.
 - Прокрутка: `AppScrollBehavior` (app_ui_kit.dart) — розтягування краю як в Android 12 (StretchingOverscrollIndicator); використовується в `MaterialApp.scrollBehavior` і скрізь замість `ScrollBehavior().copyWith(scrollbars:false)` (старий варіант повертав світіння). Фізика прокрутки — платформна (без BouncingScrollPhysics).
 - Стрічка серій на Головній (`HikkaAiringStrip`): тонка смужка з одним записом, що змінюється фейдом кожні `kAiringTick` (5 с), тонка лінія прогресу внизу; ліворуч іконка календаря, крапка лише в серій поточної години; збоку «Серія N» і час.
-- Оновлення: `services/app_updater.dart` — `AppUpdater.instance` (репозиторій `Zeddy-Coder/miki-miki`, GitHub Releases `releases/latest`), `check({auto})` (тиха раз на 12 год, ручна завжди), `state` (`UpdateIdle/Checking/UpToDate/Available/Failed`), `compareVersions`, `pickAsset` (Android — arm64 `.apk`, Windows — `.zip/.exe`). Нічого не ставить сам: «Завантажити» відкриває файл/сторінку через `SystemControls.openUrl`. Блок у «Про програму» (`_buildUpdateBlock` у `app_settings_dialog.dart`), підказка в рядку «Про» профілю, тиха перевірка з main.dart через 8 с. Реліз: тег `vX.Y.Z` + APK у Assets.
+- Оновлення: `services/app_updater.dart` — `AppUpdater.instance` (репозиторій `Zeddy-Coder/miki-miki`, GitHub Releases `releases/latest`), `check({auto})` (тиха раз на 12 год, ручна завжди), `state` (`UpdateIdle/Checking/UpToDate/Available/Failed`), `compareVersions`, `pickAsset`, `skip(version)` / `skippedVersion` / `shouldPrompt(info)` (вікно `UpdatePrompt`) (Android — arm64 `.apk`, Windows — `.zip/.exe`). Нічого не ставить сам: «Завантажити» відкриває файл/сторінку через `SystemControls.openUrl`. Блок у «Про програму» (`_buildUpdateBlock` у `app_settings_dialog.dart`), підказка в рядку «Про» профілю, тиха перевірка з main.dart через 8 с. Реліз: тег `vX.Y.Z` + APK у Assets.
 - Кеш Hikka: у памʼяті (`HikkaApi._cache`, TTL 3/10/30 хв) + на диску (`services/hikka_disk_cache.dart`, `HikkaApi.disk`, у main.dart; один файл на запит, до 600 файлів / 14 днів): свіже з диска без мережі; до 6 год — віддається одразу й оновлюється у фоні; старше — лише коли немає мережі; `clearCache()` (ручне оновлення) не віддає збережене як свіже. Статуси списків для позначок: `HikkaMyList.loadIndex` (диск `hikka_status_index`, оновлення раз на 6 год, на старті з відкладенням 4 с). Зображення — окремо `HikkaImageStore`.
 - **HikkaCollapsingHeader** — шапка (`header`) над вмістом (`body`): ховається при вертикальній прокрутці вниз, повертається при прокрутці вгору чи на верху; не ховається, якщо вмісту замало для повернення; `resetOn` показує шапку при зміні вкладки. Використано: Огляд (шапка + чіпси), календар (дні), Списки, Каталог (пошук), Профіль. Вкладені шапки ховаються разом.
 
@@ -1436,7 +1437,7 @@ UI KIT: AppOverlayButton, AppPanelSurface/Header, AppSelectableSurface, AppSelec
 - **_HikkaSchedulePageState** (р.42)
 - **_EpisodeTile** (р.166)
 
-### `lib/widgets/hikka/hikka_settings_dialog.dart` (240 р.)
+### `lib/widgets/hikka/hikka_settings_dialog.dart` (170 р.)
 Налаштування каталогу: мова назв (Українська / English / Ромаджі), 18+, «Оновити дані», «Очистити кеш зображень» із розміром. Розділ «Перегляд» з кнопкою «Джерела перегляду» (`SourcesDialog`). Розділ «Свій клієнт Hikka» (два поля, зміни з паузою 600 мс і при закритті → `HikkaAuth.setCustomClient`).
 
 - **HikkaSettingsDialog** (р.16)
@@ -1460,40 +1461,40 @@ UI KIT: AppOverlayButton, AppPanelSurface/Header, AppSelectableSurface, AppSelec
 - **HikkaImageViewer** (р.378)
 - **_HikkaImageViewerState** (р.397)
 
-### `lib/widgets/hikka/hikka_watch_dialogs.dart` (369 р.)
+### `lib/widgets/hikka/hikka_watch_dialogs.dart` (453 р.)
 Діалоги блоку «Дивитись»: `WatchDialogs.confirmLicensed(context, scale:, license:)` («Тричі подумайте»: головна дія — дивитись легально, тиха `QuietAction` «Все одно дивитись»; `true` — людина підтвердила), `WatchDialogs.teams(context, scale:, teams:, source:)` (опис, прапорці «Озвучення / Субтитри», кількість тайтлів і посилання команди з Mikai), `WatchDialogs.linkLabel(key)`; `WatchDialogFrame` — спільна оболонка діалогів перегляду (заголовок із закриттям, прокручуваний вміст, ряд кнопок); `QuietAction` — тиха текстова дія.
 
-- **WatchDialogs** (р.13)
-  - `confirmLicensed()` р.18
-  - `teams()` р.24
-  - `linkLabel()` р.29
-- **WatchDialogFrame** (р.59)
-- **_WatchDialogFrameState** (р.72)
-- **QuietAction** (р.155)
-- **_LicenseDialog** (р.194)
-- **_TeamsDialog** (р.245)
-- **_TeamBlock** (р.271)
-- **_TeamBlockState** (р.282)
+- **WatchDialogs** (р.15)
+  - `confirmLicensed()` р.20
+  - `teams()` р.38
+  - `linkLabel()` р.43
+- **WatchDialogFrame** (р.73)
+- **_WatchDialogFrameState** (р.86)
+- **QuietAction** (р.167)
+- **_LicenseDialog** (р.206)
+- **_TeamsDialog** (р.280)
+- **_TeamBlock** (р.306)
+- **_TeamBlockState** (р.317)
 
-### `lib/widgets/hikka/hikka_watch_section.dart` (567 р.)
+### `lib/widgets/hikka/hikka_watch_section.dart` (693 р.)
 `HikkaWatchSection(anime, route, scale, pad)` — блок «Дивитись» (правило «Блок Дивитись на сторінці аніме»): стан `WatchLoad` з `HikkaRoute.memo['watch']`; шапка з «Джерела» і «Оновити»; картка ліцензії → `_ack` → плеєр; порожній стан («Не знайшли, де це дивитись українською» / «Усі джерела вимкнено») з «Спробувати ще» й «Джерела», примітки про джерела без серій, помилки джерел, «Ще шукаю…»; одна головна дія («Дивитись / Продовжити · серія N», «З першої серії») + рядок озвучки за замовчуванням (`_voiceRow`) + `EpisodeNote`; сітка серій; «Джерело: … · На сайті». Усі цілі дотику на телефоні ≥ `AppPlatform.touchTarget`.
 
-- **HikkaWatchSection** (р.25)
-- **_HikkaWatchSectionState** (р.37)
+- **HikkaWatchSection** (р.30)
+- **_HikkaWatchSectionState** (р.42)
 
-### `lib/widgets/hikka/sources_dialog.dart` (145 р.)
+### `lib/widgets/hikka/sources_dialog.dart` (294 р.)
 `SourcesDialog.show(context, scale:, registry:)` — «Джерела перегляду»: перемикачі сайтів (`SourcePrefs.setEnabled`; підказка від джерела), «Якість відео» (`maxHeight`), «Плеєр за замовчуванням» (`hoster`: Авто / Moon / Ashdi), «Ключ Mikai API» (`AppSearchField`; зберігається через 600 мс після набору й при закритті вікна; `SourceRegistry` одразу передає його в `MikaiSource`). Зміни діють одразу. `SourcesDialog.searchSignature(registry)` — відбиток налаштувань, від яких залежить пошук (ввімкнені сайти + ключ): змінився → блок «Дивитись» шукає наново.
 
-- **SourcesDialog** (р.17)
-  - `show()` р.23
-  - `searchSignature()` р.28
+- **SourcesDialog** (р.18)
+  - `show()` р.24
+  - `searchSignature()` р.29
 - **_SourcesDialogState** (р.38)
 
-### `lib/widgets/home_hub.dart` (273 р.)
+### `lib/widgets/home_hub.dart` (324 р.)
 `HomeHub(scale, onOpenFile, onOpenMultipleFiles, onOpenQueue, onOpenSettings({tab}), reserveBottom)` — оболонка застосунку: чотири вкладки `MainTab` (`iconOf`), на телефоні в портреті — нижня навігація (`bottomNavHeight` 64 dp, цілі ≥ 48, `Semantics(selected)`), на ПК і широких екранах — `AppSidebar` (монограма «M», `AppIdentity.name` / `tagline`, «Налаштування», версія). Сам вміст — `HikkaHub`; локальна медіатека (`LocalLibrary`) передається йому будівельником. `HomeHub.backHandler` (статичний) = `HikkaNav.back()`; `isCompact(context)`; `debugReset()` — для тестів.
 
-- **HomeHub** (р.16)
-- **_HomeHubState** (р.66)
+- **HomeHub** (р.20)
+- **_HomeHubState** (р.74)
 
 ### `lib/widgets/local_library.dart` (1234 р.)
 `LocalLibrary(scale, onOpenFile, onOpenMultipleFiles, onOpenQueue, reserveBottom)` — колишній головний екран (відкрити файл чи посилання, історія файлів, остання черга й плейлисти), тепер прихована «Локальна медіатека» (правило «Локальна медіатека»); відкривається з «Профілю» сторінкою стека.
@@ -1512,12 +1513,12 @@ UI KIT: AppOverlayButton, AppPanelSurface/Header, AppSelectableSurface, AppSelec
 
 - **MobileControls** (р.20)
 
-### `lib/widgets/mobile_gesture_layer.dart` (226 р.)
+### `lib/widgets/mobile_gesture_layer.dart` (332 р.)
 Жести на відео для телефона: вертикально по лівій половині — яскравість, по правій — системна гучність (записи не частіше ~25/с), горизонтально — перемотка (застосовується, коли палець відпущено). Початок жесту = точка дотику (`DragStartBehavior.down`), краї екрана (системні жести) ігноруються. Тапи й подвійний тап лишаються за `VideoViewport`.
 
-- **MobileGestureLayer** (р.20)
-- **_Kind** (р.47)
-- **_MobileGestureLayerState** (р.49)
+- **MobileGestureLayer** (р.23)
+- **_Kind** (р.54)
+- **_MobileGestureLayerState** (р.56)
 
 ### `lib/widgets/mobile_sheet.dart` (158 р.)
 Рамка меню для телефона: у портреті нижня панель (до 68 % висоти, «ручка» і затемнення), в альбомній — бічна панель справа (340…440 dp). Малює лише поверхню; вміст — `SettingsDrawer(sheet: true)` / `SidePanel(sheet: true)`.
@@ -1533,7 +1534,7 @@ UI KIT: AppOverlayButton, AppPanelSurface/Header, AppSelectableSurface, AppSelec
 - **_OsdPill** (р.45)
 - **_OverlayKeyCap** (р.157)
 
-### `lib/widgets/remote_panel.dart` (374 р.)
+### `lib/widgets/remote_panel.dart` (368 р.)
 `RemotePanelBody(scale, driver, sheet, onEpisodeSelected)` — вміст бічної панелі / шторки для серій із сайтів: вкладки «Серії» (позначки «переглянуто» з `WatchStore`, поточна підсвічена, список сам прокручується до неї — `animate` лише при зміні серії), «Озвучка» (підпис «Вибір запам'ятовується»; для поточного варіанта з розбіжністю нумерації — компактний `EpisodeNote` над списком; рядки «вид · N з M сер. · джерело» з жовтим прапорцем; перемикання — `driver.switchGroup`), «Плеєр» (плеєр сайту й якість: `switchHoster`, `switchQuality`). `sheet: true` — вищі рядки під дотик (56 dp). Черги файлів тут немає: додавання, видалення й порядок не потрібні.
 
 - **_RemoteTab** (р.12)
@@ -1545,10 +1546,10 @@ UI KIT: AppOverlayButton, AppPanelSurface/Header, AppSelectableSurface, AppSelec
 
 - **RemoteStatusOverlay** (р.12)
 
-### `lib/widgets/settings_drawer.dart` (675 р.)
+### `lib/widgets/settings_drawer.dart` (809 р.)
 Випадне меню налаштувань/треків/швидкості; сторінка Anime4K (Fast / HQ, шість режимів із комбінаціями Ctrl+1…6, «Вимкнено» — Ctrl+0). `sheet: true` — режим меню-панелі для телефона (шапка 56 dp, рядки ≥ 48 dp, без підказок клавіш). Необовʼязковий `onAddSubtitleFile` → пункт «Додати файл субтитрів…» у меню субтитрів. У меню «Аудіодоріжка» під списком — `_AudioDelayRow` (крок 50 мс, ±10 с, кнопка скидання; `audioDelayKey` з контролера через `ControlsOverlay`/`SettingsDrawer` зберігає значення для твору).
 
-- **SettingsDrawer** (р.14)
+- **SettingsDrawer** (р.15)
 
 ### `lib/widgets/shortcuts_view.dart` (567 р.)
 Довідка «Гарячі клавіші»: `ShortcutsView` (картки груп із кнопками клавіатури, пошук за назвою/клавішами, дві колонки від 640 px) і `ShortcutsDialog` (вікно: перемикач схеми, пошук, Esc / F1 / Ctrl+F). Тіло довідки використовує й вкладка налаштувань.
@@ -1565,7 +1566,7 @@ UI KIT: AppOverlayButton, AppPanelSurface/Header, AppSelectableSurface, AppSelec
   - `show()` р.319
 - **_ShortcutsDialogState** (р.337)
 
-### `lib/widgets/side_panel.dart` (779 р.)
+### `lib/widgets/side_panel.dart` (773 р.)
 Бокова панель: черга / інфо / розділи (chapters). `sheet: true` — режим меню-панелі для телефона (великі кнопки, черга міняється порядок перетягуванням). Параметр `remote` (`RemoteDriver?`): коли `remote.active`, вкладка «Серії» показує `RemotePanelBody` (заголовок «Серії (N)»), а в «Інформації» замість шляху до файлу — серія, озвучка й плеєр (`_fileRows`).
 
 - **SidePanelType** (р.16)
@@ -1600,6 +1601,9 @@ Stats overlay (AppModalShell): вкладки «Огляд», «Логи libmpv�
 Верхня панель (тривалість — з `PlaybackClock`).
 
 - **TopDock** (р.9)
+
+### `lib/widgets/update_prompt.dart` (80 р.)
+Вікно «Доступне оновлення»: `UpdatePrompt.show(context, scale:, info:)` (нотатки релізу без markdown — `cleanNotes`; кнопки «Завантажити» / «Пізніше» / «Більше не нагадувати про цю версію» → `AppUpdater.skip`). Показується з `HomeHub._maybePromptUpdate` раз за запуск, коли `AppUpdater.state` = `UpdateAvailable` і `shouldPrompt(info)` (версія новіша й не пропущена).
 
 ### `lib/widgets/video_viewport.dart` (154 р.)
 Відео + жести (гучність колесом, 2x утримання).

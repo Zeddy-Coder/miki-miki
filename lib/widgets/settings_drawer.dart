@@ -213,13 +213,7 @@ class SettingsDrawer extends StatelessWidget {
               Flexible(
                 child: ScrollConfiguration(
                   behavior: const AppScrollBehavior().copyWith(scrollbars: false),
-                  child: RawScrollbar(
-                    controller: scrollController,
-                    thumbVisibility: false,
-                    thickness: 4.0 * scale,
-                    radius: Radius.circular(uiTheme.radius(2.0 * scale)),
-                    thumbColor: uiTheme.isLight ? const Color(0xFFC0C0C8) : const Color(0xFF555555),
-                    padding: EdgeInsets.only(right: 2.0 * scale, bottom: 6.0 * scale),
+                  child: KeyedSubtree(
                     child: SingleChildScrollView(
                       controller: scrollController,
                       padding: EdgeInsets.only(left: 8 * scale, right: 8 * scale, bottom: 8 * scale),

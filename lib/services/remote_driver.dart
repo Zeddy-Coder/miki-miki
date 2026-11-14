@@ -272,6 +272,7 @@ class RemoteDriver extends ChangeNotifier {
     _stickyHoster = null;
     // Свідомий вибір: запамʼятовується для цього тайтлу й стає типовим для нових (див. `pickGroup`)
     store.setPreferredGroup(s.animeKey, g.id);
+    store.setPinnedGroup(s.animeKey, g.id);
     store.setFavoriteChoice(choiceKeyOf(g));
     onSession?.call();
     await open(ni, startAt: at > const Duration(seconds: 5) ? at : null, saveCurrent: false);
@@ -315,7 +316,7 @@ class RemoteDriver extends ChangeNotifier {
     if (!active || _phase != RemotePhase.playing) return;
     _savePosition();
     final e = entry;
-    if (!_marked && e != null && episodeSeen(engine.position, engine.duration, _video?.timestamps ?? const [])) {
+    if (!_marked && e != null && episodeSeen(engine.position, engine.duration, _video?.timestamps ?? const [], fraction: StorageService.getWatchedPercent() / 100, byEnding: StorageService.getWatchedByEnding())) {
       _markWatched(e);
     }
   }
@@ -435,7 +436,11 @@ class RemoteDriver extends ChangeNotifier {
     const prefix = 'hikka:';
     if (!s.animeKey.startsWith(prefix)) return;
     final total = _hikka?.total;
-    final n = HikkaMyList.episodeNumber(number: e.episode.number, position: s.entries.indexOf(e) + 1, total: total);
+    // Номер серії довірений, якщо хоч одна серія варіанта лежить у межах тайтлу; наскрізна нумерація (13…24
+    // для 12 серій) рахується за позицією
+    final nums = s.entries.map((x) => x.episode.number).whereType<double>().toList();
+    final trust = nums.isEmpty || total == null || total <= 0 || nums.reduce((a, b) => a < b ? a : b) <= total;
+    final n = HikkaMyList.episodeNumber(number: e.episode.number, position: s.entries.indexOf(e) + 1, total: total, trustNumber: trust);
     unawaited(HikkaMyList.instance.syncEpisode(s.animeKey.substring(prefix.length), n, total: total));
   }
 

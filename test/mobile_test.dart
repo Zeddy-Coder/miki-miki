@@ -1,5 +1,6 @@
 
 import 'package:flutter/material.dart';
+import 'package:miki_miki/services/watch_service.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_symbols_icons/symbols.dart';
@@ -1230,22 +1231,23 @@ void main() {
 
     testWidgets('портрет: свайп убік перегортає вкладки (Вигляд → Субтитри → назад)', (tester) async {
       await openDialog(tester, kPortrait, const EdgeInsets.fromLTRB(0, 30, 0, 18));
-      expect(find.text('Оформлення та вигляд'), findsOneWidget);
+      expect(find.text('Тема, кольори та заокруглення'), findsOneWidget);
       await tester.flingFrom(const Offset(220, 500), const Offset(-300, 0), 1500);
       await tick(tester, 700);
-      expect(find.text('Стилізація субтитрів'), findsOneWidget, reason: 'свайп ліворуч — наступна вкладка');
+      expect(find.text('Мови, шрифт і стиль'), findsOneWidget, reason: 'свайп ліворуч — наступна вкладка');
       await tester.flingFrom(const Offset(120, 500), const Offset(300, 0), 1500);
       await tick(tester, 700);
-      expect(find.text('Оформлення та вигляд'), findsOneWidget, reason: 'свайп праворуч — назад');
+      expect(find.text('Тема, кольори та заокруглення'), findsOneWidget, reason: 'свайп праворуч — назад');
 
-      // Рядок вкладок слідує за активною: після кількох свайпів «Каталог» опиняється в полі зору
+      // Рядок вкладок слідує за активною: після кількох свайпів «Про програму» опиняється в полі зору
       for (var i = 0; i < 8; i++) {
         await tester.flingFrom(const Offset(220, 500), const Offset(-300, 0), 1500);
         await tick(tester, 700);
       }
-      final strip = tester.getRect(find.byType(ListView).first);
-      final active = tester.getRect(find.text('Каталог').first);
-      expect(strip.contains(active.center), isTrue, reason: 'активна вкладка не втрачається за краєм рядка');
+      // Вкладка в рядку під шапкою (нижче за заголовок) цілком у межах екрана
+      final inStrip = [for (final e in find.text('Про програму').evaluate()) tester.getRect(find.byWidget(e.widget))]
+          .any((r) => r.top > 80 && r.left >= 0 && r.right <= kPortrait.width);
+      expect(inStrip, isTrue, reason: 'активна вкладка не втрачається за краєм рядка');
       expect(tester.takeException(), isNull);
     });
 
@@ -1329,6 +1331,34 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    testWidgets('«Розробник»: ключі Mikai і Moon зберігаються після паузи в наборі', (tester) async {
+      final prefs = WatchService.instance.registry.prefs;
+      prefs.mikaiKey = '';
+      prefs.moonKey = '';
+      addTearDown(() {
+        prefs.mikaiKey = '';
+        prefs.moonKey = '';
+      });
+      await openDialog(tester, kPortrait, const EdgeInsets.fromLTRB(0, 30, 0, 18));
+      await goTab(tester, 'Розробник');
+
+      Finder keyField(int i) => find.descendant(of: find.byType(AppSearchField).at(i), matching: find.byType(TextField));
+      final mikai = keyField(1);
+      final moon = keyField(2);
+      await tester.ensureVisible(mikai);
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.enterText(mikai, '  mk-1  ');
+      await tester.ensureVisible(moon);
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.enterText(moon, ' mn-2 ');
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(prefs.mikaiKey, '', reason: 'ще набирають, чекаємо паузи');
+      await tester.pump(const Duration(milliseconds: 700));
+      expect(prefs.mikaiKey, 'mk-1');
+      expect(prefs.moonKey, 'mn-2', reason: 'поля не змішуються');
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('альбомна: бічне меню зліва, область вмісту праворуч', (tester) async {
       await openDialog(tester, kLandscape, const EdgeInsets.fromLTRB(46, 0, 0, 0));
       expect(find.text('Налаштування'), findsOneWidget);
@@ -1338,6 +1368,8 @@ void main() {
 
     testWidgets('рядок-перемикач на телефоні перемикається тапом по всьому рядку (≥ 48 dp)', (tester) async {
       await openDialog(tester, kPortrait, const EdgeInsets.fromLTRB(0, 30, 0, 18));
+      await tester.drag(find.byType(ListView).first, const Offset(-200, 0)); // «Відтворення» тепер за краєм рядка вкладок
+      await tick(tester, 300);
       await tester.tap(find.text('Відтворення').first);
       await tick(tester, 600);
       expect(find.text('Застосувати'), findsNothing);
@@ -1351,6 +1383,8 @@ void main() {
 
     testWidgets('вузький 360 dp: «Скасувати / Застосувати / Готово» вміщуються', (tester) async {
       await openDialog(tester, kNarrow, const EdgeInsets.fromLTRB(0, 24, 0, 24));
+      await tester.drag(find.byType(ListView).first, const Offset(-200, 0));
+      await tick(tester, 300);
       await tester.tap(find.text('Відтворення').first);
       await tick(tester, 600);
       // змінюємо значення, щоб з'явились усі три кнопки

@@ -61,7 +61,8 @@ class SourceRegistry extends ChangeNotifier {
 
   MikaiSource? get mikai => byId('mikai') is MikaiSource ? byId('mikai') as MikaiSource : null;
 
-  bool isEnabled(AnimeSource s) => prefs.isEnabled(s.id);
+  /// Єдине джерело (зараз Mikai) вимкнути не можна: перемикача сайтів тоді немає
+  bool isEnabled(AnimeSource s) => all.length <= 1 || prefs.isEnabled(s.id);
 
-  List<AnimeSource> get enabled => [for (final s in all) if (prefs.isEnabled(s.id)) s];
+  List<AnimeSource> get enabled => [for (final s in all) if (isEnabled(s)) s];
 }

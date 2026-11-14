@@ -371,7 +371,7 @@ void main() {
     });
 
     Future<void> toggleA4k(WidgetTester tester) async {
-      final row = find.ancestor(of: find.text('Увімкнути Anime4K'), matching: find.byType(Row)).first;
+      final row = find.ancestor(of: find.text('Підвищує чіткість ліній і роздільність відео в реальному часі'), matching: find.byType(Row)).first;
       await tester.tap(find.descendant(of: row, matching: find.byType(GestureDetector)).last);
       await tick(tester);
     }
@@ -383,7 +383,7 @@ void main() {
       await openSettings(tester);
       await tester.tap(find.text('Anime4K'));
       await tick(tester);
-      expect(find.text('Увімкнути Anime4K'), findsOneWidget);
+      expect(find.text('Підвищує чіткість ліній і роздільність відео в реальному часі'), findsOneWidget);
       expect(a4kExpanded(tester), isFalse);
       expect(find.text('Застосувати'), findsNothing);
       await shot(tester, 'settings_a4k_off');
