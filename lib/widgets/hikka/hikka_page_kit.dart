@@ -274,6 +274,7 @@ class _HikkaTabEnterState extends State<HikkaTabEnter> with SingleTickerProvider
 /// weekday tabs): that part is drawn under the outer header's content, is measured together with it and hides and shows
 /// with it as one block, so the two never go out of step (a separate nested header did).
 class HikkaHeaderSlot extends ChangeNotifier {
+  bool _dead = false;
   Widget? _widget;
   Object? _resetOn;
   Object? _seenReset;
@@ -282,15 +283,22 @@ class HikkaHeaderSlot extends ChangeNotifier {
 
   /// Puts [w] into the slot; a change of [resetOn] shows the header again
   void put(Widget? w, {Object? resetOn}) {
+    if (_dead) return;
     _widget = w;
     _resetOn = resetOn;
     notifyListeners();
   }
 
   void clear() {
-    if (_widget == null) return;
+    if (_dead || _widget == null) return;
     _widget = null;
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _dead = true;
+    super.dispose();
   }
 
   /// true once if [resetOn] changed since the last call

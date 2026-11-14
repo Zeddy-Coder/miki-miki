@@ -132,7 +132,7 @@ class AppSegmentedBar<T> extends StatelessWidget {
         children: options.map((opt) {
           final isSelected = opt.value == selectedValue;
           return Expanded(
-            child: GestureDetector(
+            child: AppPressable(
               onTap: () => onSelected(opt.value),
               behavior: HitTestBehavior.opaque,
               child: AppAnimatedContainer(
@@ -318,7 +318,7 @@ class _AppDropdownState<T> extends State<AppDropdown<T>> {
           ],
           SizedBox(height: 8 * scale),
         ],
-        GestureDetector(
+        AppPressable(
           onTap: () => setState(() => _isExpanded = !_isExpanded),
           behavior: HitTestBehavior.opaque,
           child: AppAnimatedContainer(
@@ -382,7 +382,7 @@ class _AppDropdownState<T> extends State<AppDropdown<T>> {
                 mainAxisSize: MainAxisSize.min,
                 children: widget.options.map((opt) {
                   final isSelected = opt.value == widget.value;
-                  return GestureDetector(
+                  return AppPressable(
                     onTap: () {
                       widget.onChanged(opt.value);
                       _closeDropdown();
@@ -768,7 +768,7 @@ class _AppSearchDropdownState<T> extends State<AppSearchDropdown<T>> with Widget
                           itemBuilder: (context, idx) {
                             final opt = filtered[idx];
                             final isSelected = multi ? widget.multiSelected!.contains(opt.value) : opt.value == widget.value;
-                            return GestureDetector(
+                            return AppPressable(
                               onTap: () {
                                 widget.onChanged(opt.value);
                                 if (!multi) _closeDropdown();
@@ -2656,7 +2656,8 @@ class AppHeaderInset extends InheritedWidget {
   /// Top padding for lists (0 if there is no header)
   static double of(BuildContext context) => context.dependOnInheritedWidgetOfExactType<AppHeaderInset>()?.inset ?? 0;
 
-  static AppHeaderInset? maybeOf(BuildContext context) => context.getInheritedWidgetOfExactType<AppHeaderInset>();
+  /// Subscribes: a nested header must follow the outer one when its height changes (e.g. the calendar's day tabs come and go)
+  static AppHeaderInset? maybeOf(BuildContext context) => context.dependOnInheritedWidgetOfExactType<AppHeaderInset>();
 
   @override
   bool updateShouldNotify(AppHeaderInset old) => inset != old.inset;
@@ -2892,4 +2893,57 @@ class _TopEdgeToRefreshBehavior extends ScrollBehavior {
         },
         child: child,
       );
+}
+
+/// Tap target with a visible press highlight: a translucent overlay is drawn above [child] while the finger is down,
+/// so it shows on any background (unlike an ink splash that hides under an opaque decoration).
+class AppPressable extends StatefulWidget {
+  final VoidCallback? onTap;
+  final HitTestBehavior behavior;
+  final BorderRadius? radius;
+  final Widget child;
+  const AppPressable({super.key, required this.onTap, required this.child, this.behavior = HitTestBehavior.opaque, this.radius});
+
+  @override
+  State<AppPressable> createState() => _AppPressableState();
+}
+
+class _AppPressableState extends State<AppPressable> {
+  bool _down = false;
+
+  void _set(bool v) {
+    if (_down != v && mounted) setState(() => _down = v);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final on = widget.onTap != null;
+    return GestureDetector(
+      behavior: widget.behavior,
+      onTap: widget.onTap,
+      onTapDown: on ? (_) => _set(true) : null,
+      onTapUp: on ? (_) => _set(false) : null,
+      onTapCancel: on ? () => _set(false) : null,
+      child: Stack(
+        fit: StackFit.passthrough,
+        children: [
+          widget.child,
+          Positioned.fill(
+            child: IgnorePointer(
+              child: AnimatedOpacity(
+                duration: _down ? Duration.zero : AppAnim.fast,
+                opacity: _down ? 1 : 0,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: uiTheme.isLight ? Colors.black.withValues(alpha: 0.08) : Colors.white.withValues(alpha: 0.10),
+                    borderRadius: widget.radius,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

@@ -1010,6 +1010,40 @@ void main() {
       await shot(tester, 'article_narrow_scrolled');
     });
 
+    testWidgets('нижня панель фільтрів: її прокручування не рухає шапку сторінки під нею', (tester) async {
+      phone();
+      setScreen(tester, kNarrow);
+      await tester.pumpWidget(hub(scale: AppPlatform.mobileScale, pad: const EdgeInsets.fromLTRB(0, 24, 0, 24)));
+      await load(tester, rounds: 4);
+      HikkaNav.instance.setTab(HikkaTab.anime);
+      await load(tester);
+      await tester.tap(find.byTooltip('Фільтри'));
+      await load(tester, rounds: 8);
+      final before = tester.getTopLeft(find.text('Огляд')).dy;
+      await tester.drag(find.text('Сортування'), const Offset(0, -300));
+      await load(tester, rounds: 6);
+      expect(tester.getTopLeft(find.text('Огляд')).dy, before, reason: 'шапка «Огляду» лишилась на місці');
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('календар → каталог: дні тижня не залишаються в шапці іншої вкладки', (tester) async {
+      setScreen(tester, kNarrow);
+      await tester.pumpWidget(hub());
+      await load(tester, rounds: 4);
+      HikkaNav.instance.setMain(MainTab.discover);
+      HikkaNav.instance.setTab(HikkaTab.schedule);
+      await load(tester);
+      expect(find.text('Пн'), findsOneWidget);
+      HikkaNav.instance.setTab(HikkaTab.anime);
+      await load(tester, rounds: 6);
+      expect(find.text('Пн'), findsNothing, reason: 'вкладки днів лишилися б висіти над каталогом');
+      expect(tester.getTopLeft(find.text('Пошук аніме за назвою…')).dy - tester.getBottomLeft(find.text('Каталог').first).dy, lessThan(50), reason: 'шапка каталогу лишила порожнє місце під дні, яких уже нема');
+      HikkaNav.instance.setTab(HikkaTab.schedule);
+      await load(tester, rounds: 6);
+      expect(find.text('Пн'), findsOneWidget, reason: 'і повертаються разом із календарем');
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('фільтри відкриваються нижньою панеллю', (tester) async {
       phone();
       setScreen(tester, kNarrow);

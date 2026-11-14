@@ -67,8 +67,12 @@ class MobileSheetFrame extends StatelessWidget {
       );
     }
 
+    // The sheet's own scrolling must not reach the page below it: otherwise the page's floating header
+    // (`HikkaCollapsingHeader` listens to the scroll notifications of everything under it) slides away while the sheet is scrolled
     return Positioned.fill(
-      child: AppLayerClaim(
+      child: NotificationListener<ScrollNotification>(
+        onNotification: (_) => true,
+        child: AppLayerClaim(
         active: open,
         child: IgnorePointer(
         ignoring: !open,
@@ -88,6 +92,7 @@ class MobileSheetFrame extends StatelessWidget {
             panel,
           ],
         ),
+      ),
       ),
       ),
     );

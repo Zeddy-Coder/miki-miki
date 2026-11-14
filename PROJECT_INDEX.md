@@ -1146,8 +1146,8 @@ AppMediaThumbnail(uri,…) — віджет прев'ю через ThumbnailServ
   - `show()` р.55
 - **_AppSettingsDialogState** (р.71)
 
-### `lib/widgets/app_ui_kit.dart` (2885 р.)
-UI KIT: AppOverlayButton, AppPanelSurface/Header, AppSelectableSurface, AppSelectableTile (з необов'язковими subtitle/trailing), AppSecondaryButton, AppEmptyState, AppModalShell, AppSidebar, AppNavItem, AppPaneHeader, AppSectionHeader, AppAccentButton, AppCard, AppStatTile, AppKeyCap / AppKeyCombo (кнопки клавіатури), AppSearchField, AppScrollEdgeFade, AppScrollbar + базові віджети. Нові UI будувати з цього. На телефоні сегменти `AppSegmentedBar` ≥ 48 dp, `AppOverlayButton` має `onLongPress`. `AppSearchField(icon:)` — з іншою іконкою й підказкою це звичайне однорядкове поле (ключ API).
+### `lib/widgets/app_ui_kit.dart` (2930 р.)
+UI KIT: AppPressable (підсвітка при натисканні поверх будь-якого фону), AppOverlayButton, AppPanelSurface/Header, AppSelectableSurface, AppSelectableTile (з необов'язковими subtitle/trailing), AppSecondaryButton, AppEmptyState, AppModalShell, AppSidebar, AppNavItem, AppPaneHeader, AppSectionHeader, AppAccentButton, AppCard, AppStatTile, AppKeyCap / AppKeyCombo (кнопки клавіатури), AppSearchField, AppScrollEdgeFade, AppScrollbar + базові віджети. Нові UI будувати з цього. На телефоні сегменти `AppSegmentedBar` ≥ 48 dp, `AppOverlayButton` має `onLongPress`. `AppSearchField(icon:)` — з іншою іконкою й підказкою це звичайне однорядкове поле (ключ API).
 
 - **EdgeToEdgeSliderTrackShape** (р.12)
 - **DotSliderThumbShape** (р.29)

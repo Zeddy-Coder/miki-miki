@@ -997,7 +997,7 @@ class HikkaToggleRow extends StatelessWidget {
     return Semantics(
       toggled: value,
       label: title,
-      child: GestureDetector(
+      child: AppPressable(
         behavior: HitTestBehavior.opaque,
         onTap: () => onChanged(!value),
         child: ConstrainedBox(
@@ -1060,7 +1060,7 @@ class HikkaInfoTable extends StatelessWidget {
               Semantics(
                 button: logo.$2 != null,
                 label: 'Усі аніме студії',
-                child: GestureDetector(
+                child: AppPressable(
                   key: const ValueKey('info-logo'),
                   onTap: logo.$2,
                   child: Container(

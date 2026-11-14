@@ -67,7 +67,10 @@ class _HikkaSchedulePageState extends State<HikkaSchedulePage> {
 
   @override
   void dispose() {
-    _slot?.clear();
+    // Not right now: the tree is being torn down, and a rebuild requested at this point of the frame would wait for the next
+    // (unscheduled) frame, leaving the day tabs hanging in the header of another tab
+    final slot = _slot;
+    if (slot != null) WidgetsBinding.instance.addPostFrameCallback((_) => slot.clear());
     _pager.removeListener(_onPager);
     _scroll.dispose();
     _pager.dispose();
@@ -127,8 +130,8 @@ class _HikkaSchedulePageState extends State<HikkaSchedulePage> {
                       selected: i == _day,
                       label: _days[i],
                       excludeSemantics: true,
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
+                      child: AppPressable(
+                        radius: uiTheme.borderRadius(10 * scale),
                         onTap: () => setState(() => _day = i),
                         child: AppAnimatedContainer(
                           duration: AppAnim.normal,
@@ -202,10 +205,20 @@ class _HikkaSchedulePageState extends State<HikkaSchedulePage> {
     final scale = widget.scale;
     final pad = HikkaLayout.sidePad(context, scale);
 
+    // Sections of "Огляд" stay mounted (offstage) when you leave them, so the day tabs must be taken out of the shared header by hand
+    final visible = TickerMode.of(context);
+    final slot = hikkaHeaderSlot(context);
+    _slot = slot;
+    void release() {
+      if (slot != null) WidgetsBinding.instance.addPostFrameCallback((_) => slot.clear());
+    }
+
     if (_pager.error != null && _pager.items.isEmpty) {
+      release();
       return HikkaErrorView(scale: scale, error: _pager.error!, onRetry: _pager.retry);
     }
     if (_pager.items.isEmpty) {
+      release();
       if (_pager.isEmpty) {
         return AppEmptyState(scale: scale, icon: Symbols.event_busy_rounded, text: 'Розклад поки порожній');
       }
@@ -220,12 +233,14 @@ class _HikkaSchedulePageState extends State<HikkaSchedulePage> {
     );
     // The day tabs are a part of the page's header (the nearest collapsing header above): they hide and show with it as one block.
     // Without such a header (the page on its own) it keeps its own.
-    final slot = hikkaHeaderSlot(context);
     if (slot == null) return HikkaCollapsingHeader(resetOn: _day, header: _tabs(pad), body: body);
-    _slot = slot;
+    if (!visible) {
+      release(); // another tab is open: its header must not carry our tabs
+      return body;
+    }
     final tabs = KeyedSubtree(key: const ValueKey('schedule-tabs'), child: _tabs(pad));
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) slot.put(tabs, resetOn: _day);
+      if (mounted && TickerMode.of(context)) slot.put(tabs, resetOn: _day);
     });
     return body;
   }
