@@ -562,6 +562,39 @@ void main() {
       expect(alerts.unread, 0, reason: 'тап позначає прочитаним');
     });
 
+    testWidgets('сповіщення: довге утримання — закріпити (піднімається вгору, з піном) і видалити', (tester) async {
+      final now = AppClock.now();
+      final alerts = alertsWith([
+        EpisodeAlert(id: 'new', slug: frieren, title: 'Свіжий тайтл', episode: 7, teamName: 'Togarashi', at: now.subtract(const Duration(minutes: 5))),
+        EpisodeAlert(id: 'old', slug: 'other', title: 'Давній тайтл', episode: 3, teamName: 'Inari', at: now.subtract(const Duration(days: 3)), read: true),
+      ]);
+      setScreen(tester, kNarrow);
+      await tester.pumpWidget(hub());
+      await load(tester);
+      await tester.tap(find.byTooltip('Сповіщення: 1 нових'));
+      await load(tester, rounds: 6);
+      final before = tester.getTopLeft(find.text('Давній тайтл')).dy;
+      expect(before, greaterThan(tester.getTopLeft(find.text('Свіжий тайтл')).dy));
+
+      await tester.longPress(find.byKey(const ValueKey('alert-old')));
+      await load(tester, rounds: 4);
+      expect(find.text('Закріпити'), findsOneWidget);
+      expect(find.text('Видалити'), findsOneWidget);
+      await tester.tap(find.text('Закріпити'));
+      await load(tester, rounds: 6);
+      expect(alerts.items.first.id, 'old');
+      expect(find.byKey(const ValueKey('alert-pinned')), findsOneWidget);
+      expect(tester.getTopLeft(find.text('Давній тайтл')).dy, lessThan(tester.getTopLeft(find.text('Свіжий тайтл')).dy), reason: 'закріплене нагорі');
+
+      await tester.longPress(find.byKey(const ValueKey('alert-new')));
+      await load(tester, rounds: 4);
+      await tester.tap(find.text('Видалити'));
+      await load(tester, rounds: 6);
+      expect(alerts.items.map((e) => e.id), ['old']);
+      expect(find.text('Свіжий тайтл'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('сповіщення: повідомлення від розробника (без тайтлу) показується з текстом і не веде нікуди', (tester) async {
       final now = AppClock.now();
       final alerts = alertsWith([

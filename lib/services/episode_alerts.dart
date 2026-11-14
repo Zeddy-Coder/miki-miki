@@ -26,6 +26,9 @@ class EpisodeAlert {
   final DateTime at;
   final bool read;
 
+  /// Pinned entries stay at the top and are never trimmed away
+  final bool pinned;
+
   /// `episode` (a new episode), or a message pushed by the developer: `news` / `update` (then [body] is the text)
   final String type;
   final String body;
@@ -40,6 +43,7 @@ class EpisodeAlert {
     this.image,
     this.kind = 'voice',
     this.read = false,
+    this.pinned = false,
     this.type = 'episode',
     this.body = '',
   });
@@ -53,7 +57,7 @@ class EpisodeAlert {
   /// "Озвучення: Togarashi" / "Субтитри: Togarashi"
   String get dubLine => '${isSub ? 'Субтитри' : 'Озвучення'}: $teamName';
 
-  EpisodeAlert copyWith({bool? read}) => EpisodeAlert(
+  EpisodeAlert copyWith({bool? read, bool? pinned}) => EpisodeAlert(
         id: id,
         slug: slug,
         title: title,
@@ -63,6 +67,7 @@ class EpisodeAlert {
         kind: kind,
         at: at,
         read: read ?? this.read,
+        pinned: pinned ?? this.pinned,
         type: type,
         body: body,
       );
@@ -77,6 +82,7 @@ class EpisodeAlert {
         'kind': kind,
         't': at.millisecondsSinceEpoch,
         if (read) 'read': true,
+        if (pinned) 'pin': true,
         if (!isEpisode) 'type': type,
         if (body.isNotEmpty) 'body': body,
       };
@@ -97,6 +103,7 @@ class EpisodeAlert {
       kind: (j['kind'] as String?) ?? 'voice',
       at: DateTime.fromMillisecondsSinceEpoch((j['t'] as num?)?.toInt() ?? 0),
       read: j['read'] == true,
+      pinned: j['pin'] == true,
       type: type,
       body: (j['body'] as String?) ?? '',
     );
@@ -138,6 +145,7 @@ class EpisodeAlerts extends ChangeNotifier {
   static Map<String, dynamic> _fresh(Map<String, dynamic> src) => {
         'items': [if (src['items'] is List) ...(src['items'] as List)],
         if (src['since'] is num) 'since': src['since'],
+        'dismissed': [if (src['dismissed'] is List) ...(src['dismissed'] as List)],
       };
 
   /// Mikai feed: `since` is RFC3339; an empty result is not an error
@@ -161,7 +169,8 @@ class EpisodeAlerts extends ChangeNotifier {
     final out = <EpisodeAlert>[
       for (final j in (_data["items"] as List)) if (EpisodeAlert.fromJson(j) case final a?) a,
     ];
-    out.sort((a, b) => b.at.compareTo(a.at));
+    // Pinned first, then the newest
+    out.sort((a, b) => a.pinned != b.pinned ? (a.pinned ? -1 : 1) : b.at.compareTo(a.at));
     return out;
   }
 
@@ -175,7 +184,10 @@ class EpisodeAlerts extends ChangeNotifier {
   }
 
   void _replace(List<EpisodeAlert> list) {
-    _data['items'] = [for (final a in list.take(maxItems)) a.toJson()];
+    // Pinned entries are always kept; the rest are the newest ones that fit
+    final pinned = list.where((a) => a.pinned).toList();
+    final rest = (list.where((a) => !a.pinned).toList()..sort((a, b) => b.at.compareTo(a.at))).take(maxItems > pinned.length ? maxItems - pinned.length : 0);
+    _data['items'] = [for (final a in [...pinned, ...rest]) a.toJson()];
   }
 
   void markRead(String id) {
@@ -191,6 +203,28 @@ class EpisodeAlerts extends ChangeNotifier {
     final list = items;
     if (list.every((a) => a.read)) return;
     _replace([for (final a in list) a.copyWith(read: true)]);
+    _commit();
+  }
+
+  /// Ids of notifications the person deleted: neither the feed check nor the push inbox brings them back
+  Set<String> get _dismissed => {for (final x in (_data['dismissed'] as List)) '$x'};
+
+  /// Deletes one notification (it does not come back when the same episode is found again)
+  void remove(String id) {
+    final list = items;
+    if (!list.any((a) => a.id == id)) return;
+    _replace([for (final a in list) if (a.id != id) a]);
+    final d = [..._dismissed.where((x) => x != id), id];
+    _data['dismissed'] = d.length > 300 ? d.sublist(d.length - 300) : d;
+    _commit();
+  }
+
+  void togglePin(String id) {
+    final list = items;
+    final i = list.indexWhere((a) => a.id == id);
+    if (i < 0) return;
+    list[i] = list[i].copyWith(pinned: !list[i].pinned);
+    _replace(list);
     _commit();
   }
 
@@ -219,6 +253,7 @@ class EpisodeAlerts extends ChangeNotifier {
     }
     if (decoded is! List || decoded.isEmpty) return 0;
     final known = {for (final a in items) a.id: a};
+    final dismissed = _dismissed;
     var added = 0;
     for (final x in decoded) {
       if (x is! Map) continue;
@@ -227,7 +262,7 @@ class EpisodeAlerts extends ChangeNotifier {
       final title = '${x['title'] ?? ''}';
       if (title.isEmpty) continue;
       final id = '${x['id'] ?? ''}'.isNotEmpty ? '${x['id']}' : 'push|${x['t']}';
-      if (known.containsKey(id)) continue;
+      if (known.containsKey(id) || dismissed.contains(id)) continue;
       final image = '${x['image'] ?? ''}';
       known[id] = EpisodeAlert(
         id: id,
@@ -290,6 +325,7 @@ class EpisodeAlerts extends ChangeNotifier {
           : now.subtract(firstLookback);
       final watch = tracked();
       final known = {for (final a in items) a.id: a};
+      final dismissed = _dismissed;
       final fresh = <String, EpisodeAlert>{};
       var added = 0;
       if (watch.isNotEmpty) {
@@ -305,7 +341,7 @@ class EpisodeAlerts extends ChangeNotifier {
             final ep = (r['episode'] as num?)?.toInt();
             if (ep == null) continue;
             final id = '$slug|${r['releaseId']}|$ep';
-            if (known.containsKey(id)) continue;
+            if (known.containsKey(id) || dismissed.contains(id)) continue;
             final titles = anime is Map ? anime['titles'] : null;
             final published = DateTime.tryParse('${r['publishedAt']}')?.toLocal() ?? now;
             known[id] = fresh[id] = EpisodeAlert(

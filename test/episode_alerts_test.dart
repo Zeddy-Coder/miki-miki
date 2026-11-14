@@ -168,4 +168,45 @@ void main() {
       expect(a.items.map((e) => e.id), containsAll(['push|9', 'frieren|t_49:voice|7']));
     });
   });
+
+  group('pin and delete', () {
+    const inbox = '[{"id":"a","type":"news","title":"A","body":"a","t":1000},{"id":"b","type":"news","title":"B","body":"b","t":2000},{"id":"c","type":"news","title":"C","body":"c","t":3000}]';
+
+    test('a pinned entry goes to the top and survives a reload; unpinning puts it back in time order', () async {
+      final a = make();
+      await a.importInbox(source: () async => inbox);
+      expect(a.items.map((e) => e.id), ['c', 'b', 'a']);
+      a.togglePin('a');
+      expect(a.items.map((e) => e.id), ['a', 'c', 'b']);
+      expect(make().items.first.pinned, isTrue);
+      a.togglePin('a');
+      expect(a.items.map((e) => e.id), ['c', 'b', 'a']);
+    });
+
+    test('a deleted entry is gone and does not come back from the inbox or the feed', () async {
+      final a = make();
+      await a.importInbox(source: () async => inbox);
+      a.remove('b');
+      expect(a.items.map((e) => e.id), ['c', 'a']);
+      expect(await a.importInbox(source: () async => inbox), 0, reason: 'the same push again');
+      expect(a.items.map((e) => e.id), ['c', 'a']);
+      feed = [_upd('frieren', 't_49:voice', 7)];
+      await a.check(force: true);
+      final id = a.items.firstWhere((e) => e.slug == 'frieren').id;
+      a.remove(id);
+      await make().check(force: true);
+      expect(a.items.where((e) => e.id == id), isEmpty, reason: 'the feed check does not bring a deleted episode back');
+      expect(make().items.map((e) => e.id), ['c', 'a']);
+    });
+
+    test('pinned entries are not trimmed away by the limit', () async {
+      final a = make();
+      await a.importInbox(source: () async => '[{"id":"old","type":"news","title":"Old","body":"x","t":1}]');
+      a.togglePin('old');
+      final many = '[${[for (var i = 0; i < EpisodeAlerts.maxItems + 20; i++) '{"id":"n$i","type":"news","title":"N","body":"x","t":${5000 + i}}'].join(',')}]';
+      await a.importInbox(source: () async => many);
+      expect(a.items.length, EpisodeAlerts.maxItems);
+      expect(a.items.first.id, 'old');
+    });
+  });
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:material_symbols_icons/symbols.dart';
@@ -101,6 +103,43 @@ class _HikkaNotificationsPageState extends State<HikkaNotificationsPage> {
     }
   }
 
+  /// Where the last press landed: the long-press menu opens there
+  Offset _lastTap = Offset.zero;
+
+  /// Long press (or right click): pin / unpin and delete
+  Future<void> _actions(EpisodeAlert a, Offset at) async {
+    final scale = _scale;
+    final overlay = Overlay.of(context).context.findRenderObject();
+    if (overlay is! RenderBox) return;
+    PopupMenuItem<String> row(String v, IconData icon, String text, {Color? color}) => PopupMenuItem<String>(
+      value: v,
+      height: 44 * scale,
+      child: Row(
+        children: [
+          Icon(icon, size: 20 * scale, color: color ?? uiTheme.colors.textMuted, weight: 300),
+          SizedBox(width: 12 * scale),
+          Text(text, style: hikkaStyle(13.5 * scale, color: color ?? uiTheme.colors.textPrimary)),
+        ],
+      ),
+    );
+    final picked = await showMenu<String>(
+      context: context,
+      color: uiTheme.colors.drawerBg,
+      shape: RoundedRectangleBorder(
+        borderRadius: uiTheme.borderRadius(12 * scale),
+        side: BorderSide(color: uiTheme.colors.drawerBorder),
+      ),
+      position: RelativeRect.fromLTRB(at.dx, at.dy, overlay.size.width - at.dx, overlay.size.height - at.dy),
+      items: [
+        row('pin', a.pinned ? Symbols.keep_off_rounded : Symbols.keep_rounded, a.pinned ? 'Відкріпити' : 'Закріпити'),
+        row('delete', Symbols.delete_rounded, 'Видалити', color: const Color(0xFFE5484D)),
+      ],
+    );
+    if (!mounted) return;
+    if (picked == 'pin') _alerts.togglePin(a.id);
+    if (picked == 'delete') _alerts.remove(a.id);
+  }
+
   void _open(EpisodeAlert a) {
     _alerts.markRead(a.id);
     if (a.slug.isNotEmpty) HikkaNav.instance.openAnime(a.slug);
@@ -111,6 +150,9 @@ class _HikkaNotificationsPageState extends State<HikkaNotificationsPage> {
     return InkWell(
       key: ValueKey('alert-${a.id}'),
       onTap: () => _open(a),
+      onTapDown: (d) => _lastTap = d.globalPosition,
+      onLongPress: () => unawaited(_actions(a, _lastTap)),
+      onSecondaryTapUp: (d) => unawaited(_actions(a, d.globalPosition)),
       child: Padding(
         padding: EdgeInsets.symmetric(horizontal: pad, vertical: 11 * scale),
         child: Row(
@@ -135,15 +177,32 @@ class _HikkaNotificationsPageState extends State<HikkaNotificationsPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    a.title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: hikkaStyle(
-                      14 * scale,
-                      weight: FontWeight.w600,
-                      height: 1.25,
-                    ),
+                  Row(
+                    children: [
+                      if (a.pinned)
+                        Padding(
+                          padding: EdgeInsets.only(right: 4 * scale),
+                          child: Icon(
+                            Symbols.keep_rounded,
+                            key: const ValueKey('alert-pinned'),
+                            size: 15 * scale,
+                            color: uiTheme.accentColor,
+                            fill: 1,
+                          ),
+                        ),
+                      Expanded(
+                        child: Text(
+                          a.title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: hikkaStyle(
+                            14 * scale,
+                            weight: FontWeight.w600,
+                            height: 1.25,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   SizedBox(height: 3 * scale),
                   Text(
