@@ -171,6 +171,29 @@ void main() {
       rig.driver.stop();
     });
 
+    testWidgets('кінець озвучки без наступної серії: картка з вибором озвучення замість «Це остання серія»', (tester) async {
+      setScreen(tester, kDesktop);
+      final rig = newRig(episodes: [1, 2, 3, 4, 5]);
+      final a = WatchGroup(id: 'a', sourceId: 'src', label: 'Amanogawa', episodes: [ep(1), ep(2), ep(3)]);
+      final b = WatchGroup(id: 'b', sourceId: 'src', label: 'Далі Буде', episodes: [ep(4), ep(5)]);
+      final title = WatchTitle(animeKey: 'hikka:test', offers: [WatchOffer(source: rig.source, anime: const SAnime(url: 'a', title: 'A'), groups: [a, b])]);
+      await tester.pumpWidget(statusHost(rig));
+      await tester.runAsync(() => rig.driver.start(RemoteLaunch(title: title, group: a, animeTitle: 'Аніме', epKey: '3')));
+      rig.started();
+      await settle(tester);
+      expect(find.textContaining('немає в цій озвучці'), findsNothing);
+
+      await tester.runAsync(() => rig.driver.onCompleted());
+      await settle(tester);
+      expect(find.text('Серії 4 немає в цій озвучці'), findsOneWidget);
+      expect(find.textContaining('Далі Буде'), findsWidgets);
+
+      await tester.tap(find.text('Закрити'));
+      await settle(tester);
+      expect(find.textContaining('немає в цій озвучці'), findsNothing);
+      rig.driver.stop();
+    });
+
     testWidgets('телефон: кнопки дій не нижчі за 48 dp', (tester) async {
       AppPlatform.debugMobile = true;
       setScreen(tester, kPhone);
@@ -238,6 +261,28 @@ void main() {
 
       await tester.tap(find.text('Серія 3'));
       expect(picked, [2]);
+      rig.driver.stop();
+    });
+
+    testWidgets('серії: довге утримання ставить і знімає позначку «Переглянуто»', (tester) async {
+      setScreen(tester, kDesktop);
+      final rig = newRig();
+      rig.store.setWatched('hikka:test', '2', true);
+      await tester.pumpWidget(panelHost(rig));
+      await tester.runAsync(() => rig.driver.start(rig.launch()));
+      rig.started();
+      await settle(tester);
+      expect(find.text('Переглянуто'), findsOneWidget);
+
+      await tester.longPress(find.text('Серія 3'));
+      await settle(tester);
+      expect(find.text('Переглянуто'), findsNWidgets(2));
+      expect(rig.store.isWatched('hikka:test', '3'), isTrue);
+
+      await tester.longPress(find.text('Серія 2'));
+      await settle(tester);
+      expect(rig.store.isWatched('hikka:test', '2'), isFalse);
+      expect(find.text('Переглянуто'), findsOneWidget);
       rig.driver.stop();
     });
 

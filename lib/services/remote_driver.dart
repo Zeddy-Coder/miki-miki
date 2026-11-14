@@ -19,6 +19,7 @@ import 'sources/hls_proxy.dart';
 import 'sources/source_log.dart';
 import 'storage_service.dart';
 import 'stream_resolver.dart';
+import 'watch_marks.dart';
 import 'watch_models.dart';
 import 'watch_store.dart';
 
@@ -41,6 +42,23 @@ abstract class RemoteEngine {
 }
 
 /// Стан відтворення серії
+/// Серія скінчилась, а наступної в цій озвучці немає, хоча в інших вона є: що запропонувати глядачеві
+class NextOffer {
+  /// Номер потрібної серії
+  final int next;
+
+  /// Назва озвучки, де наступної серії немає
+  final String from;
+
+  /// Перша за пріоритетом озвучка з наступною серією
+  final WatchGroup byPriority;
+
+  /// Повна озвучка з наступною серією, якщо вона інша, ніж [byPriority]
+  final WatchGroup? full;
+
+  const NextOffer({required this.next, required this.from, required this.byPriority, this.full});
+}
+
 enum RemotePhase {
   /// Сесії немає
   idle,
@@ -113,6 +131,7 @@ class RemoteDriver extends ChangeNotifier {
   // ── Стан ────────────────────────────────────────────────────────────────────
 
   RemoteSession? _session;
+  NextOffer? _offer;
   WatchTitle? _title;
   HikkaEpisodeInfo? _hikka;
   String _groupId = '';
@@ -148,7 +167,23 @@ class RemoteDriver extends ChangeNotifier {
   bool get active => _session != null;
 
   /// Серію ще готують або вона не запустилась: плеєр показує екран стану замість відео
-  bool get showsStatus => _session != null && (_phase == RemotePhase.resolving || _phase == RemotePhase.opening || _phase == RemotePhase.failed);
+  bool get showsStatus => _session != null && (_offer != null || _phase == RemotePhase.resolving || _phase == RemotePhase.opening || _phase == RemotePhase.failed);
+
+  /// Пропозиція перейти в іншу озвучку, коли в цій наступної серії немає
+  NextOffer? get offer => _offer;
+
+  void dismissOffer() {
+    if (_offer == null) return;
+    _offer = null;
+    _changed();
+  }
+
+  /// Прийняти пропозицію: відкрити потрібну серію в озвучці [g]
+  Future<void> acceptOffer(WatchGroup g) async {
+    final o = _offer;
+    _offer = null;
+    await switchGroup(g, episode: o?.next);
+  }
 
   /// Інший плеєр цієї серії, який варто спробувати після поточного (по колу); `null`, якщо вибору немає
   String? get alternativeHoster {
@@ -202,6 +237,7 @@ class RemoteDriver extends ChangeNotifier {
   /// Починає перегляд: черга — усі серії обраної озвучки, відкривається стартова
   Future<void> start(RemoteLaunch launch) async {
     _savePosition();
+    _offer = null;
     _session = launch.session;
     _title = launch.title;
     _hikka = launch.hikka;
@@ -226,6 +262,7 @@ class RemoteDriver extends ChangeNotifier {
     _video = null;
     _chapters = const [];
     _marked = false;
+    _offer = null;
     _tried.clear();
     _phase = RemotePhase.resolving;
     final e = s.entries[i];
@@ -256,8 +293,56 @@ class RemoteDriver extends ChangeNotifier {
 
   Duration? _fallbackStart() => _openStart > const Duration(seconds: 5) ? _openStart : null;
 
-  /// Перемикає озвучку / субтитри: та сама серія (за номером) в іншому варіанті, з того ж місця
-  Future<void> switchGroup(WatchGroup g) async {
+  /// Наступна серія є в інших озвученнях, а в цій — ні: яку озвучку запропонувати (за пріоритетом і повну)
+  NextOffer? _offerFor(RemoteEntry e) {
+    final t = _title;
+    final n = e.episode.number;
+    final cur = group;
+    if (t == null || n == null || n != n.roundToDouble()) return null;
+    final next = n.round() + 1;
+    var pool = [for (final g in t.groups) if (g.id != _groupId && g.hasEpisode(next)) g];
+    if (cur != null && pool.any((g) => g.isSub == cur.isSub)) pool = [for (final g in pool) if (g.isSub == cur.isSub) g];
+    if (pool.isEmpty) return null;
+    WatchGroup pick(List<WatchGroup> from) => pickGroup(
+          from,
+          favorites: store.favoriteChoices,
+          priority: StorageService.getWatchTeamPriority(),
+          safe: (g) => checkOf(g).syncSafe,
+        );
+    final byPriority = pick(pool);
+    final maxLast = maxEpisodeOf(t.groups, limit: t.episodeLimit);
+    final fullPool = [for (final g in pool) if (!g.isIncomplete(maxLast)) g];
+    final full = fullPool.isEmpty ? null : pick(fullPool);
+    return NextOffer(next: next, from: cur?.label ?? '', byPriority: byPriority, full: full == null || full.id == byPriority.id ? null : full);
+  }
+
+  /// Куди перейти, коли поточної серії в новому варіанті немає: перша ще не переглянута серія після неї (за
+  /// номером); якщо таких немає — остання серія варіанта; без номера — перша не переглянута
+  int _nearestIndex(RemoteSession ns, RemoteEntry cur, String animeKey) {
+    final entries = ns.entries;
+    final seen = store.watched(animeKey);
+    final hikka = _hikkaSeen(animeKey);
+    bool done(RemoteEntry e) => seen.contains(e.epKey) || (e.episode.number != null && e.episode.number! <= hikka);
+    final n = cur.episode.number;
+    if (n == null) {
+      final i = entries.indexWhere((e) => !done(e));
+      return i < 0 ? 0 : i;
+    }
+    final after = entries.indexWhere((e) => (e.episode.number ?? 0) > n && !done(e));
+    return after >= 0 ? after : entries.length - 1;
+  }
+
+  /// Скільки серій уже відмічено на Hikka (з пам'яті; без входу — 0)
+  int _hikkaSeen(String animeKey) {
+    const prefix = 'hikka:';
+    if (!animeKey.startsWith(prefix)) return 0;
+    return HikkaMyList.instance.cached(animeKey.substring(prefix.length))?.episodes ?? 0;
+  }
+
+  /// Перемикає озвучку / субтитри. Та сама серія (за номером) відкривається з того ж місця; якщо в новому варіанті
+  /// її немає — перша ще не переглянута, з початку (раніше брався номер за позицією, що кидав у кінець тайтла).
+  /// [episode] — відкрити серію з цим номером
+  Future<void> switchGroup(WatchGroup g, {int? episode}) async {
     final s = _session;
     final t = _title;
     final cur = entry;
@@ -265,17 +350,20 @@ class RemoteDriver extends ChangeNotifier {
     final at = engine.position;
     _savePosition();
     final ns = RemoteSession.fromGroup(animeKey: s.animeKey, animeTitle: s.animeTitle, group: g, poster: s.poster);
-    var ni = ns.indexOfKey(cur.epKey);
-    if (ni < 0) ni = _index.clamp(0, ns.entries.length - 1);
+    var ni = episode != null ? ns.entries.indexWhere((x) => x.episode.number == episode.toDouble()) : ns.indexOfKey(cur.epKey);
+    final sameEpisode = ni >= 0 && episode == null;
+    if (ni < 0) ni = _nearestIndex(ns, cur, s.animeKey);
     _session = ns;
     _groupId = g.id;
+    _offer = null;
     _stickyHoster = null;
     // Свідомий вибір: запамʼятовується для цього тайтлу й стає типовим для нових (див. `pickGroup`)
     store.setPreferredGroup(s.animeKey, g.id);
     store.setPinnedGroup(s.animeKey, g.id);
     store.setFavoriteChoice(choiceKeyOf(g));
     onSession?.call();
-    await open(ni, startAt: at > const Duration(seconds: 5) ? at : null, saveCurrent: false);
+    if (!sameEpisode) onMessage?.call('Відкрито: ${ns.entries[ni].title}');
+    await open(ni, startAt: sameEpisode && at > const Duration(seconds: 5) ? at : null, saveCurrent: false);
   }
 
   /// Вручну обраний плеєр (Moon, Ashdi …): діє й на наступні серії цієї сесії
@@ -337,7 +425,13 @@ class RemoteDriver extends ChangeNotifier {
     final dur = engine.duration.inMilliseconds;
     if (dur > 0) _writePosition(e.key, dur, dur); // дивитись спочатку, а не з кінця
     if (!hasNext) {
-      onMessage?.call('Це остання серія');
+      final o = _offerFor(e);
+      if (o != null) {
+        _offer = o;
+        _changed();
+      } else {
+        onMessage?.call('Це остання серія');
+      }
       return;
     }
     if (autoNext()) {
@@ -381,6 +475,7 @@ class RemoteDriver extends ChangeNotifier {
     _token++;
     _cancelTimers();
     _session = null;
+    _offer = null;
     _title = null;
     _stream = null;
     _video = null;
@@ -433,15 +528,23 @@ class RemoteDriver extends ChangeNotifier {
 
   /// Передає прогрес у списки Hikka: лише для тайтлів із каталогу Hikka, лише за входу й тихо
   void _syncToHikka(RemoteSession s, RemoteEntry e) {
-    const prefix = 'hikka:';
-    if (!s.animeKey.startsWith(prefix)) return;
     final total = _hikka?.total;
-    // Номер серії довірений, якщо хоч одна серія варіанта лежить у межах тайтлу; наскрізна нумерація (13…24
-    // для 12 серій) рахується за позицією
-    final nums = s.entries.map((x) => x.episode.number).whereType<double>().toList();
-    final trust = nums.isEmpty || total == null || total <= 0 || nums.reduce((a, b) => a < b ? a : b) <= total;
-    final n = HikkaMyList.episodeNumber(number: e.episode.number, position: s.entries.indexOf(e) + 1, total: total, trustNumber: trust);
-    unawaited(HikkaMyList.instance.syncEpisode(s.animeKey.substring(prefix.length), n, total: total));
+    final n = WatchMarks.hikkaNumber(number: e.episode.number, position: s.entries.indexOf(e) + 1, allNumbers: s.entries.map((x) => x.episode.number), total: total);
+    WatchMarks.syncToHikka(s.animeKey, n, total: total);
+  }
+
+  /// Довге утримання серії в списку: ставить чи знімає позначку «переглянуто» (і на Hikka)
+  void toggleWatched(int i) {
+    final s = _session;
+    if (s == null || i < 0 || i >= s.entries.length) return;
+    final e = s.entries[i];
+    final value = !store.isWatched(s.animeKey, e.epKey);
+    final total = _hikka?.total;
+    final n = WatchMarks.hikkaNumber(number: e.episode.number, position: i + 1, allNumbers: s.entries.map((x) => x.episode.number), total: total);
+    WatchMarks.set(store, s.animeKey, e.epKey, value, hikkaEpisode: n, total: total);
+    if (i == _index) _marked = true; // поточну серію не позначати знову автоматично
+    onMessage?.call(value ? 'Позначено переглянутою' : 'Позначку знято');
+    _changed();
   }
 
   void _savePosition() {

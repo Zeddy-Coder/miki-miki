@@ -280,6 +280,36 @@ class HikkaMyList extends ChangeNotifier {
     });
   }
 
+  /// Знімає позначку «переглянуто» з серії [episode]: прогрес на Hikka стає на одну серію менший, але лише якщо
+  /// він її враховував; решта списку не змінюється. Те саме правило входу й синхронізації, що й у [syncEpisode]
+  Future<void> unmarkEpisode(String slug, int episode, {int? total}) {
+    if (!signedIn || !_auth.syncProgress || episode < 1) return Future.value();
+    final prev = _syncing[slug] ?? Future<void>.value();
+    final run = prev.then((_) => _unmarkOne(slug, episode, total));
+    _syncing[slug] = run;
+    return run.whenComplete(() {
+      if (identical(_syncing[slug], run)) _syncing.remove(slug);
+    });
+  }
+
+  Future<void> _unmarkOne(String slug, int episode, int? total) async {
+    try {
+      final old = await entry(slug, refresh: true);
+      if (old == null || old.episodes < episode) return;
+      await save(
+        slug,
+        status: old.status == HikkaWatchStatus.completed ? HikkaWatchStatus.watching : old.status,
+        episodes: episode - 1,
+        total: total,
+      );
+      AppLog.d('hikka', 'позначку знято: $slug, серія $episode');
+    } on HikkaException catch (e) {
+      AppLog.w('hikka', 'позначку не знято ($slug, серія $episode): $e');
+    } catch (e) {
+      AppLog.w('hikka', 'позначку не знято ($slug, серія $episode): $e');
+    }
+  }
+
   Future<void> _syncOne(String slug, int episode, int? total) async {
     try {
       // Свіжий запис: на сайті прогрес міг піти вперед, а за застарілим кешем ми б його занизили

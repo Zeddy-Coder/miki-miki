@@ -237,6 +237,20 @@ void main() {
       expect(b['episodes'], 3);
     });
 
+    test('зняття позначки: прогрес на Hikka стає на серію менший; ранішу серію не чіпає', () async {
+      serveWatch(existing: watchJson(episodes: 18));
+      await list.unmarkEpisode(slug, 18, total: 19);
+      final b = put();
+      expect(b['episodes'], 17);
+      expect(b['status'], 'watching');
+    });
+
+    test('зняття позначки з серії, якої прогрес не враховував, нічого не відправляє', () async {
+      serveWatch(existing: watchJson(episodes: 9));
+      await list.unmarkEpisode(slug, 12, total: 19);
+      expect(server.of('PUT', '/watch/$slug'), isEmpty);
+    });
+
     test('остання серія: «Переглянуто»', () async {
       serveWatch(existing: watchJson(episodes: 11));
       await list.syncEpisode(slug, 12, total: 12);

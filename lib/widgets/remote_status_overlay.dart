@@ -33,6 +33,7 @@ class RemoteStatusOverlay extends StatelessWidget {
   Widget build(BuildContext context) {
     final bool show = driver.showsStatus;
     final bool failed = driver.phase == RemotePhase.failed;
+    final offer = driver.offer;
     return Positioned.fill(
       child: IgnorePointer(
         ignoring: !show,
@@ -46,9 +47,11 @@ class RemoteStatusOverlay extends StatelessWidget {
                   ? const SizedBox.shrink()
                   : AppFadeSwitcher(
                       alignment: Alignment.center,
-                      child: failed
-                          ? KeyedSubtree(key: const ValueKey('failed'), child: _failedCard())
-                          : KeyedSubtree(key: const ValueKey('loading'), child: _loadingCard()),
+                      child: offer != null
+                          ? KeyedSubtree(key: const ValueKey('offer'), child: _offerCard(offer))
+                          : failed
+                              ? KeyedSubtree(key: const ValueKey('failed'), child: _failedCard())
+                              : KeyedSubtree(key: const ValueKey('loading'), child: _loadingCard()),
                     ),
             ),
           ),
@@ -97,6 +100,61 @@ class RemoteStatusOverlay extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// Серія скінчилась, а наступної в цій озвучці немає: куди перейти
+  Widget _offerCard(NextOffer o) {
+    final others = o.full != null;
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: 420 * scale),
+      child: Container(
+        padding: EdgeInsets.fromLTRB(18 * scale, 16 * scale, 18 * scale, 16 * scale),
+        decoration: _cardDecoration(),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Symbols.skip_next_rounded, color: uiTheme.accentColor, size: 30 * scale, fill: 1, weight: 300, opticalSize: 24),
+            SizedBox(height: 8 * scale),
+            Text(
+              'Серії ${o.next} немає в цій озвучці',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontFamily: 'Arial', color: uiTheme.textPrimary, fontSize: 15 * scale, fontWeight: FontWeight.w600),
+            ),
+            SizedBox(height: 6 * scale),
+            Text(
+              o.from.isEmpty ? 'Її можна продовжити в іншій озвучці.' : 'Озвучення «${o.from}» тут закінчується. Продовжити в іншій?',
+              textAlign: TextAlign.center,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontFamily: 'Arial', color: uiTheme.textMuted, fontSize: 12.5 * scale, height: 1.35),
+            ),
+            SizedBox(height: 14 * scale),
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 8 * scale,
+              runSpacing: 8 * scale,
+              children: [
+                AppAccentButton(
+                  scale: scale,
+                  label: others ? 'Наступна за пріоритетом: ${o.byPriority.label}' : 'Перейти: ${o.byPriority.label}',
+                  icon: Symbols.skip_next_rounded,
+                  onTap: () => driver.acceptOffer(o.byPriority),
+                ),
+                if (o.full != null)
+                  AppSecondaryButton(
+                    scale: scale,
+                    expand: false,
+                    label: 'Повна: ${o.full!.label}',
+                    icon: Symbols.playlist_play_rounded,
+                    onTap: () => driver.acceptOffer(o.full!),
+                  ),
+                AppSecondaryButton(scale: scale, expand: false, label: 'Закрити', icon: Symbols.close_rounded, onTap: driver.dismissOffer),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

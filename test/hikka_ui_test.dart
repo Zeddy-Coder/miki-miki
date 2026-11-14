@@ -1015,7 +1015,7 @@ void main() {
       for (final label in ['Головна', 'Огляд', 'Списки', 'Профіль', 'Налаштування']) {
         expect(find.text(label), findsWidgets, reason: label);
       }
-      expect(find.text('v1.1.3'), findsOneWidget);
+      expect(find.text('v1.1.4'), findsOneWidget);
       expect(find.text('MyPlayer'), findsNothing);
       expect(find.text('YouTube Mobile Fork'), findsNothing);
       await shot(tester, 'homehub_desktop_home');

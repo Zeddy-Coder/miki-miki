@@ -7,6 +7,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import '../../models/hikka_models.dart';
 import '../../services/episode_check.dart';
 import '../../services/hikka_lists.dart';
+import '../../services/watch_marks.dart';
 import '../../services/hikka_nav.dart';
 import '../../services/hikka_prefs.dart';
 import '../../services/remote_playback.dart';
@@ -555,7 +556,11 @@ class _HikkaWatchSectionState extends State<HikkaWatchSection> {
     final r = uiTheme.borderRadius(8 * scale);
     final label = episodeLabel(g.episodes[i], i);
     final fg = isNext ? uiTheme.accentColor : (watched ? uiTheme.textDarkMuted : uiTheme.textPrimary);
-    void toggle() => _store.setWatched(t.animeKey, key, !watched);
+    void toggle() {
+      final total = _load.hikka.total;
+      final n = WatchMarks.hikkaNumber(number: g.episodes[i].number, position: i + 1, allNumbers: g.episodes.map((x) => x.number), total: total);
+      WatchMarks.set(_store, t.animeKey, key, !watched, hikkaEpisode: n, total: total);
+    }
     final name = g.episodes[i].name;
     final button = Material(
       color: isNext ? uiTheme.accentWash : uiTheme.bgElevated,

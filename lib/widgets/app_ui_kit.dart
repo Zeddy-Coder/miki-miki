@@ -1620,6 +1620,9 @@ class AppSelectableSurface extends StatelessWidget {
   final double scale;
   final bool isSelected;
   final VoidCallback? onTap;
+
+  /// Довге утримання (на комп'ютері — права кнопка миші)
+  final VoidCallback? onLongPress;
   final double radius;
   final double? height;
   final EdgeInsetsGeometry padding;
@@ -1631,6 +1634,7 @@ class AppSelectableSurface extends StatelessWidget {
     required this.isSelected,
     required this.child,
     this.onTap,
+    this.onLongPress,
     this.radius = 10,
     this.height,
     this.padding = EdgeInsets.zero,
@@ -1650,6 +1654,8 @@ class AppSelectableSurface extends StatelessWidget {
           highlightColor: uiTheme.touchHighlight,
           hoverColor: uiTheme.hoverOverlay,
           onTap: onTap,
+          onLongPress: onLongPress,
+          onSecondaryTap: onLongPress,
           child: AppAnimatedContainer(
             duration: AppAnim.fast,
             curve: AppAnim.easeOut,

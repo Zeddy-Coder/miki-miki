@@ -180,6 +180,7 @@ class _RemotePanelBodyState extends State<RemotePanelBody> {
             height: _rowH,
             padding: EdgeInsets.symmetric(horizontal: 10 * scale),
             onTap: () => widget.onEpisodeSelected(i),
+            onLongPress: () => widget.driver.toggleWatched(i),
             child: Row(
               children: [
                 Container(

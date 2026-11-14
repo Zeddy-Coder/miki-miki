@@ -8,6 +8,7 @@ import 'package:miki_miki/services/hikka_auth.dart';
 import 'package:miki_miki/services/hikka_lists.dart';
 import 'package:miki_miki/services/remote_driver.dart';
 import 'package:miki_miki/services/remote_playback.dart';
+import 'package:miki_miki/services/storage_service.dart';
 import 'package:miki_miki/services/watch_models.dart';
 
 import 'support/hikka_account_fakes.dart';
@@ -319,6 +320,114 @@ void main() {
       expect(r.driver.session!.groupLabel, 'Команда Б');
     });
 
+    group('озвучка без поточної серії (1–9 → 10–19)', () {
+      Rig rig() => Rig(episodes: [for (var n = 1; n <= 19; n++) n]);
+      WatchGroup a() => WatchGroup(id: 'a', sourceId: 'src', label: 'Amanogawa', episodes: [for (var n = 1; n <= 9; n++) ep(n)]);
+      WatchGroup b() => WatchGroup(id: 'b', sourceId: 'src', label: 'Далі Буде', episodes: [for (var n = 10; n <= 19; n++) ep(n)]);
+      RemoteLaunch launch(Rig r, WatchGroup ga, WatchGroup gb, String epKey) => RemoteLaunch(
+            title: WatchTitle(
+              animeKey: 'hikka:test',
+              offers: [WatchOffer(source: r.source, anime: const SAnime(url: 'a', title: 'A'), groups: [ga, gb])],
+            ),
+            group: ga,
+            animeTitle: 'Аніме',
+            epKey: epKey,
+          );
+
+      test('ручне перемикання: відкривається перша серія нової озвучки з початку, а не серія за позицією', () async {
+        final r = rig();
+        final ga = a(), gb = b();
+        await r.driver.start(launch(r, ga, gb, '9'));
+        r.started();
+        r.engine.position = const Duration(minutes: 22);
+        await r.driver.switchGroup(gb);
+        expect(r.driver.groupId, 'b');
+        expect(r.driver.entry!.epKey, '10');
+        expect(r.driver.index, 0);
+        expect(r.engine.opens.last.start, isNull, reason: 'час з іншої серії не переноситься');
+        expect(r.store.isWatched('hikka:test', '18'), isFalse);
+        expect(r.messages.last, startsWith('Відкрито: '));
+      });
+
+      test('перемикання з уже переглянутими серіями: відкривається перша непереглянута', () async {
+        final r = rig();
+        final ga = a(), gb = b();
+        r.store.setWatched('hikka:test', '10', true);
+        r.store.setWatched('hikka:test', '11', true);
+        await r.driver.start(launch(r, ga, gb, '9'));
+        r.started();
+        await r.driver.switchGroup(gb);
+        expect(r.driver.entry!.epKey, '12');
+      });
+
+      test('кінець останньої серії озвучки: пропозиція з наступною за пріоритетом і повною озвучкою', () async {
+        final r = rig();
+        final ga = a(), gb = b();
+        final full = WatchGroup(id: 'f', sourceId: 'src', label: 'Повна', episodes: [for (var n = 1; n <= 19; n++) ep(n)]);
+        StorageService.saveWatchTeamPriority(['Далі Буде']);
+        addTearDown(() => StorageService.saveWatchTeamPriority([]));
+        final title = WatchTitle(
+          animeKey: 'hikka:test',
+          offers: [WatchOffer(source: r.source, anime: const SAnime(url: 'a', title: 'A'), groups: [ga, gb, full])],
+        );
+        await r.driver.start(RemoteLaunch(title: title, group: ga, animeTitle: 'Аніме', epKey: '9'));
+        r.started();
+        r.engine.position = const Duration(minutes: 23, seconds: 59);
+        await r.driver.onCompleted();
+        expect(r.driver.hasNext, isFalse);
+        final o = r.driver.offer!;
+        expect(o.next, 10);
+        expect(o.from, 'Amanogawa');
+        expect({o.byPriority.id, o.full?.id}, {'b', 'f'});
+        expect(r.driver.showsStatus, isTrue);
+        expect(r.messages, isNot(contains('Це остання серія')));
+
+        await r.driver.acceptOffer(o.byPriority);
+        expect(r.driver.offer, isNull);
+        expect(r.driver.entry!.epKey, '10');
+        expect(r.engine.opens.last.start, isNull);
+      });
+
+      test('«Закрити» прибирає пропозицію; без інших озвучок із наступною серією лишається «Це остання серія»', () async {
+        final r = rig();
+        final ga = a(), gb = b();
+        await r.driver.start(launch(r, ga, gb, '9'));
+        r.started();
+        await r.driver.onCompleted();
+        expect(r.driver.offer, isNotNull);
+        r.driver.dismissOffer();
+        expect(r.driver.offer, isNull);
+        expect(r.driver.showsStatus, isFalse);
+
+        final r2 = rig();
+        final only = WatchGroup(id: 'o', sourceId: 'src', label: 'Одна', episodes: [for (var n = 1; n <= 3; n++) ep(n)]);
+        final t2 = WatchTitle(animeKey: 'hikka:test', offers: [WatchOffer(source: r2.source, anime: const SAnime(url: 'a', title: 'A'), groups: [only])]);
+        await r2.driver.start(RemoteLaunch(title: t2, group: only, animeTitle: 'Аніме', epKey: '3'));
+        r2.started();
+        await r2.driver.onCompleted();
+        expect(r2.driver.offer, isNull);
+        expect(r2.messages, contains('Це остання серія'));
+      });
+    });
+
+    test('довге утримання серії ставить і знімає позначку «переглянуто»', () async {
+      final r = Rig();
+      await r.driver.start(r.launch());
+      r.started();
+      r.driver.toggleWatched(2);
+      expect(r.store.isWatched('hikka:test', '3'), isTrue);
+      expect(r.messages.last, 'Позначено переглянутою');
+      r.driver.toggleWatched(2);
+      expect(r.store.isWatched('hikka:test', '3'), isFalse);
+      expect(r.messages.last, 'Позначку знято');
+      // поточну серію після зняття позначки не позначає знову сама
+      r.driver.toggleWatched(0);
+      r.driver.toggleWatched(0);
+      r.engine.position = const Duration(minutes: 23);
+      r.driver.tick();
+      expect(r.store.isWatched('hikka:test', '1'), isFalse);
+    });
+
     test('запуск — не вибір: улюбленою команда стає лише після перемикання в плеєрі', () async {
       final r = Rig();
       await r.driver.start(r.launch());
@@ -396,7 +505,7 @@ void main() {
       );
       await r.driver.start(RemoteLaunch(title: title, group: r.group, animeTitle: 'Аніме', epKey: '3'));
       await r.driver.switchGroup(short);
-      expect(r.driver.index, 1); // 3-ї серії немає — залишаємось у межах черги
+      expect(r.driver.index, 1); // 3-ї серії немає й далі нічого — остання серія черги
       expect(r.driver.entry!.epKey, '2');
     });
 
