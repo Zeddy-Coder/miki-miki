@@ -70,13 +70,13 @@ void main() {
     await mouse.up();
     await tester.pump(const Duration(milliseconds: 300));
     await expectLater(find.byType(Scaffold), matchesGoldenFile('dock_hover.png'));
-    // колесо над швидкістю
+    // wheel over speed
     final speed = find.text('1x');
     await mouse.moveTo(tester.getCenter(speed));
     await mouse.down(tester.getCenter(speed)); await mouse.up();
     await tester.sendEventToBinding(PointerScrollEvent(position: tester.getCenter(speed), scrollDelta: const Offset(0, -20), kind: PointerDeviceKind.mouse));
     await tester.pump();
-    // гучність: навести і клікнути на повзунок
+    // volume: hover and click on the slider
     final vol = find.byType(AppVolumeControl);
     final vr = tester.getRect(vol);
     await mouse.moveTo(vr.center);
@@ -87,7 +87,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     await expectLater(find.byType(Scaffold), matchesGoldenFile('dock_vol.png'));
     expect(tester.takeException(), isNull);
-    // наведення на смужку запускає фоновий сервіс прев'ю (таймер простою) — зупиняємо його до кінця тесту
+    // hovering over the bar starts the background preview service (an idle timer): we stop it before the test ends
     SeekPreviewService.dispose();
   });
 }
