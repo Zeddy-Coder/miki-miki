@@ -1,16 +1,30 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
 import 'package:media_kit/media_kit.dart';
 import '../constants/app_constants.dart';
 import '../models/media_models.dart';
+import '../models/source_models.dart';
 import '../services/anime4k_controller.dart';
 import '../services/anime4k_service.dart';
+import '../services/remote_driver.dart';
+import '../services/app_log.dart';
+import '../services/hikka_nav.dart';
+import '../services/playback_clock.dart';
+import '../services/skips/skip_align.dart';
+import '../services/songs/song_service.dart';
+import '../services/songs/theme_songs.dart';
 import '../services/storage_service.dart';
 import '../services/ui_theme_service.dart';
 import '../utils/formatters.dart';
 import '../utils/platform_info.dart';
 import 'app_animation_kit.dart';
+import 'app_tones.dart';
 import 'app_ui_kit.dart';
+import 'design_kit.dart';
+import 'line_icons.dart';
+import 'player_kit.dart';
+import 'song_card.dart';
 
 class SettingsDrawer extends StatelessWidget {
   final double scale;
@@ -47,6 +61,12 @@ class SettingsDrawer extends StatelessWidget {
   /// Work key for saving the audio delay (empty means do not save)
   final String audioDelayKey;
 
+  /// Site episodes: with several quality variants the menu starts with "Якість" (switched from the same place)
+  final RemoteDriver? remote;
+
+  /// "Усі налаштування" under "Більше": the app settings over the player (null: no row)
+  final VoidCallback? onOpenAppSettings;
+
   const SettingsDrawer({
     super.key,
     required this.scale,
@@ -75,16 +95,9 @@ class SettingsDrawer extends StatelessWidget {
     required this.onOpenStats,
     required this.anime4k,
     this.audioDelayKey = '',
+    this.remote,
+    this.onOpenAppSettings,
   });
-
-  String _getCurrentChapterLabel() {
-    if (chapters.isEmpty) return "Немає";
-    final pos = player.state.position;
-    for (int i = chapters.length - 1; i >= 0; i--) {
-      if (pos >= chapters[i].startTime) return AppFormatters.translateChapterTitle(chapters[i].title);
-    }
-    return AppFormatters.translateChapterTitle(chapters.first.title);
-  }
 
   String _getCurrentAudioLabel() {
     if (audioTracks.isEmpty) return "Немає";
@@ -114,6 +127,19 @@ class SettingsDrawer extends StatelessWidget {
     return "Вимкнено";
   }
 
+  /// The quality variants of the current site episode ("Авто", "1080p" …); empty for files
+  List<Video> get _qualities => remote != null && remote!.active ? (remote!.stream?.qualities ?? const <Video>[]) : const <Video>[];
+
+  static String qualityLabel(Video v) => v.title.isNotEmpty ? v.title : (v.resolution != null ? '${v.resolution}p' : 'Авто');
+
+  String get _currentQuality {
+    final url = remote?.video?.url;
+    for (final v in _qualities) {
+      if (v.url == url) return qualityLabel(v);
+    }
+    return remote?.video == null ? '' : qualityLabel(remote!.video!);
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentSub = player.state.track.subtitle;
@@ -124,118 +150,91 @@ class SettingsDrawer extends StatelessWidget {
 
     if (sheet) return _buildSheet(context, isSubDisabled, currentSub, currentAud);
 
+    // A PC: one dark tile like the app's drop-down menus, under (or over) its button
     final double drawerWidth = 390.0 * scale;
     final double calculatedLeft = (drawerAnchorPixelX - (drawerWidth / 2))
         .clamp(35.0 * scale, screenWidth - drawerWidth - 35.0 * scale);
+    final radius = uiTheme.borderRadius(14 * scale);
 
     return Stack(children: [Positioned(
       bottom: drawerIsTop ? null : 95.0 * scale,
       top: drawerIsTop ? 65.0 * scale : null,
       left: calculatedLeft,
-      child: Container(
-        width: drawerWidth,
+      child: DecoratedBox(
+        key: const ValueKey('player-menu'),
         decoration: BoxDecoration(
-          color: uiTheme.colors.drawerBg,
-          borderRadius: uiTheme.borderRadius(14 * scale),
-          border: Border.all(color: uiTheme.colors.drawerBorder, width: 1.0),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: uiTheme.isLight ? 0.12 : 0.50),
-              blurRadius: 16 * scale,
-              offset: Offset(0, 4 * scale),
-            ),
-          ],
+          borderRadius: radius,
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: uiTheme.isLight ? 0.16 : 0.42), blurRadius: 36 * scale, offset: Offset(0, 10 * scale))],
         ),
-        child: Container(
-          constraints: BoxConstraints(maxHeight: 420 * scale),
-          child: AppAnimatedSize(
-            child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                height: 48 * scale,
-                padding: EdgeInsets.symmetric(horizontal: 18 * scale),
-                alignment: Alignment.centerLeft,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    if (activeDrawerPrev != null)
-                      InkWell(
-                        onTap: onBack,
-                        borderRadius: uiTheme.borderRadius(6 * scale),
-                        splashColor: Colors.transparent,
-                        highlightColor: uiTheme.touchHighlight,
-                        hoverColor: uiTheme.isLight
-                            ? Colors.black.withValues(alpha: 0.04)
-                            : Colors.white.withValues(alpha: 0.05),
-                        child: Row(
-                          children: [
-                            Icon(Symbols.chevron_left_rounded, color: uiTheme.colors.textMuted, size: 20 * scale),
-                            SizedBox(width: 4 * scale),
-                            Text(
-                              'Назад',
-                              style: TextStyle(
-                                fontFamily: 'Arial',
-                                color: uiTheme.colors.textMuted,
-                                fontSize: 13.5 * scale,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    else
-                      Text(
-                        _getDrawerTitle(),
-                        style: TextStyle(
-                          fontFamily: 'Arial',
-                          color: uiTheme.colors.textPrimary,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14.5 * scale,
-                        ),
-                      ),
-                    IconButton(
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                      icon: Icon(
-                        Symbols.close_rounded,
-                        color: uiTheme.colors.textDarkMuted,
-                        size: 19 * scale,
-                        weight: 300,
-                        opticalSize: 24,
-                      ),
-                      onPressed: onClose,
-                    ),
-                  ],
-                ),
-              ),
-              Flexible(
-                child: ScrollConfiguration(
-                  behavior: const AppScrollBehavior().copyWith(scrollbars: false),
-                  child: KeyedSubtree(
-                    child: SingleChildScrollView(
-                      controller: scrollController,
-                      padding: EdgeInsets.only(left: 8 * scale, right: 8 * scale, bottom: 8 * scale),
-                      child: AppFadeSwitcher(
-                        duration: AppAnim.fast,
-                        child: Column(
-                          key: ValueKey(activeDrawer),
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: _buildContent(context, scale, isSubDisabled, currentSub, currentAud),
+        child: Material(
+          color: AppTones.menu,
+          shape: RoundedRectangleBorder(borderRadius: radius, side: BorderSide(color: AppTones.menuLine)),
+          clipBehavior: Clip.antiAlias,
+          child: Container(
+            width: drawerWidth,
+            constraints: BoxConstraints(maxHeight: 440 * scale),
+            child: AppAnimatedSize(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SizedBox(height: 6 * scale),
+                  _menuCaption(),
+                  Flexible(
+                    child: ScrollConfiguration(
+                      behavior: const AppScrollBehavior().copyWith(scrollbars: false),
+                      child: SingleChildScrollView(
+                        controller: scrollController,
+                        padding: EdgeInsets.only(bottom: 6 * scale),
+                        child: AppFadeSwitcher(
+                          duration: AppAnim.fast,
+                          child: Column(
+                            key: ValueKey(activeDrawer),
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: _buildContent(context, scale, isSubDisabled, currentSub, currentAud),
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
+                ],
               ),
-            ],
-          ),
+            ),
           ),
         ),
       ),
     )]);
+  }
+
+  /// The grey caption of the tile: what the menu is about; on an inner page it leads back ("‹ Швидкість відтворення")
+  Widget _menuCaption() {
+    final s = scale;
+    final text = Text(_getDrawerTitle(), maxLines: 1, overflow: TextOverflow.ellipsis, style: playerText(12 * s, color: AppTones.caption, weight: FontWeight.w700));
+    if (activeDrawerPrev == null) {
+      return Padding(padding: EdgeInsets.fromLTRB(16 * s, 8 * s, 16 * s, 4 * s), child: text);
+    }
+    return Semantics(
+      button: true,
+      label: 'Назад',
+      child: InkWell(
+        key: const ValueKey('menu-back'),
+        onTap: onBack,
+        splashColor: Colors.transparent,
+        highlightColor: uiTheme.touchHighlight,
+        hoverColor: uiTheme.hoverOverlay,
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(12 * s, 6 * s, 16 * s, 4 * s),
+          child: Row(
+            children: [
+              LineIconView(LineIcon.back, size: 16 * s, color: AppTones.caption, stroke: 1.8),
+              SizedBox(width: 8 * s),
+              Flexible(child: text),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   /// Phone: a header (back / title / close, buttons ≥ 48 dp) and a list scrolled by finger
@@ -249,7 +248,7 @@ class SettingsDrawer extends StatelessWidget {
           child: Row(
             children: [
               if (activeDrawerPrev != null)
-                _sheetButton(Symbols.arrow_back_rounded, onBack, 'Назад')
+                Padding(padding: const EdgeInsets.only(left: 6), child: _sheetButton(LineIcon.back, onBack, 'Назад'))
               else
                 const SizedBox(width: 20),
               Expanded(
@@ -257,10 +256,10 @@ class SettingsDrawer extends StatelessWidget {
                   _getDrawerTitle(),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontFamily: 'Arial', color: uiTheme.colors.textPrimary, fontWeight: FontWeight.w600, fontSize: 17),
+                  style: playerText(18, weight: FontWeight.w700),
                 ),
               ),
-              _sheetButton(Symbols.close_rounded, onClose, 'Закрити'),
+              _sheetButton(LineIcon.close, onClose, 'Закрити'),
               const SizedBox(width: 6),
             ],
           ),
@@ -268,7 +267,7 @@ class SettingsDrawer extends StatelessWidget {
         Flexible(
           child: SingleChildScrollView(
             controller: scrollController,
-            padding: EdgeInsets.fromLTRB(10, 0, 10, 14 * scale),
+            padding: EdgeInsets.only(bottom: 10 * scale),
             child: AppFadeSwitcher(
               duration: AppAnim.fast,
               child: Column(
@@ -285,7 +284,7 @@ class SettingsDrawer extends StatelessWidget {
   }
 
   /// A round 48×48 dp button with a visible touch reaction
-  Widget _sheetButton(IconData icon, VoidCallback onTap, String label) {
+  Widget _sheetButton(LineIcon icon, VoidCallback onTap, String label) {
     return Semantics(
       button: true,
       label: label,
@@ -299,7 +298,7 @@ class SettingsDrawer extends StatelessWidget {
           child: SizedBox(
             width: 48,
             height: 48,
-            child: Icon(icon, color: uiTheme.colors.textMuted, size: 24, weight: 300, opticalSize: 24),
+            child: Center(child: LineIconView(icon, size: icon == LineIcon.close ? 21 : 23, color: uiTheme.textSecondary)),
           ),
         ),
       ),
@@ -309,14 +308,80 @@ class SettingsDrawer extends StatelessWidget {
   String _getDrawerTitle() {
     switch (activeDrawer) {
       case 'speed': return 'Швидкість відтворення';
+      case 'quality': return 'Якість';
       case 'advanced': return 'Більше';
       case 'hwdec': return 'Апаратний декодер';
-      case 'chapters': return 'Розділи та глави';
+      case 'chapters': return 'Розділи';
       case 'anime4k': return 'Anime4K';
-      case 'subs': return 'Субтитри (${subtitleTracks.length})';
-      case 'audio': return 'Аудіодоріжка (${audioTracks.length})';
+      case 'subs': return 'Субтитри';
+      case 'audio': return 'Звук';
+      case 'song-op': case 'song-ed': return 'Пісня';
       default: return 'Налаштування';
     }
+  }
+
+  // ── Rows ───────────────────────────────────────────────────────────────────
+
+  /// A row of the menu: a line icon, the title (on a phone a long value goes under it in grey), the value, a chevron
+  Widget _row({
+    required String id,
+    required LineIcon icon,
+    required String title,
+    String? value,
+    bool long = false,
+    bool chevron = true,
+    bool active = false,
+    VoidCallback? onTap,
+  }) =>
+      PlayerMenuRow(
+        key: ValueKey('menu-$id'),
+        scale: scale,
+        sheet: sheet,
+        icon: icon,
+        title: title,
+        sub: long && sheet ? value : null,
+        value: long && sheet ? null : value,
+        chevron: chevron,
+        active: active,
+        onTap: onTap,
+      );
+
+  /// A choice inside a page: the label, maybe a grey line, the accent check mark on the chosen one
+  Widget _choice({
+    required String id,
+    required String label,
+    String? subtitle,
+    required bool selected,
+    required VoidCallback onTap,
+    Widget? trailing,
+    Widget? leading,
+  }) =>
+      AppCheckRow(
+        key: ValueKey('choice-$id'),
+        scale: scale,
+        label: label,
+        subtitle: subtitle,
+        selected: selected,
+        onTap: onTap,
+        trailing: trailing,
+        leading: leading,
+        padH: sheet ? 20 : 16,
+        minHeight: sheet ? 52 : 42,
+      );
+
+  Widget _divider() => Container(height: 1, margin: EdgeInsets.symmetric(vertical: 6 * scale), color: AppTones.menuLine);
+
+  /// A grey note under a list (Anime4K skipped, an error, what the audio delay does)
+  Widget _note(String text, {bool isError = false}) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB((sheet ? 20 : 16) * scale, 6 * scale, (sheet ? 20 : 16) * scale, 4 * scale),
+      child: Text(
+        text,
+        maxLines: 4,
+        overflow: TextOverflow.ellipsis,
+        style: playerText(12 * scale, color: isError ? const Color(0xFFE5484D) : AppTones.rowSub, height: 1.35),
+      ),
+    );
   }
 
   List<Widget> _buildContent(
@@ -326,362 +391,335 @@ class SettingsDrawer extends StatelessWidget {
     SubtitleTrack currentSub,
     AudioTrack currentAud,
   ) {
+    if (activeDrawer == 'song-op' || activeDrawer == 'song-ed') return _songPage(activeDrawer == 'song-ed' ? SongKind.ed : SongKind.op);
+
     if (activeDrawer == 'speed') {
-      return AppConstants.speeds.map((s) {
-        final isCur = (currentSpeed - s).abs() < 0.05;
-        return AppSelectableTile(
-          scale: scale,
-          title: '${s}x${s == 1.0 ? ' (Звичайна)' : ''}',
-          icon: AppFormatters.getSpeedIcon(s),
-          isSelected: isCur,
-          onTap: () => onSpeedSelected(s),
-        );
-      }).toList();
+      return [
+        for (final s in AppConstants.speeds)
+          _choice(
+            id: 'speed-$s',
+            label: s == 1.0 ? '1× · звичайна' : AppFormatters.formatSpeed(s),
+            selected: (currentSpeed - s).abs() < 0.05,
+            onTap: () => onSpeedSelected(s),
+          ),
+      ];
+    }
+
+    if (activeDrawer == 'quality') {
+      final url = remote?.video?.url;
+      return [
+        for (final v in _qualities)
+          _choice(
+            id: 'quality-${qualityLabel(v)}',
+            label: qualityLabel(v),
+            selected: v.url == url,
+            onTap: () {
+              remote?.switchQuality(v);
+              onClose();
+            },
+          ),
+      ];
     }
 
     if (activeDrawer == 'advanced') {
       return [
-        _buildItem(
-          scale: scale,
-          icon: Symbols.developer_board_rounded,
-          title: 'Апаратний декодер (GPU)',
-          value: '${AppConstants.hwdecShortNames[currentHwdec] ?? "NVDEC"}  ›',
+        _row(
+          id: 'hwdec',
+          icon: LineIcon.chip,
+          title: 'Апаратний декодер',
+          value: AppConstants.hwdecShortNames[currentHwdec] ?? 'NVDEC',
           onTap: () => onOpenSubDrawer('hwdec'),
         ),
-        _buildItem(
-          scale: scale,
-          icon: Symbols.query_stats_rounded,
-          title: 'Статистика відтворення (Stats)',
-          onTap: onOpenStats,
-        ),
+        _row(id: 'stats', icon: LineIcon.chart, title: 'Статистика відтворення', chevron: false, onTap: onOpenStats),
+        if (onOpenAppSettings != null) _row(id: 'app-settings', icon: LineIcon.gear, title: 'Усі налаштування', onTap: onOpenAppSettings),
       ];
     }
 
     if (activeDrawer == 'hwdec') {
-      return AppConstants.hwdecOptions.entries.map((entry) {
-        final isCur = currentHwdec == entry.key;
-        return AppSelectableTile(
-          scale: scale,
-          title: entry.value,
-          icon: Symbols.developer_board_rounded,
-          isSelected: isCur,
-          onTap: () => onHwdecSelected(entry.key),
-        );
-      }).toList();
+      return [
+        for (final entry in AppConstants.hwdecOptions.entries)
+          _choice(id: 'hwdec-${entry.key}', label: entry.value, selected: currentHwdec == entry.key, onTap: () => onHwdecSelected(entry.key)),
+      ];
     }
 
     if (activeDrawer == 'anime4k') return _buildAnime4kPage(scale);
 
     if (activeDrawer == 'chapters') {
       final curPos = player.state.position;
-      return chapters.asMap().entries.map((entry) {
-        final idx = entry.key;
-        final ch = entry.value;
-        final nextStart = (idx + 1 < chapters.length) ? chapters[idx + 1].startTime : player.state.duration;
-        final isCur = curPos >= ch.startTime && curPos < nextStart;
-
-        return AppSelectableTile(
-          scale: scale,
-          title: '${AppFormatters.translateChapterTitle(ch.title)} (${AppFormatters.formatTime(ch.startTime)})',
-          icon: Symbols.bookmark_rounded,
-          isSelected: isCur,
-          onTap: () {
-            player.seek(ch.startTime);
-            onClose();
-          },
-        );
-      }).toList();
+      final songs = remote?.songs?.current.value;
+      return [
+        for (final (idx, ch) in chapters.indexed)
+          () {
+            final current = curPos >= ch.startTime && curPos < ((idx + 1 < chapters.length) ? chapters[idx + 1].startTime : player.state.duration);
+            final kind = ChapterMath.songKindOf(ch);
+            final song = kind == null ? null : songs?.of(kind);
+            final time = Text(
+              AppFormatters.formatTime(ch.startTime),
+              style: playerText(13 * scale, color: AppTones.rowSub, features: const [FontFeature.tabularFigures()]),
+            );
+            return _choice(
+              id: 'chapter-$idx',
+              label: AppFormatters.translateChapterTitle(ch.title),
+              subtitle: song == null ? null : [song.title, if (song.artists.isNotEmpty) song.artist].join(' · '),
+              selected: current,
+              // The song's cover in front: the rows of songs stand out, the times stay in one column
+              leading: song == null
+                  ? null
+                  : Semantics(
+                      button: true,
+                      label: 'Пісня: ${song.title}',
+                      child: GestureDetector(
+                        key: ValueKey('chapter-song-${kind!.name}'),
+                        onTap: () => onOpenSubDrawer('song-${kind.name}'),
+                        child: SongCover(
+                          url: songs!.art[kind]?.cover,
+                          size: (sheet ? 44 : 36) * scale,
+                          equalizer: current,
+                          playing: PlaybackClock.of(player).playing,
+                        ),
+                      ),
+                    ),
+              trailing: time,
+              onTap: () {
+                player.seek(ch.startTime);
+                onClose();
+              },
+            );
+          }(),
+        ..._skipControls(),
+      ];
     }
 
     if (activeDrawer == 'subs') {
       return [
-        AppSelectableTile(
-          scale: scale,
-          title: 'Вимкнути субтитри',
-          icon: Symbols.close_rounded,
-          isSelected: isSubDisabled,
-          onTap: () => onSubtitleSelected(SubtitleTrack.no()),
-        ),
-        ...subtitleTracks.map((cached) {
-          final bool isSelected = !isSubDisabled &&
-              (currentSub.id == cached.track.id ||
-                  (currentSub.id == 'auto' && subtitleTracks.first.track.id == cached.track.id) ||
-                  (currentSub.id.isEmpty && subtitleTracks.first.track.id == cached.track.id));
-
-          final bool isSdh = cached.formattedTitle.toLowerCase().contains("sdh") ||
-              (cached.track.title?.toLowerCase().contains("sdh") ?? false);
-
-          return AppSelectableTile(
-            scale: scale,
-            title: cached.formattedTitle,
-            icon: isSdh ? Symbols.hearing_rounded : Symbols.subtitles_rounded,
-            isSelected: isSelected,
+        _choice(id: 'subs-off', label: 'Вимкнено', selected: isSubDisabled, onTap: () => onSubtitleSelected(SubtitleTrack.no())),
+        for (final cached in subtitleTracks)
+          _choice(
+            id: 'subs-${cached.track.id}',
+            label: cached.formattedTitle,
+            subtitle: cached.formattedTitle.toLowerCase().contains('sdh') || (cached.track.title?.toLowerCase().contains('sdh') ?? false)
+                ? 'Для людей з порушеннями слуху'
+                : null,
+            selected: !isSubDisabled &&
+                (currentSub.id == cached.track.id ||
+                    (currentSub.id == 'auto' && subtitleTracks.first.track.id == cached.track.id) ||
+                    (currentSub.id.isEmpty && subtitleTracks.first.track.id == cached.track.id)),
             onTap: () => onSubtitleSelected(cached.track),
-          );
-        }),
-        if (onAddSubtitleFile != null)
-          AppSelectableTile(
-            scale: scale,
-            title: 'Додати файл субтитрів…',
-            icon: Symbols.upload_file_rounded,
-            isSelected: false,
-            onTap: onAddSubtitleFile!,
           ),
+        if (onAddSubtitleFile != null) ...[
+          _divider(),
+          _row(id: 'subs-file', icon: LineIcon.plus, title: 'Додати файл субтитрів…', chevron: false, onTap: onAddSubtitleFile),
+        ],
       ];
     }
 
     if (activeDrawer == 'audio') {
-      final tiles = audioTracks.map((cached) {
-        final bool isSelected = (currentAud.id == cached.track.id) ||
-            (currentAud.id == 'auto' && audioTracks.first.track.id == cached.track.id) ||
-            (currentAud.id.isEmpty && audioTracks.first.track.id == cached.track.id) ||
-            (audioTracks.length == 1);
-
-        return AppSelectableTile(
-          scale: scale,
-          title: cached.formattedTitle,
-          icon: Symbols.music_note_rounded,
-          isSelected: isSelected,
-          onTap: () => onAudioSelected(cached.track),
-        );
-      }).toList();
-      return [_AudioPane(scale: scale, player: player, storeKey: audioDelayKey, tracks: tiles)];
+      return [
+        for (final cached in audioTracks)
+          _choice(
+            id: 'audio-${cached.track.id}',
+            label: cached.formattedTitle,
+            selected: (currentAud.id == cached.track.id) ||
+                (currentAud.id == 'auto' && audioTracks.first.track.id == cached.track.id) ||
+                (currentAud.id.isEmpty && audioTracks.first.track.id == cached.track.id) ||
+                (audioTracks.length == 1),
+            onTap: () => onAudioSelected(cached.track),
+          ),
+        if (audioTracks.isEmpty) _note('Аудіодоріжок немає'),
+        _divider(),
+        _AudioDelayRow(scale: scale, sheet: sheet, player: player, storeKey: audioDelayKey),
+        _note('Зсуває звук відносно картинки: мінус — раніше, плюс — пізніше. Зберігається для цього твору.'),
+      ];
     }
 
+    // The main page: what is switched most often, then the rest under "Більше"
+    final qualities = _qualities;
+    final delay = audioDelayKey.isEmpty ? 0 : StorageService.getAudioDelay(audioDelayKey);
     return [
-      _buildItem(
-        scale: scale,
-        icon: Symbols.speed_rounded,
-        title: 'Швидкість відтворення',
-        value: '${AppFormatters.formatSpeed(currentSpeed)}  ›',
-        onTap: () => onOpenSubDrawer('speed'),
-      ),
-      _buildItem(
-        scale: scale,
-        icon: Symbols.subtitles_rounded,
-        title: 'Субтитри',
-        value: '${_getCurrentSubtitleLabel()}  ›',
-        onTap: () => onOpenSubDrawer('subs'),
-      ),
-      _buildItem(
-        scale: scale,
-        icon: Symbols.music_note_rounded,
-        title: 'Аудіодоріжка',
-        isFilledIcon: true,
-        value: '${_getCurrentAudioLabel()}  ›',
+      if (qualities.length > 1)
+        _row(id: 'quality', icon: LineIcon.hd, title: 'Якість', value: _currentQuality, onTap: () => onOpenSubDrawer('quality')),
+      _row(id: 'speed', icon: LineIcon.speed, title: 'Швидкість', value: AppFormatters.formatSpeed(currentSpeed), onTap: () => onOpenSubDrawer('speed')),
+      _row(id: 'subs', icon: LineIcon.subtitles, title: 'Субтитри', value: _getCurrentSubtitleLabel(), long: true, onTap: () => onOpenSubDrawer('subs')),
+      _row(
+        id: 'audio',
+        icon: LineIcon.musicNote,
+        title: 'Звук',
+        value: [_getCurrentAudioLabel(), if (delay != 0) 'затримка ${_AudioDelayRowState.format(delay)}'].join(' · '),
+        long: true,
         onTap: () => onOpenSubDrawer('audio'),
       ),
-      _buildItem(
-        scale: scale,
-        icon: Symbols.auto_stories_rounded,
-        title: 'Розділи / Глави',
-        value: chapters.isNotEmpty ? '${_getCurrentChapterLabel()}  ›' : 'Немає',
-        onTap: chapters.isNotEmpty ? () => onOpenSubDrawer('chapters') : () {},
+      _row(
+        id: 'chapters',
+        icon: LineIcon.chapters,
+        title: 'Розділи',
+        value: chapters.isEmpty ? 'Немає' : '${chapters.length}',
+        chevron: chapters.isNotEmpty,
+        onTap: chapters.isEmpty ? null : () => onOpenSubDrawer('chapters'),
       ),
-      _buildItem(
-        scale: scale,
-        icon: Symbols.auto_awesome_rounded,
-        title: 'Anime4K',
-        isActive: anime4k.active,
-        value: '${anime4k.summary}  ›',
-        onTap: () => onOpenSubDrawer('anime4k'),
-      ),
-      _buildItem(
-        scale: scale,
-        icon: Symbols.settings_rounded,
-        title: 'Більше',
-        value: '›',
-        onTap: () => onOpenSubDrawer('advanced'),
-      ),
+      _row(id: 'anime4k', icon: LineIcon.sparkle, title: 'Anime4K', value: anime4k.summary, active: anime4k.active, onTap: () => onOpenSubDrawer('anime4k')),
+      _divider(),
+      _row(id: 'more', icon: LineIcon.sliders, title: 'Більше', onTap: () => onOpenSubDrawer('advanced')),
     ];
+  }
+
+  /// «Пісня»: the cover, which opening / ending it is, the title and the artist, and where to listen to it
+  List<Widget> _songPage(SongKind kind) {
+    final songs = remote?.songs?.current.value;
+    final song = songs?.of(kind);
+    if (song == null) return [_note('Пісню цієї серії не знайдено')];
+    final art = songs!.art[kind];
+    final pad = (sheet ? 20 : 16) * scale;
+    return [
+      Padding(
+        padding: EdgeInsets.fromLTRB(pad, 4 * scale, pad, 12 * scale),
+        child: Row(
+          children: [
+            SongCover(url: art?.cover, size: (sheet ? 96 : 72) * scale),
+            SizedBox(width: 16 * scale),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(song.label, style: playerText((sheet ? 12.5 : 12) * scale, color: AppTones.caption, weight: FontWeight.w700)),
+                  SizedBox(height: 4 * scale),
+                  Text(song.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: playerText((sheet ? 20 : 18) * scale, weight: FontWeight.w700)),
+                  if (song.native != null && song.native != song.title) ...[
+                    SizedBox(height: 2 * scale),
+                    Text(song.native!, maxLines: 1, overflow: TextOverflow.ellipsis, style: playerText((sheet ? 14 : 13) * scale, color: AppTones.rowSub)),
+                  ],
+                  if (song.artists.isNotEmpty) ...[
+                    SizedBox(height: 2 * scale),
+                    Text(song.artist, maxLines: 2, overflow: TextOverflow.ellipsis, style: playerText((sheet ? 15 : 14) * scale, color: uiTheme.textSecondary)),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+      _divider(),
+      for (final l in SongService.linksFor(song, art: art))
+        PlayerMenuRow(
+          key: ValueKey('menu-song-${l.app.name}'),
+          scale: scale,
+          sheet: sheet,
+          icon: LineIcon.musicNote,
+          leading: MusicAppBadge(app: l.app, size: (sheet ? 32 : 28) * scale),
+          title: musicAppName(l.app),
+          value: !l.direct ? 'пошук' : (l.app == MusicApp.youtube ? 'кліп' : 'пісня'),
+          chevron: false,
+          onTap: () {
+            AppLog.i('дія', 'пісня: ${musicAppName(l.app)} (${l.direct ? 'посилання' : 'пошук'})');
+            unawaited(HikkaNav.instance.urlOpener(l.url));
+          },
+        ),
+    ];
+  }
+
+  /// Under the chapters, when their times came from AniSkip: the shift for this dub, "the opening started here" and
+  /// where the times come from
+  List<Widget> _skipControls() {
+    final r = remote;
+    final plan = r?.skipPlan;
+    if (r == null || plan == null || plan.source == 'сайт') return const [];
+    final note = skipNote(plan);
+    return [
+      _divider(),
+      if (plan.adjustable) _SkipShiftRow(scale: scale, sheet: sheet, remote: r, plan: plan),
+      if (plan.adjustable && plan.opBase != null)
+        _row(
+          id: 'skip-here',
+          icon: LineIcon.pin,
+          title: 'Опенінґ почався тут',
+          value: AppFormatters.formatTime(player.state.position),
+          chevron: false,
+          onTap: () => r.skipOpeningAt(player.state.position),
+        ),
+      if (note.isNotEmpty) _note(note),
+    ];
+  }
+
+  /// Where the skip times come from and how sure they are, for people
+  static String skipNote(SkipPlan p) {
+    final s = p.shift;
+    if (s == null) return p.source == 'аналіз звуку' ? 'Опенінґ знайдено за звуком: він однаковий у сусідніх серіях цього озвучення.' : '';
+    if (s.source == 'user') return 'Зсув задано вручну — він діє на всі серії цього озвучення.';
+    if (s.exact) return 'Таймкоди з ${p.source}, підігнані під це озвучення. Якщо пропуск не влучає — підправте зсув: він діє на всі серії озвучення.';
+    final extra = (p.extra ?? 0).abs().round();
+    final longer = (p.extra ?? 0) >= 0 ? 'довше' : 'коротше';
+    return 'Приблизно: відео на $extra\u00A0с $longer, ніж версія, розмічена в ${p.source}, тож кнопка є лише там, де опенінґ іде напевно. Позначте його початок — і таймкоди стануть точними.';
   }
 
   /// The Anime4K page: quality, off, and six modes with key hints.
   /// The menu does not close after a choice: modes are convenient to compare "live".
   List<Widget> _buildAnime4kPage(double scale) {
     final a = anime4k;
+    final keys = !AppPlatform.isMobile;
+    final pad = (sheet ? 20 : 16) * scale;
     return [
       Padding(
-        padding: EdgeInsets.fromLTRB(2 * scale, 2 * scale, 2 * scale, 8 * scale),
+        padding: EdgeInsets.fromLTRB(pad, 4 * scale, pad, 6 * scale),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Expanded(
-                  child: AppSegmentedBar<Anime4kQuality>(
+                for (final q in Anime4kQuality.values) ...[
+                  AppPlate(
+                    key: ValueKey('anime4k-quality-${q.name}'),
                     scale: scale,
-                    options: [
-                      for (final q in Anime4kQuality.values) AppSegmentOption(value: q, label: q.label),
-                    ],
-                    selectedValue: a.quality,
-                    onSelected: a.setQuality,
+                    label: q.label,
+                    height: 34,
+                    radius: 10,
+                    selected: a.quality == q,
+                    onTap: () => a.setQuality(q),
                   ),
-                ),
-                // Key hints (Ctrl + digit) make sense only with a keyboard
-                if (!AppPlatform.isMobile) ...[
-                  SizedBox(width: 10 * scale),
-                  AppKeyCombo(scale: scale, keys: const ['Ctrl', '9']),
+                  SizedBox(width: 8 * scale),
                 ],
+                const Spacer(),
+                // Key hints (Ctrl + digit) make sense only with a keyboard
+                if (keys) AppKeyCombo(scale: scale, keys: const ['Ctrl', '9']),
               ],
             ),
-            SizedBox(height: 6 * scale),
+            SizedBox(height: 8 * scale),
             Text(
               AppPlatform.isMobile ? a.quality.deviceHint : a.quality.gpuHint,
-              style: TextStyle(fontFamily: 'Arial', color: uiTheme.colors.textDarkMuted, fontSize: 11.5 * scale),
+              style: playerText(12 * scale, color: AppTones.rowSub, height: 1.35),
             ),
           ],
         ),
       ),
-      AppSelectableTile(
-        scale: scale,
-        title: 'Вимкнено',
+      _choice(
+        id: 'anime4k-off',
+        label: 'Вимкнено',
         subtitle: 'Без обробки шейдерами',
-        icon: Symbols.close_rounded,
-        isSelected: !a.enabled,
-        trailing: AppPlatform.isMobile ? null : AppKeyCombo(scale: scale, keys: const ['Ctrl', '0']),
+        selected: !a.enabled,
+        trailing: keys ? AppKeyCombo(scale: scale, keys: const ['Ctrl', '0']) : null,
         onTap: a.disable,
       ),
       for (final m in Anime4kMode.values)
-        AppSelectableTile(
-          scale: scale,
-          title: m.title,
+        _choice(
+          id: 'anime4k-${m.name}',
+          label: m.title,
           subtitle: m.tagline,
-          icon: Symbols.auto_awesome_rounded,
-          isSelected: a.enabled && a.mode == m,
-          trailing: AppPlatform.isMobile ? null : AppKeyCombo(scale: scale, keys: ['Ctrl', '${m.digit}']),
+          selected: a.enabled && a.mode == m,
+          trailing: keys ? AppKeyCombo(scale: scale, keys: ['Ctrl', '${m.digit}']) : null,
           onTap: () => a.setMode(m),
         ),
-      if (a.enabled && a.skipped)
-        _buildAnime4kNote(scale, 'Пропущено: відео ${a.videoHeight}p не менше за поріг ${a.skipHeight}p (змінюється в налаштуваннях)'),
-      if (a.error != null) _buildAnime4kNote(scale, a.error!, isError: true),
+      if (a.enabled && a.skipped) _note('Пропущено: відео ${a.videoHeight}p не менше за поріг ${a.skipHeight}p (змінюється в налаштуваннях)'),
+      if (a.error != null) _note(a.error!, isError: true),
     ];
   }
-
-  Widget _buildAnime4kNote(double scale, String text, {bool isError = false}) {
-    return Padding(
-      padding: EdgeInsets.fromLTRB(4 * scale, 6 * scale, 4 * scale, 2 * scale),
-      child: Text(
-        text,
-        maxLines: 4,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          fontFamily: 'Arial',
-          color: isError ? const Color(0xFFE5484D) : uiTheme.colors.textDarkMuted,
-          fontSize: 11.5 * scale,
-          height: 1.35,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildItem({
-    required double scale,
-    required IconData icon,
-    required String title,
-    String? value,
-    bool isActive = false,
-    bool isFilledIcon = false,
-    required VoidCallback onTap,
-  }) {
-    final radiusObj = uiTheme.borderRadius(10 * scale);
-    final bool hasChevron = value != null && value.trim().endsWith('›');
-    String? shown = value?.replaceAll(RegExp(r'\s*›\s*$'), '').trim();
-    if (shown != null && shown.isEmpty) shown = null;
-    final Color fg = isActive ? uiTheme.accentColor : uiTheme.colors.textPrimary;
-
-    return Container(
-      height: 50 * scale,
-      margin: EdgeInsets.symmetric(vertical: 2 * scale),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: radiusObj,
-        child: InkWell(
-          borderRadius: radiusObj,
-          splashColor: Colors.transparent,
-          highlightColor: uiTheme.touchHighlight,
-          hoverColor: uiTheme.hoverOverlay,
-          onTap: onTap,
-          child: Container(
-            padding: EdgeInsets.symmetric(horizontal: 9 * scale),
-            decoration: BoxDecoration(
-              color: isActive ? uiTheme.accentWash : Colors.transparent,
-              borderRadius: radiusObj,
-              border: Border.all(color: isActive ? uiTheme.accentBorder : Colors.transparent, width: 1.0),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 32 * scale,
-                  height: 32 * scale,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: uiTheme.bgElevated,
-                    borderRadius: uiTheme.borderRadius(8 * scale),
-                    border: Border.all(color: uiTheme.colors.borderSubtle),
-                  ),
-                  child: Icon(icon, color: fg, size: 18 * scale, fill: isFilledIcon ? 1 : 0, weight: 300, opticalSize: 24),
-                ),
-                SizedBox(width: 12 * scale),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: TextStyle(
-                      fontFamily: 'Arial',
-                      color: fg,
-                      fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
-                      fontSize: 14.0 * scale,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                if (shown != null) ...[
-                  SizedBox(width: 8 * scale),
-                  ConstrainedBox(
-                    constraints: BoxConstraints(maxWidth: 150 * scale),
-                    child: Container(
-                      padding: EdgeInsets.symmetric(horizontal: 9 * scale, vertical: 4 * scale),
-                      decoration: BoxDecoration(
-                        color: uiTheme.bgElevated,
-                        borderRadius: uiTheme.borderRadius(7 * scale),
-                        border: Border.all(color: uiTheme.colors.borderSubtle),
-                      ),
-                      child: Text(
-                        shown,
-                        style: TextStyle(
-                          fontFamily: 'Arial',
-                          color: uiTheme.colors.textMuted,
-                          fontSize: 12.0 * scale,
-                          fontWeight: FontWeight.w400,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ),
-                ],
-                if (hasChevron) ...[
-                  SizedBox(width: 4 * scale),
-                  Icon(Symbols.chevron_right_rounded, color: uiTheme.colors.textDarkMuted, size: 18 * scale, weight: 300, opticalSize: 24),
-                ],
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }
-
 
 /// Audio delay (`audio-delay` in mpv): a 50 ms step, from −10 to +10 s; the reset button returns zero.
 /// It is stored for a work (see `audioDelayKey`) and applied to its next episodes.
 class _AudioDelayRow extends StatefulWidget {
   final double scale;
+  final bool sheet;
   final Player player;
   final String storeKey;
-  const _AudioDelayRow({required this.scale, required this.player, required this.storeKey});
+  const _AudioDelayRow({required this.scale, required this.sheet, required this.player, required this.storeKey});
 
   @override
   State<_AudioDelayRow> createState() => _AudioDelayRowState();
@@ -717,93 +755,162 @@ class _AudioDelayRowState extends State<_AudioDelayRow> {
     StorageService.saveAudioDelay(widget.storeKey, ms);
   }
 
-  String get _label => _ms > 0 ? '+$_ms мс' : (_ms < 0 ? '−${-_ms} мс' : '0 мс');
+  /// "+150 мс", "−50 мс", "0 мс"
+  static String format(int ms) => ms > 0 ? '+$ms мс' : (ms < 0 ? '−${-ms} мс' : '0 мс');
+
+  @override
+  Widget build(BuildContext context) => _StepperRow(
+        scale: widget.scale,
+        sheet: widget.sheet,
+        id: 'delay',
+        icon: LineIcon.sync,
+        title: 'Затримка звуку',
+        value: format(_ms),
+        strong: _ms != 0,
+        minus: ('Раніше на $_stepMs мс', () => _set(_ms - _stepMs)),
+        plus: ('Пізніше на $_stepMs мс', () => _set(_ms + _stepMs)),
+        reset: ('Скинути затримку', _ms == 0 ? null : () => _set(0)),
+      );
+}
+
+/// A row with a stepper: the icon, the name and the value, − / + / reset plates (at least 40 dp on a phone). On a
+/// phone sheet the value goes under the name: the narrow sheet has no room for both in one line
+class _StepperRow extends StatelessWidget {
+  final double scale;
+  final bool sheet;
+
+  /// Keys: `<id>-minus`, `<id>-value`, `<id>-plus`, `<id>-reset`
+  final String id;
+  final LineIcon icon;
+  final String title;
+  final String value;
+
+  /// The value is set (not zero, exact): bright, not muted
+  final bool strong;
+
+  /// (what it does for screen readers, the action; null: disabled)
+  final (String, VoidCallback?) minus;
+  final (String, VoidCallback?) plus;
+  final (String, VoidCallback?) reset;
+
+  const _StepperRow({
+    required this.scale,
+    required this.sheet,
+    required this.id,
+    required this.icon,
+    required this.title,
+    required this.value,
+    required this.strong,
+    required this.minus,
+    required this.plus,
+    required this.reset,
+  });
+
+  Widget _plate(String part, LineIcon icon, (String, VoidCallback?) a) {
+    final double size = sheet ? 40 : 32 * scale;
+    final enabled = a.$2 != null;
+    return Semantics(
+      button: true,
+      enabled: enabled,
+      label: a.$1,
+      child: Material(
+        color: AppTones.plate,
+        shape: RoundedRectangleBorder(borderRadius: uiTheme.borderRadius(10 * scale)),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          key: ValueKey('$id-$part'),
+          onTap: a.$2,
+          splashColor: Colors.transparent,
+          highlightColor: uiTheme.touchHighlight,
+          hoverColor: uiTheme.hoverOverlay,
+          child: SizedBox.square(
+            dimension: size,
+            child: Center(child: LineIconView(icon, size: size * 0.5, color: enabled ? AppTones.plateText : AppTones.chevron)),
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final double sc = widget.scale;
+    final double sc = scale;
+    final valueText = Text(
+      value,
+      key: ValueKey('$id-value'),
+      maxLines: 1,
+      textAlign: sheet ? TextAlign.start : TextAlign.center,
+      style: playerText((sheet ? 13 : 13.5) * sc, weight: FontWeight.w700, color: strong ? uiTheme.textPrimary : uiTheme.textMuted),
+    );
+    // On a phone a long name gets a little smaller rather than cut off
+    final name = sheet
+        ? FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: Text(title, maxLines: 1, style: playerText(15 * sc)))
+        : Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: playerText(14 * sc));
     return Padding(
-      padding: EdgeInsets.fromLTRB(14 * sc, 10 * sc, 8 * sc, 4 * sc),
+      padding: EdgeInsets.fromLTRB((sheet ? 20 : 16) * sc, 6 * sc, (sheet ? 14 : 12) * sc, 2 * sc),
       child: Row(
         children: [
-          Icon(Symbols.sync_rounded, color: uiTheme.colors.textMuted, size: 20 * sc),
-          SizedBox(width: 12 * sc),
-          Expanded(
-            child: Text(
-              'Затримка звуку',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontFamily: 'Arial', color: uiTheme.colors.textPrimary, fontSize: 14 * sc),
-            ),
-          ),
-          AppRowIconButton(scale: sc, icon: Symbols.remove_rounded, size: 20, onTap: () => _set(_ms - _stepMs)),
-          SizedBox(
-            width: 70 * sc,
-            child: Text(
-                _label,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontFamily: 'Arial',
-                  fontSize: 13 * sc,
-                  fontWeight: FontWeight.w600,
-                  color: _ms == 0 ? uiTheme.colors.textMuted : uiTheme.colors.textPrimary,
-                ),
+          SizedBox(width: 24 * sc, child: Center(child: LineIconView(icon, size: (sheet ? 22 : 20) * sc, color: AppTones.rowIcon))),
+          SizedBox(width: (sheet ? 16 : 14) * sc),
+          if (sheet) ...[
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [name, SizedBox(height: 2 * sc), valueText],
               ),
-          ),
-          AppRowIconButton(scale: sc, icon: Symbols.add_rounded, size: 20, onTap: () => _set(_ms + _stepMs)),
-          AppRowIconButton(scale: sc, icon: Symbols.restart_alt_rounded, size: 20, onTap: _ms == 0 ? null : () => _set(0)),
+            ),
+            SizedBox(width: 8 * sc),
+            _plate('minus', LineIcon.minus, minus),
+            SizedBox(width: 6 * sc),
+            _plate('plus', LineIcon.plus, plus),
+          ] else ...[
+            Expanded(child: name),
+            _plate('minus', LineIcon.minus, minus),
+            SizedBox(width: 72 * sc, child: valueText),
+            _plate('plus', LineIcon.plus, plus),
+          ],
+          SizedBox(width: 6 * sc),
+          _plate('reset', LineIcon.refresh, reset),
         ],
       ),
     );
   }
 }
 
-
-/// The "Аудіодоріжка" menu: tabs "Доріжка" and "Затримка", like "Серії / Озвучка / Плеєр" in the episode list
-class _AudioPane extends StatefulWidget {
+/// The shift of AniSkip's times for this dub (a half-second step): one for all its episodes, kept until reset.
+/// "≈" while the lengths alone place them (the middle of what they allow)
+class _SkipShiftRow extends StatelessWidget {
   final double scale;
-  final Player player;
-  final String storeKey;
-  final List<Widget> tracks;
-  const _AudioPane({required this.scale, required this.player, required this.storeKey, required this.tracks});
+  final bool sheet;
+  final RemoteDriver remote;
+  final SkipPlan plan;
+  const _SkipShiftRow({required this.scale, required this.sheet, required this.remote, required this.plan});
 
-  @override
-  State<_AudioPane> createState() => _AudioPaneState();
-}
+  static const double step = 0.5;
 
-class _AudioPaneState extends State<_AudioPane> {
-  bool _delayTab = false;
+  /// "+12,5 с", "−3 с", "0 с"
+  static String format(double seconds) {
+    final v = (seconds * 2).round() / 2;
+    final a = v.abs();
+    final t = a == a.roundToDouble() ? '${a.toInt()}' : a.toStringAsFixed(1).replaceAll('.', ',');
+    return v > 0 ? '+$t с' : (v < 0 ? '−$t с' : '0 с');
+  }
 
   @override
   Widget build(BuildContext context) {
-    final sc = widget.scale;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: EdgeInsets.only(bottom: 8 * sc),
-          child: AppSegmentedBar<bool>(
-            scale: sc,
-            selectedValue: _delayTab,
-            onSelected: (v) => setState(() => _delayTab = v),
-            options: const [
-              AppSegmentOption(value: false, label: 'Доріжка'),
-              AppSegmentOption(value: true, label: 'Затримка'),
-            ],
-          ),
-        ),
-        if (!_delayTab) ...widget.tracks else ...[
-          _AudioDelayRow(scale: sc, player: widget.player, storeKey: widget.storeKey),
-          Padding(
-            padding: EdgeInsets.fromLTRB(14 * sc, 6 * sc, 14 * sc, 4 * sc),
-            child: Text(
-              'Зсуває звук відносно картинки: мінус — раніше, плюс — пізніше. Зберігається для цього твору.',
-              style: TextStyle(fontFamily: 'Arial', color: uiTheme.colors.textMuted, fontSize: 12 * sc, height: 1.35),
-            ),
-          ),
-        ],
-      ],
+    final shift = plan.shift!;
+    return _StepperRow(
+      scale: scale,
+      sheet: sheet,
+      id: 'skipshift',
+      icon: LineIcon.clock,
+      title: 'Зсув таймкодів',
+      value: shift.exact ? format(shift.mid) : '≈${format(shift.mid)}',
+      strong: shift.exact,
+      minus: ('Раніше на пів секунди', () => remote.shiftSkips(-step)),
+      plus: ('Пізніше на пів секунди', () => remote.shiftSkips(step)),
+      reset: ('Скинути зсув', shift.source == 'user' ? () => remote.resetSkipShift() : null),
     );
   }
 }

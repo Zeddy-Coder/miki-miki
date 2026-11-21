@@ -33,6 +33,20 @@ class MpvConfig {
     }
   }
 
+  /// The audio output options (see `tools/audio_bench.py` for the checks with real mpv).
+  ///
+  /// `gapless-audio=weak` (mpv's default): the output follows the format of each file. With `yes` it kept the first
+  /// file's format for the whole session — after a mono episode the next stereo ones played in mono — and it never
+  /// reopened, so a latency measured at start stayed until a restart.
+  ///
+  /// Android: `audiotrack` (as in mpv-android) creates a media AudioTrack and reads what is actually playing from its
+  /// timestamps, so the sync follows Bluetooth and other route changes; OpenSL ES, which media_kit sets, measured the
+  /// device latency once when the output opened and always played two channels. OpenSL ES stays as the fallback.
+  static Map<String, String> audioOptions({required bool android}) => {
+        'gapless-audio': 'weak',
+        if (android) 'ao': 'audiotrack,opensles',
+      };
+
   static Future<void> configureEngine(Player player, String hwdec) async {
     try {
       final dynamic platform = player.platform;
@@ -55,7 +69,9 @@ class MpvConfig {
         await platform.setProperty('sub-ass-vsfilter-blur-compat', 'yes');
         await platform.setProperty('blend-subtitles', 'yes');
         await platform.setProperty('sub-fix-timing', 'yes');
-        await platform.setProperty('gapless-audio', 'yes');
+        for (final e in audioOptions(android: Platform.isAndroid).entries) {
+          await platform.setProperty(e.key, e.value);
+        }
 
         // 1. Applying subtitle styles
         await applySubtitleStyles(player);
@@ -187,6 +203,10 @@ class MpvConfig {
           getProp('container-fps'),
           getProp('hwdec-current'),
           getProp('avsync'),
+          getProp('current-ao'),
+          getProp('audio-params/hr-channels'),
+          getProp('audio-out-params/hr-channels'),
+          getProp('audio-out-params/samplerate'),
         ]);
 
         final totalDrops = int.tryParse(results[0] ?? '') ?? 0;
@@ -211,11 +231,31 @@ class MpvConfig {
           avSyncDiff: avSync,
           videoCodec: vTrack?.codec ?? "HEVC",
           audioCodec: aTrack.title ?? aTrack.language ?? "Аудіо",
+          audioOutput: describeAudioOutput(ao: results[6], source: results[7], output: results[8], rate: results[9]),
         );
       }
     } catch (_) {}
 
     return const PlaybackStats();
+  }
+
+  /// What goes to the speakers, for the stats: `5.1 → стерео · 48 кГц · audiotrack` (mono shows as «моно»)
+  static String describeAudioOutput({String? ao, String? source, String? output, String? rate}) {
+    String name(String? layout) => switch (layout) {
+          null || '' => '',
+          'mono' => 'моно',
+          'stereo' => 'стерео',
+          final l => l,
+        };
+    final out = name(output);
+    if (out.isEmpty) return '—';
+    final src = name(source);
+    final hz = int.tryParse(rate ?? '') ?? 0;
+    return [
+      src.isNotEmpty && src != out ? '$src → $out' : out,
+      if (hz > 0) '${hz % 1000 == 0 ? hz ~/ 1000 : (hz / 1000).toStringAsFixed(1)} кГц',
+      if (ao != null && ao.isNotEmpty) ao,
+    ].join(' · ');
   }
 
   static Future<List<VideoChapter>> extractChapters(Player player) async {

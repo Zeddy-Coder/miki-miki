@@ -8,10 +8,13 @@ import '../../services/hikka_pager.dart';
 import '../../services/hikka_prefs.dart';
 import '../../services/ui_theme_service.dart';
 import '../app_animation_kit.dart';
+import '../design_kit.dart' show AppMediaRow, AppPillTab;
+import '../line_icons.dart';
 import 'hikka_cards.dart';
 import 'hikka_common.dart';
 import 'hikka_markdown_view.dart';
 import 'hikka_page_kit.dart';
+import 'hikka_paged_list.dart';
 
 /// The whole crew of an anime: a grid of portraits with roles
 class HikkaAnimeStaffPage extends StatefulWidget {
@@ -57,18 +60,41 @@ class _HikkaAnimeStaffPageState extends State<HikkaAnimeStaffPage> {
     if (_scroll.hasClients) widget.route.scroll = _scroll.offset;
   }
 
+  /// "Режисер епізодів · Розкадрування · ще 2": the first three roles, the rest as a number
+  static String rolesOf(HikkaStaff s) {
+    final names = [for (final r in s.roles) r.name];
+    if (names.length <= 3) return names.join(' · ');
+    return '${names.take(3).join(' · ')} · ще ${names.length - 3}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final scale = widget.scale;
-    return HikkaPagedGrid<HikkaStaff>(
+    final pad = HikkaLayout.sidePad(context, scale);
+    final a = widget.route.memo['anime'] ?? widget.route.seed;
+    final title = a is HikkaAnime ? a.title(HikkaPrefs.instance.titleLang) : null;
+    return HikkaPagedList<HikkaStaff>(
       pager: _pager,
       scale: scale,
       controller: _scroll,
       bottomInset: widget.bottomInset,
-      maxTileWidth: 150,
+      flush: true,
       emptyIcon: Symbols.groups_rounded,
       emptyText: 'Для цього аніме ще немає знімальної групи',
-      itemBuilder: (context, s) => HikkaPersonCard(person: s.person, scale: scale, caption: s.rolesLabel),
+      header: ListenableBuilder(
+        listenable: _pager,
+        builder: (context, _) => HikkaLeadLine(scale: scale, pad: pad, parts: [if (title != null) title, if (_pager.total > 0) HikkaText.count(_pager.total)]),
+      ),
+      itemBuilder: (context, s) => AppMediaRow(
+        key: ValueKey('staff-${s.person.slug}'),
+        scale: scale,
+        inset: pad,
+        leading: HikkaAvatar(url: s.person.image, size: 46 * scale, scale: scale),
+        title: s.person.name,
+        subtitle: rolesOf(s),
+        titleLines: 1,
+        onTap: () => HikkaNav.instance.openPerson(s.person.slug, seed: s.person),
+      ),
     );
   }
 }
@@ -170,7 +196,7 @@ class _HikkaPersonPageState extends State<HikkaPersonPage> {
     final t = _tab;
     if (t != null) return t;
     final p = _full;
-    if (p != null && p.animeCount == 0 && p.charactersCount > 0) return 'characters';
+    if (p != null && p.charactersCount > p.animeCount) return 'characters';
     return 'anime';
   }
 
@@ -185,49 +211,65 @@ class _HikkaPersonPageState extends State<HikkaPersonPage> {
     _loadActive();
   }
 
+  /// Name, the other spellings in grey, then quietly "303 персонажі" and "10 аніме" with line icons
   Widget _names(HikkaPerson p, {required bool wide}) {
     final scale = _scale;
     final others = p.otherNames;
+    final full = _full;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(p.name, style: hikkaStyle((wide ? 24 : 19) * scale, weight: FontWeight.bold, height: 1.2)),
+        Text(p.name, style: hikkaStyle((wide ? 26 : 22) * scale, weight: FontWeight.bold, height: 1.2)),
         if (others.isNotEmpty)
           Padding(
-            padding: EdgeInsets.only(top: 6 * scale),
-            child: Text(others.join('\n'), style: hikkaStyle(12.5 * scale, color: uiTheme.textMuted, height: 1.35)),
+            padding: EdgeInsets.only(top: 5 * scale),
+            child: Text(others.join(' · '), style: hikkaStyle(13 * scale, color: uiTheme.textMuted, height: 1.35)),
           ),
         if (p.synonyms.isNotEmpty)
           Padding(
-            padding: EdgeInsets.only(top: 6 * scale),
+            padding: EdgeInsets.only(top: 4 * scale),
             child: Text(
               p.synonyms.take(6).join(', '),
-              maxLines: 3,
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: hikkaStyle(11.5 * scale, color: uiTheme.textDarkMuted, height: 1.35),
+              style: hikkaStyle(12 * scale, color: uiTheme.textDarkMuted, height: 1.35),
+            ),
+          ),
+        if (full != null && (full.charactersCount > 0 || full.animeCount > 0))
+          Padding(
+            padding: EdgeInsets.only(top: 14 * scale),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (full.charactersCount > 0)
+                  hikkaCountLine(scale, LineIcon.face, '${HikkaText.count(full.charactersCount)} ${HikkaText.plural(full.charactersCount, 'персонаж', 'персонажі', 'персонажів')}'),
+                if (full.charactersCount > 0 && full.animeCount > 0) SizedBox(height: 7 * scale),
+                if (full.animeCount > 0) hikkaCountLine(scale, LineIcon.monitor, '${HikkaText.count(full.animeCount)} аніме'),
+              ],
             ),
           ),
       ],
     );
   }
 
+  /// The description as on the title page (when there is one)
   Widget _description(HikkaPerson p) {
     final scale = _scale;
     final text = p.descriptionUa;
     if (text == null) return const SizedBox.shrink();
     return Padding(
-      padding: EdgeInsets.only(top: 18 * scale),
+      padding: EdgeInsets.only(top: 20 * scale),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Опис', style: hikkaStyle(13.5 * scale, weight: FontWeight.bold)),
-          SizedBox(height: 8 * scale),
-          HikkaCollapsible(
-            collapsedHeight: 190 * scale,
+          Text('Опис', style: hikkaStyle(15 * scale, weight: FontWeight.bold)),
+          SizedBox(height: 6 * scale),
+          HikkaSynopsis(
+            source: text,
             scale: scale,
-            fadeColor: uiTheme.bgPrimary,
-            child: HikkaMarkdownView(source: text, scale: scale),
+            open: _route.memo['synopsis'] == true,
+            onOpen: (v) => _route.memo['synopsis'] = v,
           ),
         ],
       ),
@@ -239,10 +281,10 @@ class _HikkaPersonPageState extends State<HikkaPersonPage> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final wide = constraints.maxWidth >= hikkaWideBreakpoint;
-        final posterW = hikkaHeaderPosterWidth(scale, wide: wide);
-        final poster = SizedBox(width: posterW, child: HikkaPoster(url: p.image, scale: scale, radius: 12, icon: Symbols.person_rounded));
+        final posterW = wide ? hikkaHeaderPosterWidth(scale, wide: true) : 112 * scale;
+        final poster = SizedBox(width: posterW, child: HikkaPoster(url: p.image, scale: scale, radius: 14, aspect: 112 / 158, icon: Symbols.person_rounded));
         return Padding(
-          padding: EdgeInsets.fromLTRB(pad, 4 * scale, pad, 18 * scale),
+          padding: EdgeInsets.fromLTRB(pad, 6 * scale, pad, 18 * scale),
           child: wide
               ? Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -257,7 +299,7 @@ class _HikkaPersonPageState extends State<HikkaPersonPage> {
                   children: [
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [poster, SizedBox(width: 14 * scale), Expanded(child: _names(p, wide: false))],
+                      children: [poster, SizedBox(width: 16 * scale), Expanded(child: Padding(padding: EdgeInsets.only(top: 4 * scale), child: _names(p, wide: false)))],
                     ),
                     _description(p),
                   ],
@@ -267,20 +309,31 @@ class _HikkaPersonPageState extends State<HikkaPersonPage> {
     );
   }
 
-  /// "Аніме · N" and "Персонажі · N": shown only when there is something to switch
+  /// "Ролі 303" and "Аніме 10" as pill tabs (as in "Списки"); shown only when there is something to switch
   Widget _tabs(HikkaPerson p, double pad) {
     final scale = _scale;
-    final tabs = <(String, String)>[
-      if (p.animeCount > 0 || p.charactersCount == 0) ('anime', 'Аніме${p.animeCount > 0 ? ' · ${HikkaText.count(p.animeCount)}' : ''}'),
-      if (p.charactersCount > 0) ('characters', 'Озвучені персонажі · ${HikkaText.count(p.charactersCount)}'),
+    final tabs = <(String, String, LineIcon, int)>[
+      if (p.charactersCount > 0) ('characters', 'Ролі', LineIcon.face, p.charactersCount),
+      if (p.animeCount > 0 || p.charactersCount == 0) ('anime', 'Аніме', LineIcon.monitor, p.animeCount),
     ];
+    // The larger list first (a voice actor's roles, a director's anime), as it is also the one open by default
+    if (tabs.length == 2 && p.animeCount >= p.charactersCount) tabs.insert(0, tabs.removeAt(1));
     return Padding(
-      padding: EdgeInsets.fromLTRB(pad, 0, pad, 12 * scale),
+      padding: EdgeInsets.fromLTRB(pad, 0, pad, 14 * scale),
       child: Wrap(
         spacing: 8 * scale,
         runSpacing: 8 * scale,
         children: [
-          for (final t in tabs) HikkaChip(label: t.$2, scale: scale, selected: _activeTab == t.$1, onTap: () => _pick(t.$1)),
+          for (final t in tabs)
+            AppPillTab(
+              key: ValueKey('person-tab-${t.$1}'),
+              scale: scale,
+              label: t.$2,
+              count: t.$4 > 0 ? HikkaText.count(t.$4) : null,
+              selected: _activeTab == t.$1,
+              icon: (c) => LineIconView(t.$3, size: 16 * scale, color: c),
+              onTap: () => _pick(t.$1),
+            ),
         ],
       ),
     );

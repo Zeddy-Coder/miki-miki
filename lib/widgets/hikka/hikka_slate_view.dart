@@ -21,7 +21,27 @@ class HikkaSlateView extends StatefulWidget {
   /// Where to send a link; by default the app navigation
   final void Function(String url)? onLink;
 
-  const HikkaSlateView({super.key, required this.nodes, required this.scale, this.fontSize = 14.5, this.onLink});
+  const HikkaSlateView({super.key, required this.nodes, required this.scale, this.fontSize = 15, this.onLink});
+
+  /// The document cut into blocks a long page can build one at a time (a lazy list): each block node on its own,
+  /// consecutive inline leaves together (one paragraph). A [HikkaSlateView] of each piece looks as the whole one does
+  static List<List<SlateNode>> pieces(List<SlateNode> nodes) {
+    final out = <List<SlateNode>>[];
+    var run = <SlateNode>[];
+    for (final n in nodes) {
+      if (_HikkaSlateViewState._isInline(n)) {
+        run.add(n);
+        continue;
+      }
+      if (run.isNotEmpty) {
+        out.add(run);
+        run = <SlateNode>[];
+      }
+      out.add([n]);
+    }
+    if (run.isNotEmpty) out.add(run);
+    return out;
+  }
 
   @override
   State<HikkaSlateView> createState() => _HikkaSlateViewState();
@@ -56,9 +76,10 @@ class _HikkaSlateViewState extends State<HikkaSlateView> {
 
   TextStyle get _base => TextStyle(
         fontFamily: 'Arial',
-        color: uiTheme.textPrimary.withValues(alpha: 0.92),
+        fontFamilyFallback: const ['MikiSans'],
+        color: uiTheme.textPrimary.withValues(alpha: 0.86),
         fontSize: widget.fontSize * _scale,
-        height: 1.55,
+        height: 1.6,
       );
 
   static bool _isInline(SlateNode n) => n.isText || n.type == 'a';
@@ -101,8 +122,9 @@ class _HikkaSlateViewState extends State<HikkaSlateView> {
         fontWeight: n.bold ? FontWeight.bold : null,
         fontStyle: n.italic ? FontStyle.italic : null,
         decoration: decorations.isEmpty ? null : TextDecoration.combine(decorations),
-        decorationColor: link != null ? uiTheme.accentColor.withValues(alpha: 0.45) : null,
-        color: link != null ? uiTheme.accentColor : null,
+        // Links are light and thinly underlined (as in an opened description): the accent stays for what is chosen
+        decorationColor: link != null ? uiTheme.textPrimary.withValues(alpha: 0.45) : null,
+        color: link != null ? uiTheme.textPrimary : null,
         fontFamily: n.code ? 'monospace' : null,
         backgroundColor: n.code ? uiTheme.bgElevated : null,
       ),

@@ -332,11 +332,33 @@ class MoonExtractor extends VideoExtractor {
     throw SourceException(kind, 'Moon API ${res.status} $code', status: res.status);
   }
 
+  static bool _fieldsLogged = false;
+
+  /// The shape of an answer for the log: the keys (a level deeper in braces, a list's length in brackets), and the
+  /// short texts of the ones that may name the episode («title», «name», «episode»…); no links or keys
+  static String fieldsOf(Map<String, dynamic> data) {
+    String one(String k, Object? v, int depth) {
+      if (v is Map) return depth > 0 ? '$k{${[for (final e in v.entries) one('${e.key}', e.value, depth - 1)].join(', ')}}' : '$k{…}';
+      if (v is List) return '$k[${v.length}]';
+      final naming = RegExp(r'title|name|episode|number', caseSensitive: false).hasMatch(k);
+      if (naming && v is String && !v.startsWith('http') && v.length <= 80) return '$k=«$v»';
+      if (naming && v is num) return '$k=$v';
+      return k;
+    }
+
+    return [for (final e in data.entries) one(e.key, e.value, 1)].join(', ');
+  }
+
   /// Video via the Premium API: a direct HLS link, subtitles and timestamps without parsing the player page
   static Future<List<Video>> _viaApi(SourceHttp http, Uri uri, String slug, String key) async {
     final h = {'Authorization': 'Bearer $key', 'Accept': 'application/json'};
     final enc = Uri.encodeComponent(slug);
     final data = await _apiGet(http, 'video/$enc', h);
+    // What else the answer has (once a run): whether Moon knows the episodes' titles
+    if (!_fieldsLogged) {
+      _fieldsLogged = true;
+      SourceLog.add('Moon API: поля відповіді — ${fieldsOf(data)}');
+    }
     final hls = (data['video'] as Map?)?['hls'] as Map?;
     final url = (hls?['url'] as String?) ?? (hls?['cloud_url'] as String?);
     if (url == null || url.isEmpty) throw const SourceException(SourceErrorKind.badResponse, 'Moon API: у відповіді немає HLS-посилання');
@@ -372,8 +394,10 @@ class MoonExtractor extends VideoExtractor {
       try {
         return await _viaApi(http, uri, slug, key);
       } on SourceException catch (e) {
-        // The key does not work, the quota is exhausted or the API is unavailable: the player still opens by parsing the page
-        SourceLog.add('Moon API не вийшло (${e.detail}), розбираю сторінку плеєра');
+        // The key does not work, the quota is exhausted or the API is unavailable: the player still opens by parsing the
+        // page. Whose key it was tells what to fix: the settings field or the backend's
+        final own = SourcePrefs.instance.moonKey.isNotEmpty;
+        SourceLog.add('Moon API не вийшло (${e.detail}; ключ ${own ? 'із налаштувань' : 'з бекенда'}), розбираю сторінку плеєра');
       }
     }
     final res = await http.get(url, headers: embedHeaders(referer ?? 'https://anitube.in.ua/'));

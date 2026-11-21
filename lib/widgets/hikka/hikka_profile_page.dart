@@ -1,25 +1,34 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
 
 import '../../constants/app_identity.dart';
 import '../../models/hikka_profile_models.dart';
+import '../../services/admin_api.dart';
 import '../../services/app_updater.dart';
+import '../../services/downloads/download_manager.dart';
 import '../../services/hikka_auth.dart';
+import '../../services/settings_sync.dart';
 import '../../services/hikka_nav.dart';
 import '../../services/storage_service.dart';
 import '../../services/ui_theme_service.dart';
 import '../app_animation_kit.dart';
 import '../app_settings_dialog.dart';
-import '../app_ui_kit.dart';
+import '../app_tones.dart';
+import '../design_kit.dart';
+import '../downloads/download_kit.dart';
+import '../line_icons.dart';
+import '../settings_kit.dart' show SettingsSwitch;
+import '../update_prompt.dart';
 import 'hikka_account_ui.dart';
 import 'hikka_common.dart';
 import 'hikka_page_kit.dart';
 import 'hikka_user_profile.dart';
 
-/// The "Профіль" tab. After sign-in, the Hikka profile as on `hikka.io/u/<name>` ([HikkaUserProfile]: header, "Список",
-/// "Активність", favorites, articles, collections, "Історія"), below it "Акаунт" (progress sync, sign-out).
-/// A guest sees a sign-in card. Then app settings and "Про застосунок"; the hidden local media library
-/// appears here when enabled in "Розробник".
+/// The "Профіль" tab with the gear in the header. After sign-in, the Hikka profile ([HikkaUserProfile]: the account
+/// block, "Список"), then "Застосунок" (settings, the local media library when enabled in "Розробник") and "Акаунт"
+/// (sync switches, signing out after a question), then "Активність", favorites, articles, collections and "Історія".
+/// A guest sees a sign-in block, "Застосунок" with "Про Miki Miki".
 class HikkaProfilePage extends StatefulWidget {
   final double scale;
   final double bottomInset;
@@ -55,17 +64,180 @@ class _HikkaProfilePageState extends State<HikkaProfilePage> {
     super.dispose();
   }
 
-  Widget _group(double scale, List<Widget> rows) {
-    if (rows.isEmpty) return const SizedBox.shrink();
-    return AppCard(
-      scale: scale,
-      radius: 14,
-      child: Column(
-        children: [
-          for (int i = 0; i < rows.length; i++) ...[
-            if (i > 0) Divider(height: 1, indent: 52 * scale, color: uiTheme.borderSubtle),
-            rows[i],
+  /// "Застосунок": settings, "Про Miki Miki" for a guest, and (when switched on in "Розробник") the local media library
+  List<Widget> _app(double scale, double inset, {required bool guest}) => [
+        AppGroupCaption(scale: scale, text: 'Застосунок', inset: inset),
+        ListenableBuilder(
+          listenable: DownloadManager.instance,
+          builder: (context, _) => AppLineRow(
+            key: const ValueKey('profile-downloads'),
+            scale: scale,
+            inset: inset,
+            icon: LineIcon.download,
+            title: 'Завантаження',
+            subtitle: downloadsSummary(DownloadManager.instance),
+            chevron: true,
+            onTap: HikkaNav.instance.openDownloads,
+          ),
+        ),
+        ListenableBuilder(
+          listenable: Listenable.merge([AppUpdater.instance.state, AppUpdater.instance.download]),
+          builder: (context, _) {
+            // An update (found, loading, ready to install) shows in the subtitle and opens "Про застосунок"
+            final update = guest ? null : UpdatePrompt.statusLine(AppUpdater.instance);
+            return AppLineRow(
+              key: const ValueKey('profile-settings'),
+              scale: scale,
+              inset: inset,
+              icon: LineIcon.gear,
+              title: 'Налаштування',
+              subtitle: update ?? 'Вигляд, субтитри, відтворення',
+              chevron: true,
+              onTap: () => widget.onOpenSettings(tab: update != null ? AppSettingsDialog.tabAbout : null),
+            );
+          },
+        ),
+        ValueListenableBuilder<bool>(
+          valueListenable: StorageService.localLibraryListenable,
+          builder: (context, on, _) => !on
+              ? const SizedBox.shrink()
+              : AppLineRow(
+                  scale: scale,
+                  inset: inset,
+                  icon: LineIcon.folder,
+                  title: 'Локальна медіатека',
+                  subtitle: 'Файли, папки, потоки',
+                  chevron: true,
+                  onTap: HikkaNav.instance.openLocalLibrary,
+                ),
+        ),
+        // Only the account the server knows as the admin sees the panel (the server checks it again on every request)
+        if (!guest && AdminApi.instance.visible)
+          AppLineRow(
+            key: const ValueKey('profile-admin'),
+            scale: scale,
+            inset: inset,
+            icon: LineIcon.shield,
+            title: 'Адмін-панель',
+            subtitle: 'Сповіщення користувачам застосунку',
+            chevron: true,
+            onTap: HikkaNav.instance.openAdmin,
+          ),
+        if (guest)
+          ValueListenableBuilder<UpdateState>(
+            valueListenable: AppUpdater.instance.state,
+            builder: (context, up, _) => AppLineRow(
+              scale: scale,
+              inset: inset,
+              icon: LineIcon.info,
+              title: 'Про ${AppIdentity.name}',
+              subtitle: up is UpdateAvailable ? 'Версія ${AppIdentity.version} · доступна ${up.info.version}' : 'Версія ${AppIdentity.version}',
+              chevron: true,
+              onTap: () => widget.onOpenSettings(tab: AppSettingsDialog.tabAbout),
+            ),
+          ),
+      ];
+
+  /// "Акаунт": the sync switches and signing out (after a question)
+  List<Widget> _account(double scale, double inset) {
+    final auth = HikkaAuth.instance;
+    final sync = SettingsSync.instance;
+    return [
+      AppGroupCaption(scale: scale, text: 'Акаунт', inset: inset),
+      ListenableBuilder(
+        listenable: Listenable.merge([auth, sync]),
+        builder: (context, _) => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Semantics(
+              toggled: sync.enabled,
+              child: AppLineRow(
+                scale: scale,
+                inset: inset,
+                icon: LineIcon.sync,
+                title: 'Синхронізувати налаштування й теми',
+                subtitle: 'Вигляд, мови, субтитри й місце зупинки однакові на телефоні та ПК',
+                trailing: SettingsSwitch(scale: scale, value: sync.enabled),
+                onTap: () => sync.enabled = !sync.enabled,
+              ),
+            ),
+            Semantics(
+              toggled: auth.syncProgress,
+              child: AppLineRow(
+                scale: scale,
+                inset: inset,
+                icon: LineIcon.list,
+                title: 'Передавати прогрес у списки',
+                subtitle: 'Переглянута серія додається в «Дивлюсь» і рахується на Hikka',
+                trailing: SettingsSwitch(scale: scale, value: auth.syncProgress),
+                onTap: () => auth.syncProgress = !auth.syncProgress,
+              ),
+            ),
+            AppLineRow(
+              scale: scale,
+              inset: inset,
+              icon: LineIcon.logout,
+              title: 'Вийти з акаунта',
+              danger: true,
+              onTap: () async {
+                final ok = await showAppConfirm(
+                  context,
+                  scale: scale,
+                  title: 'Вийти з акаунта Hikka?',
+                  message: 'Прогрес перегляду на цьому пристрої лишиться, але перестане передаватися на Hikka.',
+                  action: 'Вийти',
+                  destructive: true,
+                );
+                if (ok) unawaited(auth.signOut());
+              },
+            ),
           ],
+        ),
+      ),
+    ];
+  }
+
+  /// A guest: a grey avatar, "Гість", what signing in gives and the one accent button
+  Widget _guest(double scale, double pad) {
+    final auth = HikkaAuth.instance;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(pad, 14 * scale, pad, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 62 * scale,
+                height: 62 * scale,
+                decoration: BoxDecoration(shape: BoxShape.circle, color: AppTones.plate),
+                alignment: Alignment.center,
+                child: LineIconView(LineIcon.person, size: 28 * scale, color: uiTheme.textMuted),
+              ),
+              SizedBox(width: 14 * scale),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Гість', style: hikkaStyle(20 * scale, weight: FontWeight.bold)),
+                    SizedBox(height: 4 * scale),
+                    Text('Ви ще не увійшли в Hikka', style: hikkaStyle(12.5 * scale, color: uiTheme.textMuted)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 14 * scale),
+          Text(
+            'Увійдіть через Hikka, щоб бачити свої списки, ставити статуси й оцінки та зберігати прогрес перегляду.',
+            style: hikkaStyle(13.5 * scale, color: uiTheme.textMuted, height: 1.45),
+          ),
+          if (auth.error != null) ...[
+            SizedBox(height: 10 * scale),
+            Text(auth.error!, style: hikkaStyle(12.5 * scale, color: AppTones.danger, height: 1.4)),
+          ],
+          SizedBox(height: 14 * scale),
+          HikkaLoginButton(scale: scale),
         ],
       ),
     );
@@ -75,45 +247,25 @@ class _HikkaProfilePageState extends State<HikkaProfilePage> {
   Widget build(BuildContext context) {
     final scale = widget.scale;
     final pad = HikkaLayout.sidePad(context, scale);
+    final inset = pad + 2 * scale;
     final auth = HikkaAuth.instance;
     return HikkaCollapsingHeader(
-      header: ListenableBuilder(
-        listenable: Listenable.merge([auth, AppUpdater.instance.state]),
-        builder: (context, _) {
-          final signedIn = auth.signedIn && auth.username.isNotEmpty;
-          final update = AppUpdater.instance.state.value is UpdateAvailable;
-          // After sign-in, settings, "Про застосунок" and the account are icons in the header: the page is taken by the profile only
+      header: ValueListenableBuilder<UpdateState>(
+        valueListenable: AppUpdater.instance.state,
+        builder: (context, up, _) {
+          final update = up is UpdateAvailable;
+          // "Про застосунок" is a tab in settings: a dot on the gear when an update exists
           return HikkaTabHeader(
             scale: scale,
             title: 'Профіль',
-            subtitle: AppIdentity.tagline,
             actions: [
-              if (signedIn) ...[
-                HikkaIconButton(
-                  icon: Symbols.manage_accounts_rounded,
-                  tooltip: 'Акаунт',
-                  scale: scale,
-                  onTap: () => HikkaAccountDialog.show(context, scale: scale),
-                ),
-                // "Про застосунок" is a tab in settings; a dot on the gear when an update exists
-                Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    HikkaIconButton(
-                      icon: Symbols.settings_rounded,
-                      tooltip: update ? 'Налаштування застосунку · є оновлення' : 'Налаштування застосунку',
-                      scale: scale,
-                      onTap: () => widget.onOpenSettings(tab: update ? AppSettingsDialog.tabAbout : null),
-                    ),
-                    if (update)
-                      Positioned(
-                        right: 8 * scale,
-                        top: 8 * scale,
-                        child: Container(width: 9 * scale, height: 9 * scale, decoration: BoxDecoration(color: uiTheme.accentColor, shape: BoxShape.circle)),
-                      ),
-                  ],
-                ),
-              ],
+              HikkaLineButton(
+                scale: scale,
+                icon: LineIcon.gear,
+                tooltip: update ? 'Налаштування застосунку · є оновлення' : 'Налаштування застосунку',
+                dot: update,
+                onTap: () => widget.onOpenSettings(tab: update ? AppSettingsDialog.tabAbout : null),
+              ),
             ],
           );
         },
@@ -130,131 +282,34 @@ class _HikkaProfilePageState extends State<HikkaProfilePage> {
             bottomInset: widget.bottomInset,
             onRefresh: profile ? widget.onRefresh : null,
             children: [
-              if (profile) ...[
-                HikkaUserProfile(
-                  key: ValueKey('me-$name'),
-                  username: name,
-                  seed: HikkaUser.fromMe(me!),
-                  scale: scale,
-                  own: true,
-                  reloadKey: widget.refreshToken,
-                ),
-                SizedBox(height: 6 * scale),
-              ],
-              Padding(
-                padding: EdgeInsets.fromLTRB(pad, profile ? 0 : 8 * scale, pad, 16 * scale),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(maxWidth: hikkaReadableWidth(scale)),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (!profile) ...[
-                          HikkaAccountCard(scale: scale),
-                          SizedBox(height: 18 * scale),
-                          _group(scale, [
-                            _MenuRow(
-                              scale: scale,
-                              icon: Symbols.settings_rounded,
-                              title: 'Налаштування застосунку',
-                              subtitle: 'Вигляд, плеєр, каталог, джерела перегляду',
-                              onTap: () => widget.onOpenSettings(),
-                            ),
-                          ]),
-                          SizedBox(height: 14 * scale),
-                        ],
-                        ValueListenableBuilder<bool>(
-                          valueListenable: StorageService.localLibraryListenable,
-                          builder: (context, localLibrary, _) => _group(scale, [
-                            if (localLibrary)
-                              _MenuRow(
-                                scale: scale,
-                                icon: Symbols.video_library_rounded,
-                                title: 'Локальна медіатека',
-                                subtitle: 'Відкрити файл чи посилання, історія й плейлисти',
-                                onTap: HikkaNav.instance.openLocalLibrary,
-                              ),
-                            if (!profile)
-                              ValueListenableBuilder<UpdateState>(
-                                valueListenable: AppUpdater.instance.state,
-                                builder: (context, up, _) => _MenuRow(
-                                  scale: scale,
-                                  icon: Symbols.info_rounded,
-                                  title: 'Про ${AppIdentity.name}',
-                                  subtitle: up is UpdateAvailable
-                                      ? 'Версія ${AppIdentity.version} · доступна ${up.info.version}'
-                                      : 'Версія ${AppIdentity.version}',
-                                  onTap: () => widget.onOpenSettings(tab: AppSettingsDialog.tabAbout),
-                                ),
-                              ),
-                          ]),
+              Center(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: profile ? double.infinity : hikkaReadableWidth(scale) + pad * 2),
+                  child: profile
+                      ? HikkaUserProfile(
+                          key: ValueKey('me-$name'),
+                          username: name,
+                          seed: HikkaUser.fromMe(me!),
+                          scale: scale,
+                          own: true,
+                          reloadKey: widget.refreshToken,
+                          extra: [..._app(scale, inset, guest: false), ..._account(scale, inset)],
+                        )
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _guest(scale, pad),
+                            ..._app(scale, inset, guest: true),
+                            SizedBox(height: 18 * scale),
+                            Center(child: Text('Дані: Hikka · зображення: AniList', style: hikkaStyle(11 * scale, color: uiTheme.textDarkMuted))),
+                            SizedBox(height: 16 * scale),
+                          ],
                         ),
-                        if (!profile) ...[
-                          SizedBox(height: 18 * scale),
-                          Center(
-                            child: Text(
-                              'Дані: Hikka · зображення: AniList',
-                              style: hikkaStyle(11 * scale, color: uiTheme.textDarkMuted),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
                 ),
               ),
             ],
           );
         },
-      ),
-    );
-  }
-}
-
-class _MenuRow extends StatelessWidget {
-  final double scale;
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final VoidCallback onTap;
-
-  const _MenuRow({required this.scale, required this.icon, required this.title, required this.subtitle, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      label: '$title. $subtitle',
-      excludeSemantics: true,
-      child: InkWell(
-        onTap: onTap,
-        splashColor: Colors.transparent,
-        highlightColor: uiTheme.touchHighlight,
-        hoverColor: uiTheme.hoverOverlay,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 56),
-          child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: 14 * scale, vertical: 10 * scale),
-            child: Row(
-              children: [
-                Icon(icon, color: uiTheme.accentColor, size: 24 * scale, weight: 300),
-                SizedBox(width: 14 * scale),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(title, style: hikkaStyle(13.5 * scale, weight: FontWeight.w600)),
-                      SizedBox(height: 2 * scale),
-                      Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: hikkaStyle(11.5 * scale, color: uiTheme.textDarkMuted, height: 1.3)),
-                    ],
-                  ),
-                ),
-                Icon(Symbols.chevron_right_rounded, color: uiTheme.textDarkMuted, size: 22 * scale),
-              ],
-            ),
-          ),
-        ),
       ),
     );
   }

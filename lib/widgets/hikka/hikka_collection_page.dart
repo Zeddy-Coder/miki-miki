@@ -6,8 +6,11 @@ import '../../services/hikka_api.dart';
 import '../../services/hikka_nav.dart';
 import '../../services/hikka_prefs.dart';
 import '../../services/ui_theme_service.dart';
+import '../../utils/platform_info.dart';
 import '../app_animation_kit.dart';
+import '../app_tones.dart';
 import '../app_ui_kit.dart';
+import '../line_icons.dart';
 import 'hikka_cards.dart';
 import 'hikka_common.dart';
 import 'hikka_community_cards.dart';
@@ -83,42 +86,93 @@ class _HikkaCollectionPageState extends State<HikkaCollectionPage> {
 
   // ── Header ──────────────────────────────────────────────────────────────────
 
+  /// The title, the author with the date, the counters with line icons, marks and tags in grey, the description as on
+  /// the title page (its links work once it is open)
   Widget _header(HikkaCollection c, double pad) {
     final scale = _scale;
     final count = c.entries;
+    final marks = [if (c.spoiler) 'Спойлери', if (c.nsfw) '18+', for (final t in c.tags.take(8)) '#$t'];
     return Padding(
-      padding: EdgeInsets.fromLTRB(pad, 6 * scale, pad, 16 * scale),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(c.title, style: hikkaStyle(21 * scale, weight: FontWeight.bold, height: 1.2)),
-          SizedBox(height: 6 * scale),
-          Text(hikkaByline(c.author, c.createdAt), style: hikkaStyle(12.5 * scale, color: uiTheme.textMuted)),
-          SizedBox(height: 12 * scale),
-          Wrap(
-            spacing: 8 * scale,
-            runSpacing: 6 * scale,
-            children: [
-              HikkaChip(label: '${HikkaText.count(count)} ${HikkaText.plural(count, 'тайтл', 'тайтли', 'тайтлів')}', icon: Symbols.movie_rounded, scale: scale),
-              HikkaChip(label: HikkaText.compact(c.voteScore), icon: Symbols.arrow_circle_up_rounded, scale: scale),
-              HikkaChip(label: HikkaText.compact(c.commentsCount), icon: Symbols.chat_bubble_rounded, scale: scale),
-              if (c.spoiler) HikkaChip(label: 'Спойлери', icon: Symbols.visibility_off_rounded, scale: scale),
-              if (c.nsfw) HikkaChip(label: '18+', scale: scale, highlight: true),
-              for (final t in c.tags.take(8)) HikkaChip(label: '#$t', scale: scale),
-            ],
-          ),
-          if (c.description != null) ...[
-            SizedBox(height: 16 * scale),
-            ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: hikkaReadableWidth(scale)),
-              child: HikkaCollapsible(
-                collapsedHeight: 150 * scale,
+      padding: EdgeInsets.fromLTRB(pad, 4 * scale, pad, 4 * scale),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: hikkaReadableWidth(scale)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(c.title, style: hikkaStyle(22 * scale, weight: FontWeight.bold, height: 1.2)),
+            SizedBox(height: 8 * scale),
+            HikkaAuthorLine(author: c.author, date: c.createdAt, scale: scale),
+            SizedBox(height: 6 * scale),
+            Wrap(
+              spacing: 14 * scale,
+              runSpacing: 6 * scale,
+              children: [
+                HikkaStat(icon: LineIcon.stack, text: '${HikkaText.count(count)} ${HikkaText.plural(count, 'тайтл', 'тайтли', 'тайтлів')}', scale: scale),
+                HikkaStat(icon: LineIcon.arrowUp, text: HikkaText.compact(c.voteScore), scale: scale, tooltip: 'Оцінка'),
+                HikkaStat(icon: LineIcon.comment, text: HikkaText.compact(c.commentsCount), scale: scale, tooltip: 'Коментарі'),
+              ],
+            ),
+            if (marks.isNotEmpty)
+              Padding(
+                padding: EdgeInsets.only(top: 8 * scale),
+                child: Text(marks.join('   '), style: hikkaStyle(12.5 * scale, color: uiTheme.textMuted, height: 1.4)),
+              ),
+            if (c.description != null) ...[
+              SizedBox(height: 14 * scale),
+              HikkaSynopsis(
+                source: c.description!,
                 scale: scale,
-                fadeColor: uiTheme.bgPrimary,
-                child: HikkaMarkdownView(source: c.description, scale: scale),
+                fontSize: 14,
+                color: AppTones.plateText,
+                open: _route.memo['synopsis'] == true,
+                onOpen: (v) => _route.memo['synopsis'] = v,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Rows (with the author's comments) or a poster grid; until chosen, rows when the author wrote comments
+  bool _rowsOf(HikkaCollection c) {
+    final chosen = _route.memo['rows'];
+    if (chosen is bool) return chosen;
+    return c.items.any((e) => (e.comment ?? '').trim().isNotEmpty);
+  }
+
+  /// "50 тайтлів" in grey and the "Сіткою / Списком" toggle, as in "Списки"
+  Widget _viewLine(HikkaCollection c, double pad, int shown) {
+    final scale = _scale;
+    final rows = _rowsOf(c);
+    Widget mode(LineIcon icon, bool value, String tip) => Semantics(
+          button: true,
+          selected: rows == value,
+          label: tip,
+          excludeSemantics: true,
+          child: Tooltip(
+            message: tip,
+            child: InkResponse(
+              onTap: () => setState(() => _route.memo['rows'] = value),
+              radius: 20 * scale,
+              splashColor: Colors.transparent,
+              highlightColor: uiTheme.touchHighlight,
+              child: SizedBox.square(
+                dimension: AppPlatform.isMobile ? 40.0 : 34 * scale,
+                child: Center(
+                  child: LineIconView(icon, size: 19 * scale, color: rows == value ? (uiTheme.isLight ? uiTheme.textPrimary : const Color(0xFFEEEEEE)) : uiTheme.textDarkMuted),
+                ),
               ),
             ),
-          ],
+          ),
+        );
+    return Padding(
+      padding: EdgeInsets.fromLTRB(pad, 10 * scale, pad - 8 * scale, 4 * scale),
+      child: Row(
+        children: [
+          Expanded(child: Text('${HikkaText.count(shown)} ${HikkaText.plural(shown, 'тайтл', 'тайтли', 'тайтлів')}', style: hikkaStyle(13 * scale, color: uiTheme.textMuted))),
+          mode(LineIcon.grid, false, 'Сіткою'),
+          mode(LineIcon.rows, true, 'Списком'),
         ],
       ),
     );
@@ -163,11 +217,12 @@ class _HikkaCollectionPageState extends State<HikkaCollectionPage> {
 
   // ── Entries ─────────────────────────────────────────────────────────────────
 
+  /// A grey caption of the author's section ("Найкраще · 12")
   Widget _groupTitle(String label, int count, double pad) {
     final scale = _scale;
     return Padding(
-      padding: EdgeInsets.fromLTRB(pad, 6 * scale, pad, 10 * scale),
-      child: AppSectionHeader(scale: scale, title: label, subtitle: '${HikkaText.count(count)} ${HikkaText.plural(count, 'тайтл', 'тайтли', 'тайтлів')}'),
+      padding: EdgeInsets.fromLTRB(pad, 14 * scale, pad, 8 * scale),
+      child: Text('$label · ${HikkaText.count(count)}', style: hikkaStyle(13 * scale, color: AppTones.caption, weight: FontWeight.w700)),
     );
   }
 
@@ -182,34 +237,31 @@ class _HikkaCollectionPageState extends State<HikkaCollectionPage> {
         ),
       ];
     }
-    final withComments = c.items.any((e) => (e.comment ?? '').trim().isNotEmpty);
+    final rows = _rowsOf(c);
     final spacing = HikkaLayout.compact(context) ? 12.0 : 14 * scale;
     final textHeight = hikkaCardTextHeight(context, scale);
-    final out = <Widget>[];
+    final out = <Widget>[SliverToBoxAdapter(child: _viewLine(c, pad, total))];
     for (final (label, items) in groups) {
       if (label != null) out.add(SliverToBoxAdapter(child: _groupTitle(label, items.length, pad)));
-      if (withComments) {
+      if (rows) {
         out.add(
-          SliverPadding(
-            padding: EdgeInsets.symmetric(horizontal: pad),
-            sliver: SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, i) => Align(
-                  alignment: Alignment.centerLeft,
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(maxWidth: hikkaReadableWidth(scale)),
-                    child: Padding(padding: EdgeInsets.only(bottom: spacing), child: _EntryRow(entry: items[i], scale: scale)),
-                  ),
+          SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, i) => Align(
+                alignment: Alignment.centerLeft,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: hikkaReadableWidth(scale) + pad * 2),
+                  child: _EntryRow(entry: items[i], scale: scale, pad: pad, route: _route),
                 ),
-                childCount: items.length,
               ),
+              childCount: items.length,
             ),
           ),
         );
       } else {
         out.add(
           SliverPadding(
-            padding: EdgeInsets.fromLTRB(pad, 0, pad, label != null ? 14 * scale : 0),
+            padding: EdgeInsets.fromLTRB(pad, 6 * scale, pad, label != null ? 14 * scale : 0),
             sliver: SliverGrid(
               gridDelegate: HikkaGridDelegate(maxTileWidth: 150, spacing: spacing, posterAspect: 0.7, textHeight: textHeight),
               delegate: SliverChildBuilderDelegate(
@@ -266,12 +318,15 @@ class _HikkaCollectionPageState extends State<HikkaCollectionPage> {
   }
 }
 
-/// A collection entry with the author's comment: a poster thumbnail, title, marks and the comment text
+/// A collection entry as a row: a small poster, the title, type, season and score in grey, and the author's comment
+/// (three lines until opened, as a description)
 class _EntryRow extends StatelessWidget {
   final HikkaCollectionEntry entry;
   final double scale;
+  final double pad;
+  final HikkaRoute route;
 
-  const _EntryRow({required this.entry, required this.scale});
+  const _EntryRow({required this.entry, required this.scale, required this.pad, required this.route});
 
   @override
   Widget build(BuildContext context) {
@@ -282,56 +337,63 @@ class _EntryRow extends StatelessWidget {
       if (a.seasonLabel.isNotEmpty) a.seasonLabel,
       if (a.episodesLabel.isNotEmpty) a.episodesLabel,
     ].join(' · ');
-    return AppCard(
-      scale: scale,
-      radius: 12,
+    final grey = AppTones.rowSub;
+    final key = 'comment-${a.slug}';
+    return InkWell(
       onTap: () => HikkaNav.instance.openAnime(a.slug, seed: a),
-      padding: EdgeInsets.all(10 * scale),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(width: 64 * scale, child: HikkaPoster(url: a.image, malId: a.malId, scale: scale, radius: 8, icon: Symbols.movie_rounded)),
-          SizedBox(width: 12 * scale),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  a.title(HikkaPrefs.instance.titleLang),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: hikkaStyle(13.5 * scale, weight: FontWeight.w600, height: 1.25),
-                ),
-                if (meta.isNotEmpty)
-                  Padding(
-                    padding: EdgeInsets.only(top: 3 * scale),
-                    child: Text(meta, maxLines: 1, overflow: TextOverflow.ellipsis, style: hikkaStyle(11.5 * scale, color: uiTheme.textMuted)),
-                  ),
-                if (a.hasScore)
-                  Padding(
-                    padding: EdgeInsets.only(top: 4 * scale),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Symbols.star_rounded, color: const Color(0xFFFFC23D), size: 14 * scale, fill: 1),
-                        SizedBox(width: 3 * scale),
-                        Text(a.score.toStringAsFixed(2), style: hikkaStyle(11.5 * scale, weight: FontWeight.w600)),
-                      ],
+      splashColor: Colors.transparent,
+      highlightColor: uiTheme.touchHighlight,
+      hoverColor: uiTheme.hoverOverlay,
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: pad, vertical: 9 * scale),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(width: 52 * scale, child: HikkaPoster(url: a.image, malId: a.malId, scale: scale, radius: 8, aspect: 52 / 74, icon: Symbols.movie_rounded)),
+            SizedBox(width: 12 * scale),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(a.title(HikkaPrefs.instance.titleLang), maxLines: 2, overflow: TextOverflow.ellipsis, style: hikkaStyle(15 * scale, height: 1.25)),
+                  if (meta.isNotEmpty || a.hasScore)
+                    Padding(
+                      padding: EdgeInsets.only(top: 4 * scale),
+                      child: Text.rich(
+                        TextSpan(
+                          style: hikkaStyle(12.5 * scale, color: grey, height: 1.3),
+                          children: [
+                            TextSpan(text: meta),
+                            if (a.hasScore) ...[
+                              TextSpan(text: meta.isEmpty ? '' : ' · '),
+                              WidgetSpan(
+                                alignment: PlaceholderAlignment.middle,
+                                child: Padding(padding: EdgeInsets.only(right: 3 * scale), child: LineIconView(LineIcon.star, size: 12 * scale, color: grey, stroke: 1.8)),
+                              ),
+                              TextSpan(text: a.score.toStringAsFixed(2)),
+                            ],
+                          ],
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                  ),
-                if (comment.isNotEmpty) ...[
-                  SizedBox(height: 8 * scale),
-                  HikkaCollapsible(
-                    collapsedHeight: 96 * scale,
-                    scale: scale,
-                    fadeColor: uiTheme.bgSurface,
-                    child: HikkaMarkdownView(source: comment, scale: scale, fontSize: 12.5),
-                  ),
+                  if (comment.isNotEmpty) ...[
+                    SizedBox(height: 6 * scale),
+                    HikkaSynopsis(
+                      source: comment,
+                      scale: scale,
+                      fontSize: 12.5,
+                      lines: 3,
+                      open: route.memo[key] == true,
+                      onOpen: (v) => route.memo[key] = v,
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

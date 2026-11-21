@@ -1,4 +1,5 @@
 import 'app_log.dart';
+import 'app_updater.dart';
 import 'hikka_auth.dart';
 import 'hikka_nav.dart';
 
@@ -7,6 +8,9 @@ import 'hikka_nav.dart';
 /// Supported:
 /// - `miki://open`: just open the app (the page redirects here after Hikka sign-in);
 /// - `miki://open/anime/<slug>`, `/character/<slug>`, `/collection/<id>`, `/article/<slug>`: open a page;
+/// - `miki://open/update`: the "Доступне оновлення" window (a tap on a "new version" notification);
+/// - `miki://open/notifications`: the "Сповіщення" page (a tap on an announcement);
+/// - `miki://open/downloads`: the "Завантаження" page (a tap on the downloads' notification);
 /// - `miki://open/auth?reference=<code>`: finish Hikka sign-in, but only while a sign-in is actually in progress
 ///   (a foreign link cannot silently sign you in to someone else's account).
 class DeepLinks {
@@ -21,7 +25,7 @@ class DeepLinks {
   static String anime(String slug) => '$scheme://$host/anime/$slug';
 
   /// Handles a link. `true`: recognized and executed (or it is just an open), `false`: ignored.
-  static bool handle(String link, {HikkaNav? nav, HikkaAuth? auth}) {
+  static bool handle(String link, {HikkaNav? nav, HikkaAuth? auth, AppUpdater? updater}) {
     final uri = Uri.tryParse(link.trim());
     if (uri == null || uri.scheme != scheme || uri.host != host) return false;
     final seg = uri.pathSegments.where((s) => s.isNotEmpty).toList();
@@ -37,6 +41,15 @@ class DeepLinks {
           return false;
         }
         return a.submit(ref);
+      case 'update':
+        (updater ?? AppUpdater.instance).requestPrompt();
+        return true;
+      case 'notifications':
+        n.openNotifications();
+        return true;
+      case 'downloads':
+        n.openDownloads();
+        return true;
       case 'anime' || 'character' || 'collection' || 'article':
         if (seg.length < 2 || !_id.hasMatch(seg[1])) return false;
         final id = seg[1];

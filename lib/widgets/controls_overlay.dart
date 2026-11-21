@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import '../models/media_models.dart';
 import '../services/anime4k_controller.dart';
+import '../services/remote_driver.dart';
 import 'top_dock.dart';
 import 'bottom_dock.dart';
 import 'settings_drawer.dart';
@@ -14,6 +15,9 @@ class ControlsOverlay extends StatelessWidget {
   final bool isSpeeding;
   final bool isDraggingFile;
   final String currentTitle;
+
+  /// The grey line under the title ("Серія 6 з 28 · Inari · 1080p")
+  final String currentSubtitle;
   final Player player;
   final double currentSpeed;
   /// Volume and "mute" via a separate notifier so their change does not rebuild the whole panel
@@ -67,6 +71,12 @@ class ControlsOverlay extends StatelessWidget {
   final ValueChanged<String> onHwdecSelected;
   final VoidCallback onOpenStats;
 
+  /// "Усі налаштування" in the menu (see [SettingsDrawer.onOpenAppSettings])
+  final VoidCallback? onOpenAppSettings;
+
+  /// Site episodes: quality in the menu, "серія · озвучка · якість" under the title
+  final RemoteDriver? remote;
+
   /// "Previous / next" in the dock (see [BottomDock.onPrevious])
   final VoidCallback? onPrevious;
   final VoidCallback? onNext;
@@ -78,6 +88,7 @@ class ControlsOverlay extends StatelessWidget {
     required this.isSpeeding,
     required this.isDraggingFile,
     required this.currentTitle,
+    this.currentSubtitle = '',
     required this.player,
     required this.currentSpeed,
     required this.volume,
@@ -127,6 +138,8 @@ class ControlsOverlay extends StatelessWidget {
     this.audioDelayKey = '',
     required this.onHwdecSelected,
     required this.onOpenStats,
+    this.onOpenAppSettings,
+    this.remote,
     this.onPrevious,
     this.onNext,
   });
@@ -147,6 +160,7 @@ class ControlsOverlay extends StatelessWidget {
                 TopDock(
                   scale: scale,
                   title: currentTitle,
+                  subtitle: currentSubtitle,
                   player: player,
                   settingsKey: settingsKey,
                   isSettingsOpen: drawerOwner == 'settings',
@@ -221,6 +235,8 @@ class ControlsOverlay extends StatelessWidget {
                     onOpenChaptersSidePanel: onChaptersTap,
                     onOpenStats: onOpenStats,
                     anime4k: anime4k,
+                    remote: remote,
+                    onOpenAppSettings: onOpenAppSettings,
                   )),
                   ),
                 ),

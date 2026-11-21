@@ -298,6 +298,7 @@ class PlayerActions {
       return true;
     }
     if (c.activeSidePanel != null) {
+      if (c.panelStepBack()) return true;
       c.closeSidePanel();
       return true;
     }

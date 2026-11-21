@@ -18,8 +18,9 @@ class AppFormatters {
     return h > 0 ? '$h:${m.toString().padLeft(2, '0')}:$s' : '$m:$s';
   }
 
+  /// "1×", "1.25×": the multiplication sign, as on the player's pill
   static String formatSpeed(double s) {
-    return s == s.toInt() ? '${s.toInt()}x' : '${s}x';
+    return s == s.toInt() ? '${s.toInt()}×' : '$s×';
   }
 
   static IconData getSpeedIcon(double speed) {
@@ -216,4 +217,4 @@ class AppFormatters {
     _trackTitleCache[cacheKey] = result;
     return result;
   }
-}
+}

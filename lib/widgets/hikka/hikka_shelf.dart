@@ -33,6 +33,13 @@ class HikkaShelf extends StatefulWidget {
   final double? cardWidth;
   final double? cardHeight;
 
+  /// Space between cards and the heading size before scaling (the title page uses its own)
+  final double gap;
+  final double titleSize;
+
+  /// The new design: a grey, low "Усі ›" and a larger grey line under the heading (the wide title page keeps the old look)
+  final bool calm;
+
   const HikkaShelf({
     super.key,
     required this.scale,
@@ -45,6 +52,9 @@ class HikkaShelf extends StatefulWidget {
     this.moreLabel = 'Усі',
     this.cardWidth,
     this.cardHeight,
+    this.gap = 10,
+    this.titleSize = 15,
+    this.calm = true,
   });
 
   @override
@@ -72,7 +82,7 @@ class _HikkaShelfState extends State<HikkaShelf> {
     final scale = widget.scale;
     final showArrows = !AppPlatform.isMobile && widget.count > 4;
     return Padding(
-      padding: EdgeInsets.only(bottom: 22 * scale),
+      padding: EdgeInsets.only(bottom: (widget.calm ? 20 : 22) * scale),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -82,6 +92,8 @@ class _HikkaShelfState extends State<HikkaShelf> {
               scale: scale,
               title: widget.title,
               subtitle: widget.subtitle,
+              titleSize: widget.titleSize,
+              calm: widget.calm,
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -89,7 +101,7 @@ class _HikkaShelfState extends State<HikkaShelf> {
                     HikkaIconButton(icon: Symbols.chevron_left_rounded, tooltip: 'Назад', scale: scale * 0.8, onTap: () => _page(-1)),
                     HikkaIconButton(icon: Symbols.chevron_right_rounded, tooltip: 'Далі', scale: scale * 0.8, onTap: () => _page(1)),
                   ],
-                  if (widget.onMore != null) HikkaLinkButton(label: widget.moreLabel, scale: scale, onTap: widget.onMore!),
+                  if (widget.onMore != null) HikkaLinkButton(label: widget.moreLabel, scale: scale, onTap: widget.onMore!, calm: widget.calm),
                 ],
               ),
             ),
@@ -102,7 +114,7 @@ class _HikkaShelfState extends State<HikkaShelf> {
               scrollDirection: Axis.horizontal,
               padding: EdgeInsets.symmetric(horizontal: widget.pad),
               itemCount: widget.count,
-              separatorBuilder: (_, __) => SizedBox(width: 12 * scale),
+              separatorBuilder: (_, __) => SizedBox(width: widget.gap * scale),
               itemBuilder: (context, i) => SizedBox(width: widget.cardWidth ?? HikkaShelfMetrics.cardWidth(scale), child: widget.itemBuilder(context, i)),
             ),
           ),
@@ -132,7 +144,7 @@ class HikkaShelfSkeleton extends StatelessWidget {
           scrollDirection: Axis.horizontal,
           padding: EdgeInsets.symmetric(horizontal: pad),
           itemCount: 4,
-          separatorBuilder: (_, __) => SizedBox(width: 12 * scale),
+          separatorBuilder: (_, __) => SizedBox(width: 10 * scale),
           itemBuilder: (context, i) => Container(
             width: cardWidth,
             decoration: BoxDecoration(color: uiTheme.bgElevated.withValues(alpha: 0.6), borderRadius: uiTheme.borderRadius(14 * scale)),
@@ -153,7 +165,7 @@ class HikkaShelfSkeleton extends StatelessWidget {
         scrollDirection: Axis.horizontal,
         padding: EdgeInsets.symmetric(horizontal: pad),
         itemCount: 8,
-        separatorBuilder: (_, __) => SizedBox(width: 12 * scale),
+        separatorBuilder: (_, __) => SizedBox(width: 10 * scale),
         itemBuilder: (context, i) => SizedBox(
           width: w,
           child: Column(
@@ -161,7 +173,7 @@ class HikkaShelfSkeleton extends StatelessWidget {
             children: [
               AspectRatio(
                 aspectRatio: 0.7,
-                child: DecoratedBox(decoration: BoxDecoration(color: uiTheme.bgElevated, borderRadius: uiTheme.borderRadius(10 * scale))),
+                child: DecoratedBox(decoration: BoxDecoration(color: uiTheme.bgElevated, borderRadius: uiTheme.borderRadius(12 * scale))),
               ),
               SizedBox(height: 9 * scale),
               bar(w * 0.85, 9 * scale),
@@ -188,6 +200,9 @@ class HikkaShelfAsync<T> extends StatelessWidget {
   final String moreLabel;
   final double? cardWidth;
   final double? cardHeight;
+  final double gap;
+  final double titleSize;
+  final bool calm;
 
   /// Another value means the shelf loads anew
   final Object? token;
@@ -205,6 +220,9 @@ class HikkaShelfAsync<T> extends StatelessWidget {
     this.token,
     this.cardWidth,
     this.cardHeight,
+    this.gap = 10,
+    this.titleSize = 15,
+    this.calm = true,
   });
 
   @override
@@ -215,15 +233,15 @@ class HikkaShelfAsync<T> extends StatelessWidget {
       compactError: true,
       load: load,
       stateFrame: (context, child) => Padding(
-        padding: EdgeInsets.only(bottom: 22 * scale),
+        padding: EdgeInsets.only(bottom: (calm ? 20 : 22) * scale),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
               padding: EdgeInsets.symmetric(horizontal: pad),
-              child: AppSectionHeader(scale: scale, title: title, subtitle: subtitle),
+              child: AppSectionHeader(scale: scale, title: title, subtitle: subtitle, titleSize: titleSize, calm: calm),
             ),
-            SizedBox(height: 8 * scale),
+            SizedBox(height: 10 * scale),
             child,
           ],
         ),
@@ -240,6 +258,9 @@ class HikkaShelfAsync<T> extends StatelessWidget {
           moreLabel: moreLabel,
           cardWidth: cardWidth,
           cardHeight: cardHeight,
+          gap: gap,
+          titleSize: titleSize,
+          calm: calm,
           count: list.length,
           itemBuilder: (context, i) => itemBuilder(context, list[i]),
         );

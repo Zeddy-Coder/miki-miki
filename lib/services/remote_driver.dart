@@ -9,10 +9,14 @@ import 'package:flutter/foundation.dart';
 
 import '../models/media_models.dart';
 import '../models/source_models.dart';
+import 'app_log.dart';
 import 'episode_check.dart';
 import 'hikka_lists.dart';
 import 'lang_match.dart';
 import 'remote_playback.dart';
+import 'skips/skip_align.dart';
+import 'skips/skip_service.dart';
+import 'songs/song_service.dart';
 import 'source_registry.dart';
 import 'sources/source_http.dart';
 import 'sources/hls_proxy.dart';
@@ -110,12 +114,24 @@ class RemoteDriver extends ChangeNotifier {
     List<String> Function()? subPriorities,
     this.openTimeout = const Duration(seconds: 30),
     this.errorGrace = const Duration(seconds: 6),
+    this.skips,
+    this.songs,
   }) : store = store ?? WatchStore.instance,
        autoNext = autoNext ?? (() => StorageService.getAutoplayNext()),
        _subPriorities = subPriorities ?? (() => StorageService.getSubLangPriorities()),
        _readPosition = readPosition ?? StorageService.getPlaybackPosition,
        _writePosition = writePosition ?? StorageService.savePlaybackPosition,
-       _now = now ?? DateTime.now;
+       _now = now ?? DateTime.now {
+    skips?.current.addListener(_onPlan);
+    // The songs come after the start: the menu and the chapters show them
+    songs?.current.addListener(_changed);
+  }
+
+  /// Skips for episodes the site gave no times for (AniSkip, listening); null: only the site's own times
+  final SkipService? skips;
+
+  /// The songs of the episode's opening and ending (the card over the video, «Пісня» in the menu); null: none
+  final SongService? songs;
 
   // ── Callbacks to the player controller ────────────────────────────────────────
 
@@ -127,6 +143,13 @@ class RemoteDriver extends ChangeNotifier {
 
   /// A short message for the screen ("Наступна серія", "Це остання серія")
   void Function(String text, {bool error})? onMessage;
+
+  /// The episode was watched to the end (marked by itself, not by hand): smart downloads go on from it
+  void Function(String animeKey, RemoteEntry entry)? onWatched;
+
+  /// Set by the open "Перегляд" panel: a step back inside it (from an episode's details or an inner page to the list);
+  /// false — it is at its list already. The system Back and Esc ask it before closing the panel
+  bool Function()? panelBack;
 
   // ── State ────────────────────────────────────────────────────────────────────
 
@@ -141,6 +164,9 @@ class RemoteDriver extends ChangeNotifier {
   ResolvedStream? _stream;
   Video? _video;
   List<VideoChapter> _chapters = const [];
+
+  /// The times behind [_chapters]: the site's, or the skip plan's (AniSkip, listening)
+  List<TimeStamp> _stamps = const [];
 
   RemoteSession? get session => _session;
 
@@ -161,8 +187,23 @@ class RemoteDriver extends ChangeNotifier {
 
   Video? get video => _video;
 
-  /// Chapters from the site's timestamps (opening, ending …)
+  /// Chapters from the site's timestamps or the skip plan (opening, ending …)
   List<VideoChapter> get chapters => _chapters;
+
+  /// The skip plan of the episode playing now (where its times come from, their shift); null: none
+  SkipPlan? get skipPlan {
+    final p = skips?.current.value;
+    return p != null && p.key == _planKey ? p : null;
+  }
+
+  /// Moves the AniSkip times of this dub by [delta] seconds (every episode of it)
+  Future<void> shiftSkips(double delta) async => skips?.shiftBy(delta);
+
+  /// The viewer marked where this episode's opening starts: AniSkip's times of the dub move to fit
+  Future<void> skipOpeningAt(Duration position) async => skips?.openingAt(position.inMilliseconds / 1000);
+
+  /// Forgets the hand correction of the times
+  Future<void> resetSkipShift() async => skips?.resetShift();
 
   bool get active => _session != null;
 
@@ -232,7 +273,10 @@ class RemoteDriver extends ChangeNotifier {
   // ── Launch and navigation ──────────────────────────────────────────────────────
 
   /// Reconciliation of the variant's episodes with Hikka (for warnings in the dub list). Without Hikka data, numbering check only.
-  EpisodeCheck checkOf(WatchGroup g) => checkEpisodes(g.episodes, _hikka ?? const HikkaEpisodeInfo());
+  /// What Hikka knows about the episodes (released / total): "28 з 28 серій" under the dub in the player's panel
+  HikkaEpisodeInfo? get hikka => _hikka;
+
+  EpisodeCheck checkOf(WatchGroup g) => checkGroup(g, _hikka ?? const HikkaEpisodeInfo(), all: _title?.groups ?? const []);
 
   /// Starts watching: the queue is all episodes of the chosen dub, the starting one opens
   Future<void> start(RemoteLaunch launch) async {
@@ -261,6 +305,9 @@ class RemoteDriver extends ChangeNotifier {
     _stream = null;
     _video = null;
     _chapters = const [];
+    _stamps = const [];
+    skips?.detach();
+    songs?.detach();
     _marked = false;
     _offer = null;
     _tried.clear();
@@ -393,18 +440,76 @@ class RemoteDriver extends ChangeNotifier {
     final v = _video;
     _watchdog?.cancel();
     _phase = RemotePhase.playing;
-    _chapters = chaptersFromTimestamps(v?.timestamps ?? const [], d);
+    _stamps = v?.timestamps ?? const [];
+    _chapters = chaptersFromTimestamps(_stamps, d);
     _changed();
     final token = _token;
     if (v != null) unawaited(_applyExtras(token, v));
+    final sk = skips, so = songs, e = entry, g = group, s = _session;
+    if (e == null || s == null) return;
+    final (number, why) = g == null ? (null, '') : _numberOf(e, checkOf(g));
+    if (number == null && g != null && (sk != null || so != null)) AppLog.i('пропуск', '${g.teamLabel} · ${e.epKey}: номер для AniSkip невідомий — $why');
+    if (sk != null && v != null && g != null) {
+      unawaited(sk.attach(SkipRequest(animeKey: s.animeKey, group: g, index: _index, epKey: e.epKey, number: number, duration: d.inMilliseconds / 1000, video: v)));
+    }
+    if (so != null) unawaited(so.attach(animeKey: s.animeKey, epKey: e.epKey, number: number));
   }
+
+  String get _planKey {
+    final s = _session, e = entry;
+    return s == null || e == null ? '' : '${s.animeKey}#$_groupId#${e.epKey}';
+  }
+
+  /// A new or better skip plan for the episode playing now
+  void _onPlan() {
+    final plan = skips?.current.value;
+    final total = engine.duration;
+    if (plan == null || !active || _phase != RemotePhase.playing || plan.key != _planKey || total <= Duration.zero) return;
+    _stamps = plan.stamps;
+    _chapters = chaptersFromTimestamps(plan.stamps, total);
+    _changed();
+  }
+
+  /// AniSkip's number of [e] (MyAnimeList's numbering) by its dub's check [c]: whole numbers of a dub whose numbers
+  /// still name Hikka's episodes (`EpisodeCheck.numbersHold`: a gap such as Gintama's 1, 3, 4… is fine); null when they
+  /// may not (merged parts, seasons in one list, extras after the last episode), with why (for the log)
+  (int?, String) _numberOf(RemoteEntry e, EpisodeCheck c) {
+    final n = e.episode.number;
+    if (n == null) return (null, 'серія без номера');
+    if (n < 1 || n != n.roundToDouble()) return (null, 'номер $n');
+    if (e.episode.season != null) return (null, 'у списку джерела є сезон ${e.episode.season}');
+    if (!c.numbersHold) return (null, 'нумерація джерела не збігається з Hikka (${c.summary})');
+    final limit = c.syncLimit;
+    if (limit != null && n > limit) return (null, 'після останньої серії Hikka ($limit)');
+    return (n.toInt(), '');
+  }
+
+  (RemoteSession, WatchGroup, HikkaEpisodeInfo?)? _numbersFor;
+  List<int?> _numbers = const [];
+
+  /// MyAnimeList's numbers of the queue's episodes by the AniSkip rule (null where a dub's number may name another
+  /// episode): the titles of the episode list go by them
+  List<int?> get malNumbers {
+    final s = _session, g = group;
+    if (s == null || g == null) return const [];
+    final f = _numbersFor;
+    if (f != null && identical(f.$1, s) && identical(f.$2, g) && identical(f.$3, _hikka)) return _numbers;
+    final c = checkOf(g);
+    _numbers = [for (final e in s.entries) _numberOf(e, c).$1];
+    _numbersFor = (s, g, _hikka);
+    return _numbers;
+  }
+
+  /// Every few seconds while an episode plays (the list's progress of it follows without rebuilding the whole panel)
+  final ValueNotifier<int> progress = ValueNotifier<int>(0);
 
   /// Every few seconds: saves the position and marks the episode watched
   void tick() {
     if (!active || _phase != RemotePhase.playing) return;
+    progress.value++;
     _savePosition();
     final e = entry;
-    if (!_marked && e != null && episodeSeen(engine.position, engine.duration, _video?.timestamps ?? const [], fraction: StorageService.getWatchedPercent() / 100, byEnding: StorageService.getWatchedByEnding())) {
+    if (!_marked && e != null && episodeSeen(engine.position, engine.duration, _stamps, fraction: StorageService.getWatchedPercent() / 100, byEnding: StorageService.getWatchedByEnding())) {
       _markWatched(e);
     }
   }
@@ -480,6 +585,9 @@ class RemoteDriver extends ChangeNotifier {
     _stream = null;
     _video = null;
     _chapters = const [];
+    _stamps = const [];
+    skips?.detach();
+    songs?.detach();
     _error = null;
     _phase = RemotePhase.idle;
     _changed();
@@ -489,6 +597,9 @@ class RemoteDriver extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _cancelTimers();
+    skips?.current.removeListener(_onPlan);
+    songs?.current.removeListener(_changed);
+    progress.dispose();
     super.dispose();
   }
 
@@ -523,6 +634,7 @@ class RemoteDriver extends ChangeNotifier {
     final s = _session!;
     store.setWatched(s.animeKey, e.epKey, true);
     _syncToHikka(s, e);
+    onWatched?.call(s.animeKey, e);
     _changed(); // a "watched" mark appears in the episode panel
   }
 

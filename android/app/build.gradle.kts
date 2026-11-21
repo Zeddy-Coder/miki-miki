@@ -88,6 +88,8 @@ if (file("google-services.json").exists()) {
 dependencies {
     implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
     implementation("com.google.firebase:firebase-messaging")
+    // FileProvider: hands a downloaded update (APK) to the system installer
+    implementation("androidx.core:core:1.13.1")
 }
 
 flutter {

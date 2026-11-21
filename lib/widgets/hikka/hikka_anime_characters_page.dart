@@ -5,9 +5,11 @@ import '../../models/hikka_models.dart';
 import '../../services/hikka_api.dart';
 import '../../services/hikka_nav.dart';
 import '../../services/hikka_pager.dart';
+import '../../services/hikka_prefs.dart';
 import '../app_animation_kit.dart';
 import 'hikka_cards.dart';
 import 'hikka_common.dart';
+import 'hikka_page_kit.dart';
 
 /// All characters of an anime: portrait grids by the "Головні" and "Другорядні" sections
 class HikkaAnimeCharactersPage extends StatefulWidget {
@@ -54,9 +56,23 @@ class _HikkaAnimeCharactersPageState extends State<HikkaAnimeCharactersPage> {
     if (_scroll.hasClients) widget.route.scroll = _scroll.offset;
   }
 
+  /// "Головні · 3" / "Другорядні · 50": the server returns the main characters first, so the loaded ones are counted
+  (int, int, int) _counted = (-1, 0, 0);
+  String _sectionOf(HikkaCharacterRole r) {
+    final items = _pager.items;
+    if (_counted.$1 != items.length) _counted = (items.length, items.where((x) => x.main).length, _pager.total);
+    final main = _counted.$2;
+    final rest = _counted.$3 - main;
+    if (r.main) return 'Головні · ${HikkaText.count(main)}';
+    return rest > 0 ? 'Другорядні · ${HikkaText.count(rest)}' : 'Другорядні';
+  }
+
   @override
   Widget build(BuildContext context) {
     final scale = widget.scale;
+    final pad = HikkaLayout.sidePad(context, scale);
+    final a = widget.route.memo['anime'] ?? widget.route.seed;
+    final title = a is HikkaAnime ? a.title(HikkaPrefs.instance.titleLang) : null;
     return HikkaPagedGrid<HikkaCharacterRole>(
       pager: _pager,
       scale: scale,
@@ -65,8 +81,12 @@ class _HikkaAnimeCharactersPageState extends State<HikkaAnimeCharactersPage> {
       maxTileWidth: 150,
       emptyIcon: Symbols.person_search_rounded,
       emptyText: 'Для цього аніме ще немає персонажів',
-      // The server returns main characters first: the grid splits into "Головні" and "Другорядні"
-      sectionOf: (r) => r.main ? 'Головні персонажі' : 'Другорядні персонажі',
+      header: ListenableBuilder(
+        listenable: _pager,
+        builder: (context, _) => HikkaLeadLine(scale: scale, pad: pad, parts: [if (title != null) title, if (_pager.total > 0) HikkaText.count(_pager.total)]),
+      ),
+      sectionOf: _sectionOf,
+      subtitle: false,
       itemBuilder: (context, r) => HikkaCharacterCard(character: r.character, scale: scale),
     );
   }

@@ -15,6 +15,7 @@ import '../services/app_log.dart';
 import '../services/log_export.dart';
 import '../services/orientation_policy.dart';
 import '../services/hikka_auth.dart';
+import '../services/hikka_nav.dart';
 import '../services/storage_service.dart';
 import '../services/watch_service.dart';
 import '../services/system_fonts.dart';
@@ -22,11 +23,16 @@ import '../services/ui_theme_service.dart';
 import '../services/mpv_config.dart';
 import '../services/player_state_controller.dart';
 import '../services/shortcut_catalog.dart';
+import 'app_tones.dart';
 import 'app_ui_kit.dart';
+import 'settings_kit.dart';
+import 'settings_search.dart';
+import 'hikka/hikka_cards.dart' show HikkaProgressBar;
 import 'hikka/hikka_page_kit.dart';
 import 'hikka/hikka_settings_dialog.dart';
 import 'app_animation_kit.dart';
 import 'shortcuts_view.dart';
+import 'update_prompt.dart';
 import '../utils/platform_info.dart';
 
 class AppSettingsDialog extends StatefulWidget {
@@ -34,12 +40,13 @@ class AppSettingsDialog extends StatefulWidget {
   final PlayerStateController controller;
 
   /// The tab the window opens on (see [tabDeveloper], [tabAbout])
-  final int initialTab;
+  final int? initialTab;
 
   /// A navigation tab instead of a window: fills the given space, without "Закрити" and "Готово"
   final bool embedded;
 
   /// Tab indices reachable from other screens
+  static const int tabPlayback = 2;
   static const int tabDeveloper = 5;
   static const int tabAbout = 6;
   static const int tabCatalog = 9;
@@ -48,11 +55,11 @@ class AppSettingsDialog extends StatefulWidget {
     super.key,
     required this.scale,
     required this.controller,
-    this.initialTab = 0,
+    this.initialTab,
     this.embedded = false,
   });
 
-  static void show(BuildContext context, double scale, PlayerStateController controller, {int initialTab = 0}) {
+  static void show(BuildContext context, double scale, PlayerStateController controller, {int? initialTab}) {
     showGeneralDialog(
       context: context,
       barrierDismissible: true,
@@ -69,7 +76,22 @@ class AppSettingsDialog extends StatefulWidget {
 }
 
 class _AppSettingsDialogState extends State<AppSettingsDialog> {
-  late int _activeTab = widget.initialTab;
+  late int _activeTab = widget.initialTab ?? 0;
+
+  /// Phone: the start screen with the list of sections is shown until a section is opened (a PC window opens on a tab)
+  late bool _menu = widget.initialTab == null && AppPlatform.isMobile;
+
+  /// Embedded page: back (the bar's arrow or the gesture) first clears the search, then returns from a section to the list
+  bool _backGuard() {
+    if (_menu && _query.isNotEmpty) {
+      _search.clear();
+      setState(() => _query = '');
+      return true;
+    }
+    if (_menu) return false;
+    setState(() => _menu = true);
+    return true;
+  }
   late final TextEditingController _mikaiKey = TextEditingController(text: WatchService.instance.registry.prefs.mikaiKey);
   late final TextEditingController _moonKey = TextEditingController(text: WatchService.instance.registry.prefs.moonKey);
   late final TextEditingController _clientRef = TextEditingController(text: HikkaAuth.instance.customReference);
@@ -106,6 +128,8 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
   late double _holdRate;
   late bool _autoSkip;
   late bool _showSkipButton;
+  late bool _listenSkips;
+  late bool _themeSongs;
   late PlayerOrientation _playerOrientation;
 
   // Sound
@@ -147,6 +171,8 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
   late double _initialHoldRate;
   late bool _initialAutoSkip;
   late bool _initialShowSkipButton;
+  late bool _initialListenSkips;
+  late bool _initialThemeSongs;
   late PlayerOrientation _initialPlayerOrientation;
 
   late bool _initialPitchCorrection;
@@ -166,10 +192,14 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
     super.initState();
     _loadFromStorage();
     _saveInitialSnapshot();
+    if (widget.embedded) HikkaNav.instance.addBackGuard(_backGuard);
   }
 
   @override
   void dispose() {
+    if (widget.embedded) HikkaNav.instance.removeBackGuard(_backGuard);
+    _spotTimer?.cancel();
+    _search.dispose();
     _hotkeysSearch.dispose();
     _keyTimer?.cancel();
     _commitKeys();
@@ -252,6 +282,8 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
     _holdRate = StorageService.getHoldToSpeedRate();
     _autoSkip = StorageService.getAutoSkipChapters();
     _showSkipButton = StorageService.getShowSkipButton();
+    _listenSkips = StorageService.getListenForSkips();
+    _themeSongs = StorageService.getShowThemeSongs();
     _playerOrientation = PlayerOrientation.parse(StorageService.getPlayerOrientation());
 
     _pitchCorrection = StorageService.getPitchCorrection();
@@ -292,6 +324,8 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
     _initialHoldRate = _holdRate;
     _initialAutoSkip = _autoSkip;
     _initialShowSkipButton = _showSkipButton;
+    _initialListenSkips = _listenSkips;
+    _initialThemeSongs = _themeSongs;
     _initialPlayerOrientation = _playerOrientation;
 
     _initialPitchCorrection = _pitchCorrection;
@@ -335,6 +369,8 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
         _holdRate != _initialHoldRate ||
         _autoSkip != _initialAutoSkip ||
         _showSkipButton != _initialShowSkipButton ||
+        _listenSkips != _initialListenSkips ||
+        _themeSongs != _initialThemeSongs ||
         _playerOrientation != _initialPlayerOrientation ||
         _pitchCorrection != _initialPitchCorrection ||
         !_listEquals(_audioLangPriorities, _initialAudioLangPriorities) ||
@@ -376,6 +412,7 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
       if (_activeTab == 0) {
         uiTheme.reset();
         _themeMode = UiThemeService.defaultThemeMode;
+        StorageService.savePhoneUiScale(StorageService.defaultPhoneUiScale);
       } else if (_activeTab == 1) {
         _font = SystemFonts.defaultFont;
         _fontSize = 48.0;
@@ -399,6 +436,8 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
         _holdRate = 2.0;
         _autoSkip = false;
         _showSkipButton = true;
+        _listenSkips = true;
+        _themeSongs = true;
         _playerOrientation = PlayerOrientation.landscape;
       } else if (_activeTab == 3) {
         widget.controller.changeHwdec(AppPlatform.defaultHwdec);
@@ -450,6 +489,8 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
       _holdRate = _initialHoldRate;
       _autoSkip = _initialAutoSkip;
       _showSkipButton = _initialShowSkipButton;
+      _listenSkips = _initialListenSkips;
+      _themeSongs = _initialThemeSongs;
       _playerOrientation = _initialPlayerOrientation;
 
       _pitchCorrection = _initialPitchCorrection;
@@ -490,6 +531,8 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
     StorageService.saveHoldToSpeedRate(_holdRate);
     StorageService.saveAutoSkipChapters(_autoSkip);
     StorageService.saveShowSkipButton(_showSkipButton);
+    StorageService.saveListenForSkips(_listenSkips);
+    StorageService.saveShowThemeSongs(_themeSongs);
     StorageService.savePlayerOrientation(_playerOrientation.id);
 
     StorageService.savePitchCorrection(_pitchCorrection);
@@ -535,348 +578,410 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
     HikkaAuth.instance.setCustomClient(_clientRef.text, _clientSecret.text);
   }
 
-  /// Tabs for a narrow phone screen: (tab index, icon, label). "Гарячі клавіші" is pointless without a keyboard.
-  static const List<(int, IconData, String)> _phoneTabs = [
-    (0, Symbols.palette_rounded, 'Вигляд'),
-    (1, Symbols.subtitles_rounded, 'Субтитри'),
-    (9, Symbols.video_library_rounded, 'Каталог'),
-    (2, Symbols.play_circle_rounded, 'Відтворення'),
-    (3, Symbols.developer_board_rounded, 'Відео & GPU'),
-    (7, Symbols.auto_awesome_rounded, 'Anime4K'),
-    (4, Symbols.volume_up_rounded, 'Звук'),
-    (5, Symbols.terminal_rounded, 'Розробник'),
-    (6, Symbols.info_rounded, 'Про програму'),
-  ];
+  /// Settings sections in the order of the tab strip: (tab index, icon, label). "Гарячі клавіші" is pointless without a keyboard.
+  static List<(int, IconData, String)> get _tabs => [
+        (0, Symbols.palette_rounded, 'Вигляд'),
+        (1, Symbols.subtitles_rounded, 'Субтитри'),
+        (9, Symbols.video_library_rounded, 'Каталог'),
+        (2, Symbols.play_circle_rounded, 'Відтворення'),
+        (3, Symbols.developer_board_rounded, 'Відео & GPU'),
+        (7, Symbols.auto_awesome_rounded, 'Anime4K'),
+        (4, Symbols.volume_up_rounded, 'Звук'),
+        if (!AppPlatform.isMobile) (8, Symbols.keyboard_rounded, 'Гарячі клавіші'),
+        (5, Symbols.terminal_rounded, 'Розробник'),
+        (6, Symbols.info_rounded, 'Про програму'),
+      ];
 
-  /// The tab row under the header (narrow screen): scrolls sideways, each tab is at least 48 dp tall
-  /// Keys of the tab buttons and the last tab the row was scrolled to: the active tab is always in view
-  final Map<int, GlobalKey> _tabKeys = {};
-  int? _centeredTab;
+  // ───────── Search ─────────
 
-  void _centerActiveTab() {
-    final tab = _activeTab;
-    if (_centeredTab == tab) return;
-    final first = _centeredTab == null;
-    _centeredTab = tab;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final ctx = _tabKeys[tab]?.currentContext;
-      if (!mounted || ctx == null) return;
-      Scrollable.ensureVisible(ctx, alignment: 0.5, duration: first ? Duration.zero : AppAnim.medium, curve: AppAnim.easeOut);
+  final TextEditingController _search = TextEditingController();
+  String _query = '';
+
+  /// The scale slider while it is being dragged
+  double? _scaleDraft;
+
+  /// What to spotlight after opening a search result (a row title or a group caption)
+  String? _spot;
+  int _spotSeq = 0;
+  Timer? _spotTimer;
+
+  void _setQuery(String q) => setState(() => _query = q.trim());
+
+  void _openResult(SettingsSearchEntry e) {
+    FocusManager.instance.primaryFocus?.unfocus();
+    _search.clear();
+    setState(() {
+      _query = '';
+      _activeTab = e.tab;
+      _menu = false;
+      _spot = e.spot ?? e.title;
+      _spotSeq++;
+    });
+    // The row may be hidden (its switch is off): the request does not wait for it forever
+    _spotTimer?.cancel();
+    _spotTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted && _spot != null) setState(() => _spot = null);
     });
   }
 
-  Widget _buildPhoneTabStrip(double scale) {
-    _centerActiveTab();
-    return SizedBox(
-      height: 52,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: EdgeInsets.symmetric(horizontal: 18 * scale),
+  void _spotShown() {
+    if (mounted && _spot != null) setState(() => _spot = null);
+  }
+
+  /// Search results: icon, title with the match, "section › group" under it
+  Widget _buildSearchResults(double scale, {EdgeInsets padding = EdgeInsets.zero, bool shrinkWrap = false}) {
+    final found = searchSettings(_query);
+    if (found.isEmpty) {
+      return Padding(
+        padding: EdgeInsets.fromLTRB(12 * scale, 18 * scale, 12 * scale, 18 * scale),
+        child: Text('Нічого не знайдено', style: TextStyle(fontFamily: 'Arial', color: uiTheme.textDarkMuted, fontSize: 13 * scale)),
+      );
+    }
+    final rows = [
+      Padding(
+        padding: EdgeInsets.fromLTRB(12 * scale, 6 * scale, 12 * scale, 4 * scale),
+        child: Text(settingsResultsLabel(found.length), style: TextStyle(fontFamily: 'Arial', color: uiTheme.textDarkMuted, fontSize: 12 * scale)),
+      ),
+      for (final e in found)
+        SettingsRow(
+          key: ValueKey('settings-result-${e.tab}-${e.title}'),
+          scale: scale,
+          icon: e.icon,
+          title: e.title,
+          highlight: _query,
+          subtitle: '${_titleOf(e.tab)} › ${e.group}',
+          onTap: () => _openResult(e),
+        ),
+    ];
+    return ListView(
+      key: const ValueKey('settings-search-results'),
+      padding: padding,
+      shrinkWrap: shrinkWrap,
+      physics: shrinkWrap ? const NeverScrollableScrollPhysics() : null,
+      children: rows,
+    );
+  }
+
+  // ───────── Start screen (phone) ─────────
+
+  /// The app logo in a circle (the same picture as the launcher icon)
+  Widget _appLogo(double scale, double size) => ClipOval(
+        child: Image.asset('assets/images/app_logo.png', width: size * scale, height: size * scale, filterQuality: FilterQuality.medium),
+      );
+
+  /// Phone: the start screen — who and what (app, Hikka account), search, the list of sections, version at the bottom
+  Widget _buildLanding(double scale) {
+    final auth = HikkaAuth.instance;
+    final account = auth.signedIn && auth.username.isNotEmpty ? 'Hikka: ${auth.username}' : 'Hikka: вхід не виконано';
+    Widget tile((int, IconData, String) t) => SettingsSectionTile(
+          key: ValueKey('settings-menu-${t.$1}'),
+          scale: scale,
+          icon: t.$2,
+          title: t.$3,
+          subtitle: _summaryOf(t.$1),
+          onTap: () => setState(() {
+            _activeTab = t.$1;
+            _menu = false;
+          }),
+        );
+    // A layout builder: the header inset belongs to the context under the collapsing header
+    final identity = Padding(
+      padding: EdgeInsets.fromLTRB(12 * scale, 10 * scale, 12 * scale, 12 * scale),
+      child: Row(
         children: [
-          for (final (index, icon, label) in _phoneTabs)
-            Padding(
-              key: _tabKeys.putIfAbsent(index, GlobalKey.new),
-              padding: const EdgeInsets.only(right: 8, top: 2, bottom: 2),
-              child: Material(
-                color: _activeTab == index ? uiTheme.accentWash : uiTheme.bgElevated,
-                shape: RoundedRectangleBorder(
-                  borderRadius: uiTheme.borderRadius(26),
-                  side: BorderSide(color: _activeTab == index ? uiTheme.accentBorder : uiTheme.borderSubtle),
-                ),
-                child: InkWell(
-                  customBorder: RoundedRectangleBorder(borderRadius: uiTheme.borderRadius(26)),
-                  splashColor: Colors.transparent,
-                  highlightColor: uiTheme.touchHighlight,
-                  onTap: () => setState(() => _activeTab = index),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(icon, size: 20, color: _activeTab == index ? uiTheme.accentColor : uiTheme.textMuted, weight: 300, opticalSize: 24),
-                        const SizedBox(width: 8),
-                        Text(
-                          label,
-                          style: TextStyle(
-                            fontFamily: 'Arial',
-                            color: _activeTab == index ? uiTheme.accentColor : uiTheme.textMuted,
-                            fontSize: 14,
-                            fontWeight: _activeTab == index ? FontWeight.w700 : FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
+          _appLogo(scale, 52),
+          SizedBox(width: 14 * scale),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(AppIdentity.name, style: TextStyle(fontFamily: 'Arial', color: uiTheme.textPrimary, fontSize: 20 * scale, fontWeight: FontWeight.bold)),
+                SizedBox(height: 3 * scale),
+                Text(account, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontFamily: 'Arial', color: uiTheme.textDarkMuted, fontSize: 12.5 * scale)),
+              ],
             ),
+          ),
         ],
       ),
     );
+    final search = Padding(
+      padding: EdgeInsets.fromLTRB(4 * scale, 0, 4 * scale, 8 * scale),
+      child: SettingsSearchBar(scale: scale, controller: _search, onChanged: _setQuery),
+    );
+    return LayoutBuilder(builder: (context, box) {
+      final wide = box.maxWidth > 640;
+      return ListView(
+      key: const ValueKey('settings-menu'),
+      padding: EdgeInsets.fromLTRB(8 * scale, 4 + AppHeaderInset.of(context), 8 * scale, 24),
+      children: [
+        // Wide (landscape): who-and-what and the search share one row
+        if (wide)
+          Padding(
+            padding: EdgeInsets.only(bottom: 6 * scale),
+            child: Row(children: [Expanded(child: identity), SizedBox(width: 8 * scale), Expanded(child: search)]),
+          )
+        else ...[identity, search],
+        if (_query.isNotEmpty)
+          _buildSearchResults(scale, shrinkWrap: true)
+        else ...[
+          // A wide screen (landscape): sections in two columns
+          if (wide)
+            for (var i = 0; i < _tabs.length; i += 2)
+              Row(
+                children: [
+                  Expanded(child: tile(_tabs[i])),
+                  SizedBox(width: 8 * scale),
+                  Expanded(child: i + 1 < _tabs.length ? tile(_tabs[i + 1]) : const SizedBox.shrink()),
+                ],
+              )
+          else
+            for (final t in _tabs) tile(t),
+          Padding(
+            padding: EdgeInsets.only(top: 18 * scale),
+            child: Center(
+              child: Text(
+                '${AppIdentity.version}   •   ${AppDiagnostics.build}',
+                style: TextStyle(fontFamily: 'Arial', color: uiTheme.textDarkMuted, fontSize: 11.5 * scale, letterSpacing: 0.3),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final scale = widget.scale;
+    // Phone: the user's scale ("Вигляд" → "Масштаб налаштувань") instead of the old fixed enlargement
+    final scale = AppPlatform.isMobile ? StorageService.getPhoneUiScale() : widget.scale;
     final mq = MediaQuery.of(context);
-    // Phone: settings full screen (portrait: tabs in a row, landscape: a side menu)
+    // Phone: a start screen with sections, then a section with the tab strip; PC window: the tab strip right away
     final bool phone = AppPlatform.isMobile;
     final bool compact = phone && AppLayout(mq.size).isCompactWidth;
+    final bool menu = _menu;
     final EdgeInsets safe = phone ? mq.padding : EdgeInsets.zero;
     final double outerR = phone ? 0 : 22 * scale;
+    final bool searching = !phone && _query.isNotEmpty;
+
+    final Widget resetButton = InkWell(
+      onTap: _resetCurrentTab,
+      borderRadius: uiTheme.borderRadius(8 * scale),
+      splashColor: Colors.transparent,
+      highlightColor: uiTheme.touchHighlight,
+      hoverColor: uiTheme.isLight ? Colors.black.withValues(alpha: 0.04) : Colors.white.withValues(alpha: 0.05),
+      child: AppAnimatedContainer(
+        duration: AppAnim.medium,
+        curve: AppAnim.easeOut,
+        constraints: BoxConstraints(minHeight: phone ? AppPlatform.touchTarget : 0),
+        alignment: Alignment.center,
+        padding: EdgeInsets.symmetric(horizontal: 10 * scale, vertical: 5 * scale),
+        decoration: BoxDecoration(
+          color: _isResetting ? const Color(0xFF00FF66).withValues(alpha: 0.12) : Colors.transparent,
+          borderRadius: uiTheme.borderRadius(8 * scale),
+          border: Border.all(color: _isResetting ? const Color(0xFF00FF66).withValues(alpha: 0.40) : Colors.transparent),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AppRotate(
+              turns: _isResetting ? 1.0 : 0.0,
+              duration: AppAnim.long,
+              curve: AppAnim.easeOut,
+              child: Icon(
+                _isResetting ? Symbols.check_rounded : Symbols.restart_alt_rounded,
+                color: _isResetting ? const Color(0xFF00FF66) : uiTheme.textMuted,
+                size: 16 * scale,
+              ),
+            ),
+            SizedBox(width: 5 * scale),
+            Text(
+              _isResetting ? 'Скинуто до початкових' : 'Скинути',
+              style: TextStyle(
+                fontFamily: 'Arial',
+                color: _isResetting ? const Color(0xFF00FF66) : uiTheme.textMuted,
+                fontSize: 12.5 * scale,
+                fontWeight: _isResetting ? FontWeight.bold : FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
 
     final Widget titleRow = Padding(
       padding: EdgeInsets.only(
-                        left: (compact ? 18 : 24) * scale,
-                        right: (compact ? 6 : 20) * scale,
-                        top: (compact ? 8 : 18) * scale,
-                        bottom: (compact ? 6 : 12) * scale,
+        left: (compact ? 18 : 24) * scale,
+        right: (compact ? 6 : 20) * scale,
+        top: (compact ? 8 : 18) * scale,
+        bottom: (compact ? 4 : 10) * scale,
+      ),
+      child: Row(
+        children: [
+          if (phone && !menu && !widget.embedded) // embedded: the page bar's arrow (and the back gesture) leads to the list, see the back guard
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: IconButton(
+                key: const ValueKey('settings-back'),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints.tightFor(width: 44, height: 48),
+                icon: Icon(Symbols.arrow_back_rounded, color: uiTheme.textPrimary, size: 24),
+                onPressed: () => setState(() => _menu = true),
+              ),
+            ),
+          Expanded(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: 48 * scale),
+              child: AppFadeSwitcher(
+                duration: AppAnim.fast,
+                child: Column(
+                  key: ValueKey<String>(menu ? 'menu' : (searching ? 'search' : '$_activeTab')),
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      menu ? 'Налаштування' : (searching ? 'Пошук' : _getTitle()),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontFamily: 'Arial', color: uiTheme.textPrimary, fontSize: 20 * scale, fontWeight: FontWeight.bold),
+                    ),
+                    if (!menu) ...[
+                      SizedBox(height: 2 * scale),
+                      Text(
+                        searching ? 'У всіх розділах' : _getSubtitle(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontFamily: 'Arial', color: uiTheme.textDarkMuted, fontSize: 12.5 * scale),
                       ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: SizedBox(
-                              height: 44 * scale,
-                              child: AppFadeSwitcher(
-                                duration: AppAnim.fast,
-                                child: Column(
-                                  key: ValueKey<int>(_activeTab),
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Text(
-                                      _getTitle(),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontFamily: 'Arial',
-                                        color: uiTheme.textPrimary,
-                                        fontSize: 17 * scale,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    SizedBox(height: 2 * scale),
-                                    Text(
-                                      _getSubtitle(),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontFamily: 'Arial',
-                                        color: uiTheme.textDarkMuted,
-                                        fontSize: 12 * scale,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                          if (_activeTab != 6 && _activeTab != 9) ...[
-                            InkWell(
-                              onTap: _resetCurrentTab,
-                              borderRadius: uiTheme.borderRadius(8 * scale),
-                              splashColor: Colors.transparent,
-                              highlightColor: uiTheme.touchHighlight,
-                              hoverColor: uiTheme.isLight ? Colors.black.withValues(alpha: 0.04) : Colors.white.withValues(alpha: 0.05),
-                              child: AppAnimatedContainer(
-                                duration: AppAnim.medium,
-                                curve: AppAnim.easeOut,
-                                constraints: BoxConstraints(minHeight: phone ? AppPlatform.touchTarget : 0),
-                                alignment: Alignment.center,
-                                padding: EdgeInsets.symmetric(horizontal: 10 * scale, vertical: 5 * scale),
-                                decoration: BoxDecoration(
-                                  color: _isResetting
-                                      ? const Color(0xFF00FF66).withValues(alpha: 0.12)
-                                      : Colors.transparent,
-                                  borderRadius: uiTheme.borderRadius(8 * scale),
-                                  border: Border.all(
-                                    color: _isResetting
-                                        ? const Color(0xFF00FF66).withValues(alpha: 0.40)
-                                        : Colors.transparent,
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    AppRotate(
-                                      turns: _isResetting ? 1.0 : 0.0,
-                                      duration: AppAnim.long,
-                                      curve: AppAnim.easeOut,
-                                      child: Icon(
-                                        _isResetting ? Symbols.check_rounded : Symbols.restart_alt_rounded,
-                                        color: _isResetting ? const Color(0xFF00FF66) : uiTheme.textMuted,
-                                        size: 16 * scale,
-                                      ),
-                                    ),
-                                    SizedBox(width: 5 * scale),
-                                    Text(
-                                      _isResetting ? 'Скинуто до початкових' : 'Скинути',
-                                      style: TextStyle(
-                                        fontFamily: 'Arial',
-                                        color: _isResetting ? const Color(0xFF00FF66) : uiTheme.textMuted,
-                                        fontSize: 12 * scale,
-                                        fontWeight: _isResetting ? FontWeight.bold : FontWeight.w500,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            SizedBox(width: 8 * scale),
-                          ],
-                          if (!widget.embedded)
-                          IconButton(
-                            padding: EdgeInsets.zero,
-                            constraints: phone ? const BoxConstraints.tightFor(width: 48, height: 48) : const BoxConstraints(),
-                            icon: Icon(Symbols.close_rounded, color: uiTheme.textDarkMuted, size: phone ? 24 : 20 * scale),
-                            onPressed: () => Navigator.of(context).pop(),
-                          ),
-                        ],
-                      ),
-                    );
-    // Phone: a sideways swipe flips tabs, as in "Списки" and the catalog (the order follows the tab row)
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+          if (!menu && !searching && _activeTab != 6 && _activeTab != 9) ...[resetButton, SizedBox(width: 8 * scale)],
+          // PC: the search stays in one place (next to the close button) on every tab
+          if (!phone) ...[
+            SizedBox(width: 240 * scale, child: SettingsSearchBar(scale: scale, controller: _search, onChanged: _setQuery, compact: true)),
+            SizedBox(width: 12 * scale),
+          ],
+          if (!widget.embedded)
+            IconButton(
+              padding: EdgeInsets.zero,
+              constraints: phone ? const BoxConstraints.tightFor(width: 48, height: 48) : const BoxConstraints(),
+              icon: Icon(Symbols.close_rounded, color: uiTheme.textDarkMuted, size: phone ? 24 : 20 * scale),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+        ],
+      ),
+    );
+
+    final Widget strip = SettingsTabStrip(
+      scale: scale,
+      tabs: _tabs,
+      active: _activeTab,
+      padding: EdgeInsets.symmetric(horizontal: (compact ? 16 : 22) * scale),
+      onChanged: (t) {
+        if (_query.isNotEmpty) _search.clear();
+        setState(() {
+          _query = '';
+          _activeTab = t;
+        });
+      },
+    );
+
+    // Phone: a sideways swipe flips sections (the order follows the tab strip)
     Widget swipeable(Widget child) {
-      if (!compact) return child;
-      final index = _phoneTabs.indexWhere((t) => t.$1 == _activeTab);
+      if (!phone) return child;
+      final index = _tabs.indexWhere((t) => t.$1 == _activeTab);
       if (index < 0) return child;
       return HikkaSwipeTabs(
         index: index,
-        count: _phoneTabs.length,
+        count: _tabs.length,
         animate: false, // the transition is already animated by AppFadeSlideSwitcher
-        onChanged: (i) => setState(() => _activeTab = _phoneTabs[i].$1),
+        onChanged: (i) => setState(() => _activeTab = _tabs[i].$1),
         child: child,
       );
     }
 
-    final Widget tabSwitcher = AppFadeSlideSwitcher(
-                        duration: AppAnim.normal,
-                        child: KeyedSubtree(
-                          key: ValueKey<int>(_activeTab),
-                          child: _activeTab == 1
-                              ? _buildSubtitlesTabWithStickyPreview(scale)
-                              : _buildScrollableTabWithShadows(scale, _buildTabBody(scale)),
-                        ),
-                      );
+    final Widget tabSwitcher = SettingsSpotlight(
+      target: _spot,
+      seq: _spotSeq,
+      onShown: _spotShown,
+      child: AppFadeSlideSwitcher(
+        duration: AppAnim.normal,
+        child: KeyedSubtree(
+          key: ValueKey<int>(_activeTab),
+          child: _activeTab == 1 ? _buildSubtitlesTabWithStickyPreview(scale) : _buildScrollableTabWithShadows(scale, _buildTabBody(scale)),
+        ),
+      ),
+    );
 
-    return Center(
-      child: Material(
-        color: Colors.transparent,
-        child: Container(
-          width: widget.embedded ? double.infinity : (phone ? mq.size.width : 860 * scale),
-          height: widget.embedded ? double.infinity : (phone ? mq.size.height : 620 * scale),
-          padding: phone && !widget.embedded ? safe : EdgeInsets.zero,
-          decoration: BoxDecoration(
-            color: uiTheme.bgPrimary,
-            borderRadius: uiTheme.borderRadius(outerR),
-            border: phone ? null : Border.all(color: uiTheme.borderSubtle, width: 1.0),
-            boxShadow: phone
-                ? null
-                : [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: uiTheme.isLight ? 0.12 : 0.80),
-                      blurRadius: 40 * scale,
-                      offset: Offset(0, 12 * scale),
-                    ),
-                  ],
-          ),
-          child: Row(
-            children: [
-              if (!compact)
-                Container(
-                  width: (phone ? 200 : 220) * scale,
-                  padding: EdgeInsets.symmetric(horizontal: 14 * scale, vertical: 20 * scale),
-                  decoration: BoxDecoration(
-                    color: uiTheme.bgSidebar,
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(uiTheme.radius(outerR)),
-                      bottomLeft: Radius.circular(uiTheme.radius(outerR)),
-                    ),
-                    border: Border(right: BorderSide(color: uiTheme.borderSubtle, width: 1.0)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Padding(
-                        padding: EdgeInsets.only(left: 10 * scale, bottom: 16 * scale),
-                        child: Text(
-                          'Налаштування',
-                          style: TextStyle(
-                            fontFamily: 'Arial',
-                            color: uiTheme.textPrimary,
-                            fontSize: 16 * scale,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        child: ListView(
-                          children: [
-                            _buildNavGroupLabel(scale, 'ОФОРМЛЕННЯ'),
-                            _buildNavItem(scale, index: 0, icon: Symbols.palette_rounded, label: 'Вигляд'),
-                            _buildNavItem(scale, index: 1, icon: Symbols.subtitles_rounded, label: 'Субтитри'),
-                            SizedBox(height: 12 * scale),
-                            _buildNavGroupLabel(scale, 'КАТАЛОГ'),
-                            _buildNavItem(scale, index: 9, icon: Symbols.video_library_rounded, label: 'Каталог'),
-                            SizedBox(height: 12 * scale),
-                            _buildNavGroupLabel(scale, 'ПЛЕЄР'),
-                            _buildNavItem(scale, index: 2, icon: Symbols.play_circle_rounded, label: 'Відтворення'),
-                            _buildNavItem(scale, index: 3, icon: Symbols.developer_board_rounded, label: 'Відео & GPU'),
-                            _buildNavItem(scale, index: 7, icon: Symbols.auto_awesome_rounded, label: 'Anime4K'),
-                            _buildNavItem(scale, index: 4, icon: Symbols.volume_up_rounded, label: 'Звук'),
-                            if (!phone) _buildNavItem(scale, index: 8, icon: Symbols.keyboard_rounded, label: 'Гарячі клавіші'),
-                            SizedBox(height: 12 * scale),
-                            _buildNavGroupLabel(scale, 'СИСТЕМА'),
-                            _buildNavItem(scale, index: 5, icon: Symbols.terminal_rounded, label: 'Розробник'),
-                            _buildNavItem(scale, index: 6, icon: Symbols.info_rounded, label: 'Про програму'),
-                          ],
-                        ),
-                      ),
-                      Padding(
-                        padding: EdgeInsets.only(left: 8 * scale),
-                        child: Text(
-                          '${AppIdentity.name} · ${AppIdentity.version}',
-                          style: TextStyle(
-                            fontFamily: 'Arial',
-                            color: uiTheme.textDarkMuted,
-                            fontSize: 11 * scale,
-                          ),
-                        ),
+    return SettingsFont(
+      child: PopScope(
+      canPop: widget.embedded || _menu || !phone,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) setState(() => _menu = true);
+      },
+      child: Center(
+        child: Material(
+          color: Colors.transparent,
+          child: Container(
+            width: widget.embedded ? double.infinity : (phone ? mq.size.width : 900 * scale),
+            height: widget.embedded ? double.infinity : (phone ? mq.size.height : 640 * scale),
+            padding: phone && !widget.embedded ? safe : EdgeInsets.zero,
+            decoration: BoxDecoration(
+              color: uiTheme.bgPrimary,
+              borderRadius: uiTheme.borderRadius(outerR),
+              border: phone ? null : Border.all(color: uiTheme.borderSubtle, width: 1.0),
+              boxShadow: phone
+                  ? null
+                  : [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: uiTheme.isLight ? 0.12 : 0.80),
+                        blurRadius: 40 * scale,
+                        offset: Offset(0, 12 * scale),
                       ),
                     ],
-                  ),
-                ),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (phone)
-                      Expanded(
-                        child: HikkaCollapsingHeader(
-                          resetOn: _activeTab,
-                          header: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [titleRow, if (compact) _buildPhoneTabStrip(scale)],
-                          ),
-                          body: swipeable(tabSwitcher),
-                        ),
-                      )
-                    else ...[
-                      titleRow,
-                      Expanded(child: tabSwitcher),
-                    ],
-                    if (!widget.embedded || _hasChanges)
-                    Padding(
-                      padding: EdgeInsets.only(
-                        left: (compact ? 16 : 24) * scale,
-                        right: (compact ? 16 : 24) * scale,
-                        bottom: (compact ? 12 : 16) * scale,
-                        top: 8 * scale,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (phone)
+                  Expanded(
+                    child: HikkaCollapsingHeader(
+                      resetOn: menu ? -1 : _activeTab,
+                      header: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        // The hub's page bar already says «Налаштування»: the embedded start screen has no title row
+                        children: menu ? [if (!widget.embedded) titleRow] : [titleRow, strip, const SizedBox(height: 2)],
                       ),
-                      // Narrow screen: three buttons do not fit in a row, so the row shrinks a bit
-                      child: _footerFit(
-                        compact,
-                        Row(
+                      body: menu ? _buildLanding(scale) : swipeable(tabSwitcher),
+                    ),
+                  )
+                else ...[
+                  titleRow,
+                  strip,
+                  SizedBox(height: 4 * scale),
+                  Expanded(
+                    child: searching
+                        ? _buildSearchResults(scale, padding: EdgeInsets.fromLTRB(12 * scale, 4 * scale, 12 * scale, 24 * scale))
+                        : tabSwitcher,
+                  ),
+                ],
+                if (!widget.embedded || _hasChanges)
+                  Padding(
+                    padding: EdgeInsets.only(
+                      left: (compact ? 16 : 24) * scale,
+                      right: (compact ? 16 : 24) * scale,
+                      bottom: (compact ? 12 : 16) * scale,
+                      top: 8 * scale,
+                    ),
+                    // Narrow screen: three buttons do not fit in a row, so the row shrinks a bit
+                    child: _footerFit(
+                      compact,
+                      Row(
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
                           if (_hasChanges) ...[
@@ -895,12 +1000,7 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
                               onPressed: _cancelChanges,
                               child: Text(
                                 'Скасувати',
-                                style: TextStyle(
-                                  fontFamily: 'Arial',
-                                  color: uiTheme.textPrimary,
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 13 * scale,
-                                ),
+                                style: TextStyle(fontFamily: 'Arial', color: uiTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 13 * scale),
                               ),
                             ),
                             SizedBox(width: 10 * scale),
@@ -919,50 +1019,40 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
                               onPressed: _applyAllChanges,
                               child: Text(
                                 'Застосувати',
-                                style: TextStyle(
-                                  fontFamily: 'Arial',
-                                  color: uiTheme.isLight ? _accentColor : Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 13 * scale,
-                                ),
+                                style: TextStyle(fontFamily: 'Arial', color: uiTheme.isLight ? _accentColor : Colors.white, fontWeight: FontWeight.bold, fontSize: 13 * scale),
                               ),
                             ),
                             SizedBox(width: 10 * scale),
                           ],
                           if (!widget.embedded)
-                          ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: _accentColor.withValues(alpha: uiTheme.isLight ? 0.15 : 0.18),
-                              foregroundColor: uiTheme.isLight ? _accentColor : Colors.white,
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: uiTheme.borderRadius(12 * scale),
-                                side: BorderSide(color: _accentColor.withValues(alpha: 0.65)),
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: _accentColor.withValues(alpha: uiTheme.isLight ? 0.15 : 0.18),
+                                foregroundColor: uiTheme.isLight ? _accentColor : Colors.white,
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: uiTheme.borderRadius(12 * scale),
+                                  side: BorderSide(color: _accentColor.withValues(alpha: 0.65)),
+                                ),
+                                padding: EdgeInsets.symmetric(horizontal: 24 * scale, vertical: 12 * scale),
+                                minimumSize: phone ? const Size(0, AppPlatform.touchTarget) : null,
                               ),
-                              padding: EdgeInsets.symmetric(horizontal: 24 * scale, vertical: 12 * scale),
-                              minimumSize: phone ? const Size(0, AppPlatform.touchTarget) : null,
-                            ),
-                            onPressed: () => Navigator.of(context).pop(),
-                            child: Text(
-                              'Готово',
-                              style: TextStyle(
-                                fontFamily: 'Arial',
-                                color: uiTheme.isLight ? _accentColor : Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13 * scale,
+                              onPressed: () => Navigator.of(context).pop(),
+                              child: Text(
+                                'Готово',
+                                style: TextStyle(fontFamily: 'Arial', color: uiTheme.isLight ? _accentColor : Colors.white, fontWeight: FontWeight.bold, fontSize: 13 * scale),
                               ),
                             ),
-                          ),
                         ],
-                      )),
+                      ),
                     ),
-                  ],
-                ),
-              ),
-            ],
+                  ),
+              ],
+            ),
           ),
         ),
       ),
+    ),
     );
   }
 
@@ -971,16 +1061,23 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
       : row;
 
   /// A universal wrapper for scrollable tabs with soft shadows at the top and bottom
+  /// The keyboard is up: the view's inset is set (the page may also be resized by it: depend on the size to rebuild)
+  bool _keyboardUp(BuildContext context) {
+    MediaQuery.sizeOf(context);
+    return View.of(context).viewInsets.bottom > 0;
+  }
+
   Widget _buildScrollableTabWithShadows(double scale, Widget content) {
     return Builder(builder: (context) => Stack(
       children: [
         Positioned.fill(
           child: AppSmoothScrollView(
             padding: EdgeInsets.only(
-              left: 24 * scale,
-              right: 24 * scale,
-              top: 18 * scale + AppHeaderInset.of(context),
-              bottom: 36 * scale,
+              left: (AppPlatform.isMobile ? 8 : 12) * scale,
+              right: (AppPlatform.isMobile ? 8 : 12) * scale,
+              top: 4 * scale + AppHeaderInset.of(context),
+              // With the keyboard up there is slack under the content: a search list inside a block can be raised to the top
+              bottom: 36 * scale + (_keyboardUp(context) ? 160 * scale : 0),
             ),
             child: Align(
               alignment: Alignment.topLeft,
@@ -1006,11 +1103,11 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
     return Builder(builder: (context) {
       final inset = AppHeaderInset.of(context);
       final shown = AppHeaderInset.maybeOf(context)?.shown;
-      final previewH = 90 * scale + 6 * scale;
+      final previewH = 90 * scale + 10 * scale;
       Widget preview = ColoredBox(
         color: uiTheme.bgPrimary,
         child: Padding(
-          padding: EdgeInsets.fromLTRB(24 * scale, 0, 24 * scale, 6 * scale),
+          padding: EdgeInsets.fromLTRB(20 * scale, 4 * scale, 20 * scale, 6 * scale),
           child: _buildSubtitlePreview(scale),
         ),
       );
@@ -1028,79 +1125,93 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
           Positioned.fill(
                 child: AppSmoothScrollView(
                   padding: EdgeInsets.only(
-                    left: 24 * scale,
-                    right: 24 * scale,
-                    top: inset + previewH + 12 * scale,
+                    left: (AppPlatform.isMobile ? 8 : 12) * scale,
+                    right: (AppPlatform.isMobile ? 8 : 12) * scale,
+                    top: inset + previewH + 4 * scale,
                     bottom: 36 * scale,
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildToggleRow(
-                        scale,
-                        title: 'Автоматичне ввімкнення субтитрів',
-                        subtitle: 'За списком мов нижче',
-                        value: _subtitlesEnabled,
-                        onChanged: (enabled) {
-                          setState(() {
-                            _subtitlesEnabled = enabled;
-                            _defaultSubLang = enabled
-                                ? (_subLangPriorities.isNotEmpty ? _subLangPriorities.first : 'uk')
-                                : 'no';
-                          });
-                        },
-                      ),
-                      AppSlideDownCollapse(
-                        isExpanded: _subtitlesEnabled,
-                        duration: AppAnim.medium,
-                        child: Padding(
-                          padding: EdgeInsets.only(top: 14 * scale),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              _buildSectionHeader(
-                                scale,
-                                'Пріоритет мов субтитрів',
-                                'Перетягуйте для зміни пріоритету; плеєр обере першу знайдену мову',
-                              ),
-                              SizedBox(height: 8 * scale),
-                              AppLanguagePriorityList(
-                                scale: scale,
-                                languages: _subLangPriorities,
-                                onChanged: (newList) {
-                                  setState(() => _subLangPriorities = newList);
-                                },
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      SizedBox(height: 28 * scale),
-                      _buildSectionHeader(scale, 'Стилі SSA / ASS', 'Перезаписати вигляд субтитрів SSA'),
-                      SizedBox(height: 8 * scale),
-                      AppSegmentedBar<String>(
+                      SettingsGroup(
                         scale: scale,
-                        options: const [
-                          AppSegmentOption(value: 'no', label: 'Оригінал (ASS)'),
-                          AppSegmentOption(value: 'yes', label: 'Лише діалоги'),
-                          AppSegmentOption(value: 'force', label: 'Примусово (Force)'),
+                        label: 'Субтитри',
+                        rows: [
+                          SettingsToggleRow(
+                            scale: scale,
+                            icon: Symbols.subtitles_rounded,
+                            title: 'Автоматичне ввімкнення субтитрів',
+                            subtitle: 'За списком мов нижче',
+                            value: _subtitlesEnabled,
+                            onChanged: (enabled) {
+                              setState(() {
+                                _subtitlesEnabled = enabled;
+                                _defaultSubLang = enabled ? (_subLangPriorities.isNotEmpty ? _subLangPriorities.first : 'uk') : 'no';
+                              });
+                            },
+                          ),
+                          if (_subtitlesEnabled)
+                            SettingsPad(
+                              scale: scale,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Padding(
+                                    padding: EdgeInsets.only(bottom: 8 * scale),
+                                    child: Text(
+                                      'Пріоритет мов: перетягуйте для зміни, плеєр обере першу знайдену мову',
+                                      style: TextStyle(fontFamily: 'Arial', color: uiTheme.textDarkMuted, fontSize: 12 * scale, height: 1.3),
+                                    ),
+                                  ),
+                                  AppLanguagePriorityList(
+                                    scale: scale,
+                                    languages: _subLangPriorities,
+                                    onChanged: (newList) => setState(() => _subLangPriorities = newList),
+                                  ),
+                                ],
+                              ),
+                            ),
                         ],
-                        selectedValue: _assMode,
-                        onSelected: (val) {
-                          setState(() => _assMode = val);
-                          _applySubtitles();
-                        },
                       ),
-                      SizedBox(height: 18 * scale),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(child: _buildSectionHeader(scale, 'Шрифт', 'Оберіть шрифт для вигляду субтитрів')),
-                          SizedBox(width: 10 * scale),
-                          _buildActionPill(
-                            scale,
-                            icon: Symbols.add_rounded,
-                            label: 'Свій шрифт',
+                      SettingsGroup(
+                        scale: scale,
+                        label: 'Стилі SSA / ASS',
+                        rows: [
+                          SettingsChoiceRow<String>(
+                            scale: scale,
+                            icon: Symbols.style_rounded,
+                            title: 'Вигляд субтитрів SSA',
+                            subtitle: 'Перезаписати стилі субтитрів SSA',
+                            options: const [('no', 'Оригінал (ASS)'), ('yes', 'Лише діалоги'), ('force', 'Примусово (Force)')],
+                            value: _assMode,
+                            onChanged: (val) {
+                              setState(() => _assMode = val);
+                              _applySubtitles();
+                            },
+                          ),
+                        ],
+                      ),
+                      SettingsGroup(
+                        scale: scale,
+                        label: 'Шрифт',
+                        rows: [
+                          SettingsChoiceRow<String>(
+                            scale: scale,
+                            icon: Symbols.font_download_rounded,
+                            title: 'Шрифт субтитрів',
+                            options: [for (final o in fontOptions) (o.value, o.label)],
+                            value: _font,
+                            onChanged: (newFont) {
+                              setState(() => _font = newFont);
+                              _ensureFont(newFont);
+                              _applySubtitles();
+                            },
+                          ),
+                          SettingsRow(
+                            scale: scale,
+                            icon: Symbols.upload_file_rounded,
+                            title: 'Додати свій шрифт',
+                            subtitle: 'Файл .ttf або .otf',
                             onTap: () async {
                               final res = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: ['ttf', 'otf']);
                               final path = res?.files.first.path;
@@ -1113,11 +1224,10 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
                               }
                             },
                           ),
-                          SizedBox(width: 8 * scale),
-                          _buildActionPill(
-                            scale,
-                            icon: Symbols.folder_open_rounded,
-                            label: Platform.isAndroid ? 'Кілька' : 'Тека',
+                          SettingsRow(
+                            scale: scale,
+                            icon: Symbols.create_new_folder_rounded,
+                            title: Platform.isAndroid ? 'Додати кілька шрифтів' : 'Додати теку зі шрифтами',
                             onTap: () async {
                               final paths = <String>[];
                               if (Platform.isAndroid) {
@@ -1145,23 +1255,16 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
                           ),
                         ],
                       ),
-                      SizedBox(height: 8 * scale),
-                      AppDropdown<String>(
+                      SettingsGroup(
                         scale: scale,
-                        value: _font,
-                        options: fontOptions,
-                        onChanged: (newFont) {
-                          setState(() => _font = newFont);
-                          _ensureFont(newFont);
-                          _applySubtitles();
-                        },
+                        label: 'Вигляд тексту',
+                        rows: [
+                          SettingsSliderRow(scale: scale, icon: Symbols.format_size_rounded, title: 'Розмір шрифту', valueLabel: '${_fontSize.toInt()} px', value: _fontSize, min: 24.0, max: 80.0, onChanged: (v) { setState(() => _fontSize = v.roundToDouble()); _applySubtitles(); }),
+                          SettingsSliderRow(scale: scale, icon: Symbols.border_style_rounded, title: 'Товщина обводки', valueLabel: '${_borderSize.toStringAsFixed(1)} px', value: _borderSize, min: 0.0, max: 8.0, onChanged: (v) { setState(() => _borderSize = (v * 10).round() / 10); _applySubtitles(); }),
+                          SettingsSliderRow(scale: scale, icon: Symbols.blur_on_rounded, title: 'Тінь', valueLabel: '${_shadowOffset.toStringAsFixed(1)} px', value: _shadowOffset, min: 0.0, max: 6.0, onChanged: (v) { setState(() => _shadowOffset = (v * 10).round() / 10); _applySubtitles(); }),
+                          SettingsSliderRow(scale: scale, icon: Symbols.vertical_align_bottom_rounded, title: 'Відступ знизу', valueLabel: '${_marginY.toInt()} px', value: _marginY, min: 10.0, max: 80.0, onChanged: (v) { setState(() => _marginY = v.roundToDouble()); _applySubtitles(); }),
+                        ],
                       ),
-                      SizedBox(height: 16 * scale),
-                      _buildAlignedSlider(scale, label: 'Розмір шрифту', valueText: '${_fontSize.toInt()} px', value: _fontSize, min: 24.0, max: 80.0, onChanged: (v) { setState(() => _fontSize = v.roundToDouble()); _applySubtitles(); }),
-                      _buildAlignedSlider(scale, label: 'Товщина обводки', valueText: '${_borderSize.toStringAsFixed(1)} px', value: _borderSize, min: 0.0, max: 8.0, onChanged: (v) { setState(() => _borderSize = (v * 10).round() / 10); _applySubtitles(); }),
-                      _buildAlignedSlider(scale, label: 'Тінь', valueText: '${_shadowOffset.toStringAsFixed(1)} px', value: _shadowOffset, min: 0.0, max: 6.0, onChanged: (v) { setState(() => _shadowOffset = (v * 10).round() / 10); _applySubtitles(); }),
-                      _buildAlignedSlider(scale, label: 'Відступ знизу', valueText: '${_marginY.toInt()} px', value: _marginY, min: 10.0, max: 80.0, onChanged: (v) { setState(() => _marginY = v.roundToDouble()); _applySubtitles(); }),
-                      SizedBox(height: 16 * scale),
                     ],
                   ),
                 ),
@@ -1176,123 +1279,105 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
     switch (_activeTab) {
       case 0: // ВИГЛЯД
         final swatchRadius = uiTheme.borderRadius(8 * scale);
-
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            _buildSectionHeader(scale, 'Тема оформлення', 'Оберіть колірну схему вигляду'),
-            SizedBox(height: 10 * scale),
-            AppSegmentedBar<String>(
+            SettingsGroup(
               scale: scale,
-              options: const [
-                AppSegmentOption(value: 'system', label: 'Авто (Система)'),
-                AppSegmentOption(value: 'dark', label: 'Темна'),
-                AppSegmentOption(value: 'light', label: 'Світла'),
-              ],
-              selectedValue: _themeMode,
-              onSelected: (val) {
-                setState(() => _themeMode = val);
-                uiTheme.setThemeMode(val);
-              },
-            ),
-            SizedBox(height: 24 * scale),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(child: _buildSectionHeader(scale, 'Основний колір', 'Оберіть акцентний колір інтерфейсу плеєра')),
-                SizedBox(width: 10 * scale),
-                Text('Як акцент  ${uiTheme.accentHex}', style: TextStyle(fontFamily: 'Arial', color: uiTheme.textDarkMuted, fontSize: 12 * scale)),
-              ],
-            ),
-            SizedBox(height: 12 * scale),
-            // Wrap: on a narrow phone screen the colors go to a second row
-            Wrap(
-              runSpacing: 4 * scale,
-              children: UiThemeService.presets.entries.map((e) {
-                final hex = e.key;
-                final col = e.value.$2;
-                final isCur = uiTheme.accentHex.toUpperCase() == hex.toUpperCase();
-
-                return GestureDetector(
-                  onTap: () {
-                    uiTheme.setAccentHex(hex);
+              label: 'Оформлення',
+              rows: [
+                SettingsChoiceRow<String>(
+                  scale: scale,
+                  icon: Symbols.dark_mode_rounded,
+                  title: 'Тема оформлення',
+                  subtitle: 'Колірна схема вигляду',
+                  options: const [('system', 'Авто (система)'), ('dark', 'Темна'), ('light', 'Світла')],
+                  value: _themeMode,
+                  onChanged: (val) {
+                    setState(() => _themeMode = val);
+                    uiTheme.setThemeMode(val);
+                  },
+                ),
+                SettingsChoiceRow<String>(
+                  scale: scale,
+                  icon: Symbols.rounded_corner_rounded,
+                  title: 'Радіус заокруглення',
+                  subtitle: 'Кутів кнопок, карток та елементів',
+                  options: const [('Без', 'Без'), ('XS', 'XS'), ('SM', 'SM'), ('MD', 'MD'), ('LG', 'LG'), ('XL', 'XL')],
+                  value: uiTheme.radiusKey,
+                  onChanged: (r) {
+                    uiTheme.setRadiusKey(r);
                     setState(() {});
                   },
-                  child: Container(
-                    width: 34 * scale,
-                    height: 34 * scale,
-                    margin: EdgeInsets.only(right: 10 * scale),
-                    alignment: Alignment.center,
-                    child: AppAnimatedContainer(
-                      duration: AppAnim.fast,
-                      curve: AppAnim.easeOut,
-                      width: 30 * scale,
-                      height: 30 * scale,
-                      decoration: BoxDecoration(
-                        color: col,
-                        borderRadius: swatchRadius,
-                        border: Border.all(
-                          color: isCur ? (uiTheme.isLight ? Colors.black : Colors.white) : uiTheme.borderSubtle,
-                          width: isCur ? 2.5 : 1.0,
-                        ),
-                        boxShadow: isCur
-                            ? [
-                                BoxShadow(
-                                  color: col.withValues(alpha: 0.5),
-                                  blurRadius: 8 * scale,
-                                  spreadRadius: 1 * scale,
-                                ),
-                              ]
-                            : null,
-                      ),
-                      child: isCur ? Icon(Symbols.check_rounded, color: Colors.black, size: 17 * scale) : null,
-                    ),
+                ),
+                // Applied when the finger is lifted: otherwise the slider would move under the finger while it is dragged
+                if (AppPlatform.isMobile)
+                  SettingsSliderRow(
+                    scale: scale,
+                    icon: Symbols.zoom_in_rounded,
+                    title: 'Масштаб налаштувань',
+                    subtitle: 'Розмір тексту й рядків на цьому пристрої',
+                    valueLabel: '${((_scaleDraft ?? StorageService.getPhoneUiScale()) * 100).round()} %',
+                    value: _scaleDraft ?? StorageService.getPhoneUiScale(),
+                    min: 0.8,
+                    max: 1.15,
+                    divisions: 7,
+                    onChanged: (v) => setState(() => _scaleDraft = v),
+                    onChangeEnd: (v) => setState(() {
+                      StorageService.savePhoneUiScale((v * 20).round() / 20);
+                      _scaleDraft = null;
+                    }),
                   ),
-                );
-              }).toList(),
+              ],
             ),
-            SizedBox(height: 24 * scale),
-            _buildSectionHeader(scale, 'Радіус заокруглення', 'Заокруглення кутів кнопок, карток та елементів UI'),
-            SizedBox(height: 10 * scale),
-            Wrap(
-              runSpacing: 8 * scale,
-              children: ['Без', 'XS', 'SM', 'MD', 'LG', 'XL'].map((r) {
-                final isCur = uiTheme.radiusKey == r;
-                return Padding(
-                  padding: EdgeInsets.only(right: 8 * scale),
-                  child: GestureDetector(
-                    onTap: () {
-                      uiTheme.setRadiusKey(r);
-                      setState(() {});
-                    },
-                    child: AppAnimatedContainer(
-                      duration: AppAnim.fast,
-                      curve: AppAnim.easeOut,
-                      width: 44 * scale,
-                      height: 32 * scale,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: isCur ? uiTheme.accentWash : uiTheme.bgSurface,
-                        borderRadius: uiTheme.borderRadius(14 * scale),
-                        border: Border.all(
-                          color: isCur ? uiTheme.accentBorder : uiTheme.borderSubtle,
-                          width: 1.0,
+            SettingsGroup(
+              scale: scale,
+              label: 'Основний колір',
+              rows: [
+                SettingsRow(
+                  scale: scale,
+                  icon: Symbols.format_color_fill_rounded,
+                  title: 'Акцентний колір',
+                  subtitle: 'Інтерфейс плеєра · ${uiTheme.accentHex}',
+                  // Wrap: on a narrow phone screen the colors go to a second row
+                  below: Wrap(
+                    runSpacing: 4 * scale,
+                    children: UiThemeService.presets.entries.map((e) {
+                      final hex = e.key;
+                      final col = e.value.$2;
+                      final isCur = uiTheme.accentHex.toUpperCase() == hex.toUpperCase();
+                      return GestureDetector(
+                        onTap: () {
+                          uiTheme.setAccentHex(hex);
+                          setState(() {});
+                        },
+                        child: Container(
+                          width: 38 * scale,
+                          height: 38 * scale,
+                          margin: EdgeInsets.only(right: 4 * scale),
+                          alignment: Alignment.center,
+                          child: AppAnimatedContainer(
+                            duration: AppAnim.fast,
+                            curve: AppAnim.easeOut,
+                            width: 30 * scale,
+                            height: 30 * scale,
+                            decoration: BoxDecoration(
+                              color: col,
+                              borderRadius: swatchRadius,
+                              border: Border.all(
+                                color: isCur ? (uiTheme.isLight ? Colors.black : Colors.white) : uiTheme.borderSubtle,
+                                width: isCur ? 2.5 : 1.0,
+                              ),
+                            ),
+                            child: isCur ? Icon(Symbols.check_rounded, color: Colors.black, size: 17 * scale) : null,
+                          ),
                         ),
-                      ),
-                      child: Text(
-                        r,
-                        style: TextStyle(
-                          fontFamily: 'Arial',
-                          color: isCur ? uiTheme.accentColor : uiTheme.textMuted,
-                          fontSize: 12.5 * scale,
-                          fontWeight: isCur ? FontWeight.bold : FontWeight.w500,
-                        ),
-                      ),
-                    ),
+                      );
+                    }).toList(),
                   ),
-                );
-              }).toList(),
+                ),
+              ],
             ),
           ],
         );
@@ -1302,146 +1387,141 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            _buildToggleRow(
-              scale,
-              title: 'Автовідтворення наступного епізоду',
-              subtitle: 'Після завершення поточної серії автоматично вмикається наступна',
-              value: _autoplayNext,
-              onChanged: (v) {
-                setState(() => _autoplayNext = v);
-              },
-            ),
-            SizedBox(height: 28 * scale),
-            _buildSectionHeader(scale, 'Швидкість відтворення за замовчуванням', 'Застосовується до кожного нового відео'),
-            SizedBox(height: 10 * scale),
-            AppSegmentedBar<double>(
+            SettingsGroup(
               scale: scale,
-              options: const [
-                AppSegmentOption(value: 0.75, label: '0.75x'),
-                AppSegmentOption(value: 1.0, label: '1.0x'),
-                AppSegmentOption(value: 1.25, label: '1.25x'),
-                AppSegmentOption(value: 1.5, label: '1.5x'),
-                AppSegmentOption(value: 2.0, label: '2.0x'),
-              ],
-              selectedValue: _defaultSpeed,
-              onSelected: (v) {
-                setState(() => _defaultSpeed = v);
-              },
-            ),
-            if (AppPlatform.isMobile) ...[
-              SizedBox(height: 28 * scale),
-              _buildSectionHeader(
-                scale,
-                'Орієнтація плеєра',
-                'У якій орієнтації відкривається відео',
-              ),
-              SizedBox(height: 10 * scale),
-              AppSegmentedBar<PlayerOrientation>(
-                scale: scale,
-                options: [for (final o in PlayerOrientation.values) AppSegmentOption(value: o, label: o.label)],
-                selectedValue: _playerOrientation,
-                onSelected: (v) => setState(() => _playerOrientation = v),
-              ),
-            ],
-            SizedBox(height: 28 * scale),
-            _buildSectionHeader(
-              scale,
-              'Крок перемотування',
-              AppPlatform.isMobile ? 'Для жесту подвійного дотику та кнопок на екрані' : 'Для клавіш J / L, стрілок чи кнопок на екрані',
-            ),
-            SizedBox(height: 10 * scale),
-            AppSegmentedBar<int>(
-              scale: scale,
-              options: const [
-                AppSegmentOption(value: 5, label: '±5 сек'),
-                AppSegmentOption(value: 10, label: '±10 сек'),
-                AppSegmentOption(value: 15, label: '±15 сек'),
-                AppSegmentOption(value: 30, label: '±30 сек'),
-              ],
-              selectedValue: _seekStep,
-              onSelected: (v) {
-                setState(() => _seekStep = v);
-              },
-            ),
-            SizedBox(height: 28 * scale),
-            _buildToggleRow(
-              scale,
-              title: 'Перемотування подвійним дотиком',
-              subtitle: 'Перемотувати відео подвійним дотиком ліворуч чи праворуч на екрані плеєра',
-              value: _doubleTapSeek,
-              onChanged: (v) => setState(() => _doubleTapSeek = v),
-            ),
-            SizedBox(height: 28 * scale),
-            if (AppPlatform.isMobile)
-              _buildToggleRow(
-                scale,
-                title: 'Кнопки перемотування на екрані',
-                subtitle: 'Кнопки «назад» і «вперед» на заданий крок біля кнопки паузи',
-                value: _mobileSeekButtons,
-                onChanged: (v) => setState(() => _mobileSeekButtons = v),
-              )
-            else
-              _buildToggleRow(
-                scale,
-                title: 'Кнопки перемотування на панелі',
-                subtitle: 'Кнопки «назад» і «вперед» на заданий крок біля кнопки паузи',
-                value: _seekButtons,
-                onChanged: (v) => setState(() => _seekButtons = v),
-              ),
-            SizedBox(height: 28 * scale),
-            _buildToggleRow(
-              scale,
-              title: 'Прискорення утримуванням',
-              subtitle: 'Тимчасово збільшує швидкість відтворення, доки утримується екран',
-              value: _holdToSpeed,
-              onChanged: (v) {
-                setState(() => _holdToSpeed = v);
-              },
-            ),
-            AppSlideDownCollapse(
-              isExpanded: _holdToSpeed,
-              duration: AppAnim.medium,
-              child: Padding(
-                padding: EdgeInsets.only(top: 12 * scale),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildSectionHeader(scale, 'Швидкість прискорення', 'З якою швидкістю відтворюється відео, доки утримується екран'),
-                    SizedBox(height: 8 * scale),
-                    AppSegmentedBar<double>(
-                      scale: scale,
-                      options: const [
-                        AppSegmentOption(value: 1.5, label: '1.5x'),
-                        AppSegmentOption(value: 2.0, label: '2.0x'),
-                        AppSegmentOption(value: 2.5, label: '2.5x'),
-                        AppSegmentOption(value: 3.0, label: '3.0x'),
-                      ],
-                      selectedValue: _holdRate,
-                      onSelected: (v) {
-                        setState(() => _holdRate = v);
-                      },
-                    ),
-                  ],
+              label: 'Відтворення',
+              rows: [
+                SettingsToggleRow(
+                  scale: scale,
+                  icon: Symbols.autoplay_rounded,
+                  title: 'Автовідтворення наступного епізоду',
+                  subtitle: 'Після завершення серії автоматично вмикається наступна',
+                  value: _autoplayNext,
+                  onChanged: (v) => setState(() => _autoplayNext = v),
                 ),
-              ),
+                SettingsChoiceRow<double>(
+                  scale: scale,
+                  icon: Symbols.speed_rounded,
+                  title: 'Швидкість за замовчуванням',
+                  subtitle: 'Застосовується до кожного нового відео',
+                  options: const [(0.75, '0.75x'), (1.0, '1.0x'), (1.25, '1.25x'), (1.5, '1.5x'), (2.0, '2.0x')],
+                  value: _defaultSpeed,
+                  onChanged: (v) => setState(() => _defaultSpeed = v),
+                ),
+                if (AppPlatform.isMobile)
+                  SettingsChoiceRow<PlayerOrientation>(
+                    scale: scale,
+                    icon: Symbols.screen_rotation_rounded,
+                    title: 'Орієнтація плеєра',
+                    subtitle: 'У якій орієнтації відкривається відео',
+                    options: [for (final o in PlayerOrientation.values) (o, o.label)],
+                    value: _playerOrientation,
+                    onChanged: (v) => setState(() => _playerOrientation = v),
+                  ),
+              ],
             ),
-            SizedBox(height: 28 * scale),
-            _buildToggleRow(
-              scale,
-              title: 'Кнопка пропуску опенінґу й ендінґу',
-              subtitle: 'Показується під час опенінґу чи ендінґу',
-              value: _showSkipButton,
-              onChanged: (v) => setState(() => _showSkipButton = v),
+            SettingsGroup(
+              scale: scale,
+              label: 'Перемотування',
+              rows: [
+                SettingsChoiceRow<int>(
+                  scale: scale,
+                  icon: Symbols.fast_forward_rounded,
+                  title: 'Крок перемотування',
+                  subtitle: AppPlatform.isMobile ? 'Для подвійного дотику та кнопок на екрані' : 'Для клавіш J / L, стрілок чи кнопок на панелі',
+                  options: const [(5, '±5 сек'), (10, '±10 сек'), (15, '±15 сек'), (30, '±30 сек')],
+                  value: _seekStep,
+                  onChanged: (v) => setState(() => _seekStep = v),
+                ),
+                SettingsToggleRow(
+                  scale: scale,
+                  icon: Symbols.touch_app_rounded,
+                  title: 'Перемотування подвійним дотиком',
+                  subtitle: 'Подвійний дотик ліворуч чи праворуч на екрані плеєра',
+                  value: _doubleTapSeek,
+                  onChanged: (v) => setState(() => _doubleTapSeek = v),
+                ),
+                if (AppPlatform.isMobile)
+                  SettingsToggleRow(
+                    scale: scale,
+                    icon: Symbols.forward_10_rounded,
+                    title: 'Кнопки перемотування на екрані',
+                    subtitle: 'Кнопки «назад» і «вперед» біля кнопки паузи',
+                    value: _mobileSeekButtons,
+                    onChanged: (v) => setState(() => _mobileSeekButtons = v),
+                  )
+                else
+                  SettingsToggleRow(
+                    scale: scale,
+                    icon: Symbols.forward_10_rounded,
+                    title: 'Кнопки перемотування на панелі',
+                    subtitle: 'Кнопки «назад» і «вперед» біля кнопки паузи',
+                    value: _seekButtons,
+                    onChanged: (v) => setState(() => _seekButtons = v),
+                  ),
+              ],
             ),
-            SizedBox(height: 28 * scale),
-            _buildToggleRow(
-              scale,
-              title: 'Автоматичний пропуск опенінґів і ендінґів',
-              subtitle: 'Пропуск без натискання кнопки',
-              value: _autoSkip,
-              onChanged: (v) {
-                setState(() => _autoSkip = v);
-              },
+            SettingsGroup(
+              scale: scale,
+              label: 'Прискорення',
+              rows: [
+                SettingsToggleRow(
+                  scale: scale,
+                  icon: Symbols.pan_tool_rounded,
+                  title: 'Прискорення утримуванням',
+                  subtitle: 'Тимчасово збільшує швидкість, доки утримується екран',
+                  value: _holdToSpeed,
+                  onChanged: (v) => setState(() => _holdToSpeed = v),
+                ),
+                if (_holdToSpeed)
+                  SettingsChoiceRow<double>(
+                    scale: scale,
+                    icon: Symbols.bolt_rounded,
+                    title: 'Швидкість прискорення',
+                    subtitle: 'З якою швидкістю йде відео під час утримування',
+                    options: const [(1.5, '1.5x'), (2.0, '2.0x'), (2.5, '2.5x'), (3.0, '3.0x')],
+                    value: _holdRate,
+                    onChanged: (v) => setState(() => _holdRate = v),
+                  ),
+              ],
+            ),
+            SettingsGroup(
+              scale: scale,
+              label: 'Опенінґ та ендінґ',
+              rows: [
+                SettingsToggleRow(
+                  scale: scale,
+                  icon: Symbols.skip_next_rounded,
+                  title: 'Кнопка пропуску опенінґу й ендінґу',
+                  subtitle: 'Показується під час опенінґу чи ендінґу',
+                  value: _showSkipButton,
+                  onChanged: (v) => setState(() => _showSkipButton = v),
+                ),
+                SettingsToggleRow(
+                  scale: scale,
+                  icon: Symbols.keyboard_double_arrow_right_rounded,
+                  title: 'Автоматичний пропуск',
+                  subtitle: 'Пропуск без натискання кнопки',
+                  value: _autoSkip,
+                  onChanged: (v) => setState(() => _autoSkip = v),
+                ),
+                SettingsToggleRow(
+                  scale: scale,
+                  icon: Symbols.graphic_eq_rounded,
+                  title: 'Шукати опенінґ за звуком',
+                  subtitle: 'Коли сайт не дав таймкодів: порівнює початок двох серій (через Wi‑Fi чи із завантажених)',
+                  value: _listenSkips,
+                  onChanged: (v) => setState(() => _listenSkips = v),
+                ),
+                SettingsToggleRow(
+                  scale: scale,
+                  icon: Symbols.album_rounded,
+                  title: 'Пісня опенінґу й ендінґу',
+                  subtitle: 'Обкладинка й назва на початку пісні; дотик — послухати в Spotify, YouTube Music, Apple Music',
+                  value: _themeSongs,
+                  onChanged: (v) => setState(() => _themeSongs = v),
+                ),
+              ],
             ),
           ],
         );
@@ -1451,18 +1531,23 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            AppDropdown<String>(
+            SettingsGroup(
               scale: scale,
-              label: 'Апаратний декодер відео',
-              subtitle: 'У більшості випадків достатньо автоматичного вибору',
-              value: widget.controller.currentHwdec,
-              options: AppConstants.hwdecOptions.entries
-                  .map((e) => AppDropdownOption(value: e.key, label: e.value))
-                  .toList(),
-              onChanged: (newHwdec) async {
-                await widget.controller.changeHwdec(newHwdec);
-                setState(() {});
-              },
+              label: 'Декодування',
+              hint: 'У більшості випадків достатньо автоматичного вибору',
+              rows: [
+                SettingsChoiceRow<String>(
+                  scale: scale,
+                  icon: Symbols.memory_rounded,
+                  title: 'Апаратний декодер відео',
+                  options: [for (final e in AppConstants.hwdecOptions.entries) (e.key, e.value)],
+                  value: widget.controller.currentHwdec,
+                  onChanged: (newHwdec) async {
+                    await widget.controller.changeHwdec(newHwdec);
+                    setState(() {});
+                  },
+                ),
+              ],
             ),
           ],
         );
@@ -1472,28 +1557,34 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            _buildToggleRow(
-              scale,
-              title: 'Корекція висоти тону',
-              subtitle: 'Голос звучить природно за швидкості понад 1×',
-              value: _pitchCorrection,
-              onChanged: (v) async {
-                setState(() => _pitchCorrection = v);
-              },
-            ),
-            SizedBox(height: 28 * scale),
-            _buildSectionHeader(
-              scale,
-              'Пріоритет мов звукових доріжок',
-              'Перетягуйте для зміни пріоритету; плеєр обере першу знайдену мову',
-            ),
-            SizedBox(height: 10 * scale),
-            AppLanguagePriorityList(
+            SettingsGroup(
               scale: scale,
-              languages: _audioLangPriorities,
-              onChanged: (newList) {
-                setState(() => _audioLangPriorities = newList);
-              },
+              label: 'Звук',
+              rows: [
+                SettingsToggleRow(
+                  scale: scale,
+                  icon: Symbols.graphic_eq_rounded,
+                  title: 'Корекція висоти тону',
+                  subtitle: 'Голос звучить природно за швидкості понад 1×',
+                  value: _pitchCorrection,
+                  onChanged: (v) => setState(() => _pitchCorrection = v),
+                ),
+              ],
+            ),
+            SettingsGroup(
+              scale: scale,
+              label: 'Пріоритет мов звукових доріжок',
+              hint: 'Перетягуйте для зміни пріоритету; плеєр обере першу знайдену мову',
+              rows: [
+                SettingsPad(
+                  scale: scale,
+                  child: AppLanguagePriorityList(
+                    scale: scale,
+                    languages: _audioLangPriorities,
+                    onChanged: (newList) => setState(() => _audioLangPriorities = newList),
+                  ),
+                ),
+              ],
             ),
           ],
         );
@@ -1508,157 +1599,115 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
         return HikkaCatalogSettings(scale: scale);
 
       case 5: // РОЗРОБНИК
+        Widget keyRow(String title, String hint, TextEditingController c, IconData icon, String placeholder, ValueChanged<String> onChanged) => SettingsRow(
+              scale: scale,
+              icon: icon,
+              title: title,
+              subtitle: hint,
+              below: AppSearchField(scale: scale, controller: c, icon: Symbols.edit_rounded, hint: placeholder, onChanged: onChanged),
+            );
+        Widget action(IconData icon, String label, VoidCallback onTap) => SettingsRow(scale: scale, icon: icon, title: label, onTap: onTap);
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            _buildSectionHeader(scale, 'Експериментальні функції', 'Функції, які ще не є частиною основного інтерфейсу'),
-            SizedBox(height: 10 * scale),
-            _buildToggleRow(
-              scale,
-              title: 'Локальна медіатека',
-              subtitle: 'Відкриття файлів і посилань, історія та плейлисти. Розділ з’явиться у «Профілі»',
-              value: StorageService.getLocalLibrary(),
-              onChanged: (v) => setState(() => StorageService.saveLocalLibrary(v)),
-            ),
-            SizedBox(height: 14 * scale),
-            _buildSectionHeader(scale, 'Ключ TheMovieDB', 'Необов’язково. Використовується для запасних банерів на головній'),
-            SizedBox(height: 10 * scale),
-            AppSearchField(
+            SettingsGroup(
               scale: scale,
-              controller: _tmdbKey,
-              icon: Symbols.key_rounded,
-              hint: 'Вставте ключ',
-              onChanged: StorageService.saveTmdbKey,
-            ),
-            SizedBox(height: 14 * scale),
-            _buildSectionHeader(scale, 'Ключ Mikai', 'Необов’язково. З ключем ліміт становить 300 запитів на хвилину замість 60'),
-            SizedBox(height: 10 * scale),
-            AppSearchField(
-              scale: scale,
-              controller: _mikaiKey,
-              icon: Symbols.key_rounded,
-              hint: 'Вставте ключ',
-              onChanged: _keysChanged,
-            ),
-            SizedBox(height: 14 * scale),
-            _buildSectionHeader(scale, 'Ключ Moon', 'Необов’язково. Власний ключ (наприклад, Premium) використовується замість вбудованого'),
-            SizedBox(height: 10 * scale),
-            AppSearchField(
-              scale: scale,
-              controller: _moonKey,
-              icon: Symbols.key_rounded,
-              hint: 'Вставте ключ',
-              onChanged: _keysChanged,
-            ),
-            SizedBox(height: 28 * scale),
-            _buildSectionHeader(scale, 'Власний клієнт Hikka', 'Потрібен лише тоді, коли вбудований клієнт перестав працювати. Зміни застосовуються після наступного входу'),
-            SizedBox(height: 10 * scale),
-            AppSearchField(scale: scale, controller: _clientRef, icon: Symbols.badge_rounded, hint: 'Референс клієнта', onChanged: _keysChanged),
-            SizedBox(height: 10 * scale),
-            AppSearchField(scale: scale, controller: _clientSecret, icon: Symbols.key_rounded, hint: 'Ключ клієнта', onChanged: _keysChanged),
-            SizedBox(height: 28 * scale),
-            _buildSectionHeader(scale, 'Журнал', 'Запис дій застосунку для пошуку помилок'),
-            SizedBox(height: 10 * scale),
-            _buildToggleRow(
-              scale,
-              title: 'Детальний журнал',
-              subtitle: 'Докладніший запис у файл. Повною мірою діє після перезапуску',
-              value: AppLog.instance.detailed,
-              onChanged: _setDetailedLog,
-            ),
-            SizedBox(height: 10 * scale),
-            Wrap(
-              spacing: 10 * scale,
-              runSpacing: 10 * scale,
-              children: [
-                _buildActionPill(
-                  scale,
-                  icon: Symbols.download_rounded,
-                  label: 'Зберегти журнал у файл',
-                  onTap: _saveLogToFile,
-                ),
-                _buildActionPill(
-                  scale,
-                  icon: Symbols.delete_outline_rounded,
-                  label: 'Очистити журнали',
-                  onTap: _clearLogs,
+              label: 'Експериментальні функції',
+              hint: 'Функції, які ще не є частиною основного інтерфейсу',
+              rows: [
+                SettingsToggleRow(
+                  scale: scale,
+                  icon: Symbols.video_file_rounded,
+                  title: 'Локальна медіатека',
+                  subtitle: 'Відкриття файлів і посилань, історія та плейлисти. Розділ з’явиться у «Профілі»',
+                  value: StorageService.getLocalLibrary(),
+                  onChanged: (v) => setState(() => StorageService.saveLocalLibrary(v)),
                 ),
               ],
             ),
-            if (Platform.isWindows) ...[
-              SizedBox(height: 10 * scale),
-              _buildActionPill(
-                scale,
-                icon: Symbols.folder_open_rounded,
-                label: 'Відкрити папку журналів',
-                onTap: () async {
-                  final dir = AppLog.instance.directory;
-                  if (dir == null) return;
-                  await dir.create(recursive: true);
-                  Process.run('explorer.exe', [dir.path]);
-                },
-              ),
-            ],
-            SizedBox(height: 8 * scale),
-            _buildLogStatusLine(scale),
-            SizedBox(height: 28 * scale),
-            _buildSectionHeader(scale, 'Конфігурація та кеш', 'Файли налаштувань плеєра та історія перегляду'),
-            SizedBox(height: 12 * scale),
-            Row(
-              children: [
-                // The file explorer exists only on Windows; the phone has no such button
-                if (Platform.isWindows) ...[
-                  Expanded(
-                    child: _buildActionPill(
-                      scale,
-                      icon: Symbols.folder_open_rounded,
-                      label: 'Відкрити папку конфігів',
-                      onTap: () => Process.run('explorer.exe', [StorageService.appBasePath]),
-                    ),
-                  ),
-                  SizedBox(width: 10 * scale),
-                ],
-                Expanded(
-                  child: _buildActionPill(
-                    scale,
-                    icon: Symbols.delete_outline_rounded,
-                    label: 'Очистити історію перегляду',
-                    onTap: () {
-                      StorageService.clearRecentFiles();
-                      setState(() {});
+            SettingsGroup(
+              scale: scale,
+              label: 'Ключі',
+              rows: [
+                keyRow('Ключ TheMovieDB', 'Необов’язково. Запасні банери на головній, українські назви й кадри серій', _tmdbKey, Symbols.key_rounded, 'Вставте ключ', StorageService.saveTmdbKey),
+                keyRow('Ключ Mikai', 'Необов’язково. З ключем ліміт становить 300 запитів на хвилину замість 60', _mikaiKey, Symbols.key_rounded, 'Вставте ключ', _keysChanged),
+                keyRow('Ключ Moon', 'Необов’язково. Власний ключ (наприклад, Premium) використовується замість вбудованого', _moonKey, Symbols.key_rounded, 'Вставте ключ', _keysChanged),
+              ],
+            ),
+            SettingsGroup(
+              scale: scale,
+              label: 'Власний клієнт Hikka',
+              hint: 'Потрібен лише тоді, коли вбудований клієнт перестав працювати. Зміни застосовуються після наступного входу',
+              rows: [
+                keyRow('Референс клієнта', '', _clientRef, Symbols.badge_rounded, 'Референс клієнта', _keysChanged),
+                keyRow('Ключ клієнта', '', _clientSecret, Symbols.key_rounded, 'Ключ клієнта', _keysChanged),
+              ],
+            ),
+            SettingsGroup(
+              scale: scale,
+              label: 'Журнал',
+              hint: 'Запис дій застосунку для пошуку помилок',
+              rows: [
+                SettingsToggleRow(
+                  scale: scale,
+                  icon: Symbols.description_rounded,
+                  title: 'Детальний журнал',
+                  subtitle: 'Докладніший запис у файл. Повною мірою діє після перезапуску',
+                  value: AppLog.instance.detailed,
+                  onChanged: _setDetailedLog,
+                ),
+                action(Symbols.download_rounded, 'Зберегти журнал у файл', _saveLogToFile),
+                action(Symbols.delete_outline_rounded, 'Очистити журнали', _clearLogs),
+                if (Platform.isWindows)
+                  action(Symbols.folder_open_rounded, 'Відкрити папку журналів', () async {
+                    final dir = AppLog.instance.directory;
+                    if (dir == null) return;
+                    await dir.create(recursive: true);
+                    Process.run('explorer.exe', [dir.path]);
+                  }),
+                SettingsPad(scale: scale, indent: true, child: _buildLogStatusLine(scale)),
+              ],
+            ),
+            SettingsGroup(
+              scale: scale,
+              label: 'Конфігурація та кеш',
+              hint: 'Файли налаштувань плеєра та історія перегляду',
+              rows: [
+                // The file explorer exists only on Windows; the phone has no such row
+                if (Platform.isWindows) action(Symbols.folder_open_rounded, 'Відкрити папку конфігів', () => Process.run('explorer.exe', [StorageService.appBasePath])),
+                action(Symbols.history_rounded, 'Очистити історію перегляду', () {
+                  StorageService.clearRecentFiles();
+                  setState(() {});
+                }),
+              ],
+            ),
+            SettingsGroup(
+              scale: scale,
+              label: 'Журнал плеєра',
+              hint: 'Останні записи',
+              rows: [
+                Container(
+                  height: 180 * scale,
+                  margin: EdgeInsets.fromLTRB(12 * scale, 6 * scale, 12 * scale, 8 * scale),
+                  padding: EdgeInsets.all(10 * scale),
+                  decoration: BoxDecoration(color: uiTheme.bgSurface, borderRadius: uiTheme.borderRadius(12 * scale), border: Border.all(color: uiTheme.borderSubtle)),
+                  child: ListView.builder(
+                    itemCount: widget.controller.mpvLogs.length,
+                    itemBuilder: (ctx, i) {
+                      final log = widget.controller.mpvLogs[i];
+                      return Text(
+                        log,
+                        style: TextStyle(
+                          fontFamily: 'Consolas',
+                          fontSize: 10.5 * scale,
+                          color: log.contains('error') ? Colors.redAccent : (uiTheme.isLight ? const Color(0xFF222226) : Colors.white70),
+                        ),
+                      );
                     },
                   ),
                 ),
               ],
-            ),
-            SizedBox(height: 18 * scale),
-            _buildSectionHeader(scale, 'Журнал плеєра', 'Останні записи'),
-            SizedBox(height: 8 * scale),
-            Container(
-              height: 180 * scale,
-              padding: EdgeInsets.all(10 * scale),
-              decoration: BoxDecoration(
-                color: uiTheme.isLight ? const Color(0xFFF0F0F4) : const Color(0xFF070707),
-                borderRadius: uiTheme.borderRadius(10 * scale),
-                border: Border.all(color: uiTheme.borderSubtle),
-              ),
-              child: ListView.builder(
-                itemCount: widget.controller.mpvLogs.length,
-                itemBuilder: (ctx, i) {
-                  final log = widget.controller.mpvLogs[i];
-                  return Text(
-                    log,
-                    style: TextStyle(
-                      fontFamily: 'Consolas',
-                      fontSize: 10.5 * scale,
-                      color: log.contains('error')
-                          ? Colors.redAccent
-                          : (uiTheme.isLight ? const Color(0xFF222226) : Colors.white70),
-                    ),
-                  );
-                },
-              ),
             ),
           ],
         );
@@ -1669,15 +1718,8 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Container(
-                  width: 64 * scale,
-                  height: 64 * scale,
-                  decoration: BoxDecoration(
-                    color: uiTheme.accentColor,
-                    borderRadius: uiTheme.borderRadius(18 * scale),
-                  ),
-                  child: Icon(Symbols.smart_display_rounded, color: Colors.white, size: 38 * scale),
-                ),
+                // The full-body mascot
+                Image.asset('assets/images/app_mascot.png', width: 120 * scale, height: 120 * scale, filterQuality: FilterQuality.medium),
                 SizedBox(height: 14 * scale),
                 Text(
                   AppIdentity.name,
@@ -1708,7 +1750,7 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
                   child: Column(
                     children: [
                       Text(
-                        '• ${AppIdentity.tagline}\n• Дані каталогу — hikka.io\n• Банери: AniList; запасні — TheMovieDB (використовує TMDB API, але не схвалений і не сертифікований TMDB)\n• Відео — libmpv: D3D11 і NVDEC на ПК, MediaCodec на телефоні\n• Субтитри SSA/ASS, шейдери Anime4K\n• Шрифти: Arial / Liberation Sans',
+                        '• ${AppIdentity.tagline}\n• Дані каталогу — hikka.io\n• Банери: AniList; запасні — TheMovieDB\n• Назви й кадри серій: TheMovieDB, MoonAnime, MyAnimeList (через Tenrai), Anime Skip\n• Використовує TMDB API, але не схвалений і не сертифікований TMDB\n• Відео — libmpv: D3D11 і NVDEC на ПК, MediaCodec на телефоні\n• Субтитри SSA/ASS, шейдери Anime4K\n• Шрифти: Arial / Liberation Sans',
                         style: TextStyle(
                           fontFamily: 'Arial',
                           color: uiTheme.textSecondary,
@@ -1734,17 +1776,65 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
   // ───────── Updates ─────────
 
   Widget _buildUpdateBlock(double scale) {
-    return ValueListenableBuilder<UpdateState>(
-      valueListenable: AppUpdater.instance.state,
-      builder: (context, st, _) {
+    final updater = AppUpdater.instance;
+    final text = TextStyle(fontFamily: 'Arial', color: uiTheme.textMuted, fontSize: 12 * scale, height: 1.4);
+    return ListenableBuilder(
+      listenable: Listenable.merge([updater.state, updater.download]),
+      builder: (context, _) {
+        final st = updater.state.value;
+        final d = updater.download.value;
         final checking = st is UpdateChecking;
-        final String title;
-        final String? sub;
+        String title;
+        String? sub;
+        Color? subColor;
+        Widget? progress;
+        Widget? primary;
         switch (st) {
           case UpdateAvailable(:final info):
+            final size = info.size > 0 ? ' · ${updateMegabytes(info.size)}' : '';
+            final inApp = updater.canInstallInApp(info);
+            void open() => UpdatePrompt.show(context, scale: scale, info: info, updater: updater, start: true);
             title = 'Доступна версія ${info.version}';
-            final size = info.size > 0 ? ' · ${(info.size / 1048576).toStringAsFixed(1)} МБ' : '';
             sub = info.notes.isEmpty ? 'Файл: ${info.assetName.isEmpty ? 'сторінка релізу' : info.assetName}$size' : info.notes;
+            if (d is DownloadRunning && d.version == info.version) {
+              title = 'Завантаження версії ${info.version}';
+              sub = null;
+              progress = Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(3 * scale),
+                    child: HikkaProgressBar(value: d.fraction ?? 0, height: 6 * scale),
+                  ),
+                  SizedBox(height: 6 * scale),
+                  Text(UpdatePrompt.progressText(d), style: text),
+                ],
+              );
+              primary = AppSecondaryButton(
+                scale: scale,
+                label: 'Скасувати',
+                icon: Symbols.close_rounded,
+                expand: false,
+                onTap: updater.cancelDownload,
+              );
+            } else if (updater.readyFor(info.version) != null) {
+              title = 'Версія ${info.version} завантажена';
+              sub = updater.installRestartsApp
+                  ? 'Під час встановлення Miki Miki закриється й відкриється знову.'
+                  : 'Залишилось підтвердити встановлення.';
+              primary = AppAccentButton(scale: scale, label: 'Встановити', icon: Symbols.system_update_rounded, onTap: open);
+            } else if (d is DownloadFailed && d.version == info.version) {
+              sub = d.message;
+              subColor = AppTones.danger;
+              primary = AppAccentButton(scale: scale, label: 'Спробувати ще', icon: Symbols.refresh_rounded, onTap: open);
+            } else {
+              primary = AppAccentButton(
+                scale: scale,
+                label: inApp ? 'Оновити' : 'Завантажити',
+                icon: Symbols.download_rounded,
+                onTap: inApp ? open : () => SystemControls.openUrl(info.target),
+              );
+            }
           case UpdateUpToDate():
             title = 'У вас остання версія';
             sub = null;
@@ -1756,7 +1846,7 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
             sub = null;
           case UpdateIdle():
             title = 'Оновлення';
-            sub = 'Нові версії беруться з GitHub (${AppUpdater.repo})';
+            sub = 'Нові версії беруться з GitHub (${AppUpdater.repo}) і встановлюються прямо із застосунку';
         }
         return Container(
           width: double.infinity,
@@ -1779,21 +1869,19 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
                   sub,
                   maxLines: 6,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontFamily: 'Arial', color: uiTheme.textMuted, fontSize: 12 * scale, height: 1.4),
+                  style: subColor == null ? text : text.copyWith(color: subColor),
                 ),
+              ],
+              if (progress != null) ...[
+                SizedBox(height: 10 * scale),
+                progress,
               ],
               SizedBox(height: 12 * scale),
               Wrap(
                 spacing: 10 * scale,
                 runSpacing: 10 * scale,
                 children: [
-                  if (st is UpdateAvailable)
-                    AppAccentButton(
-                      scale: scale,
-                      label: 'Завантажити',
-                      icon: Symbols.download_rounded,
-                      onTap: () => SystemControls.openUrl(st.info.target),
-                    ),
+                  if (primary != null) primary,
                   AppSecondaryButton(
                     scale: scale,
                     label: checking ? 'Перевіряю…' : 'Перевірити оновлення',
@@ -1826,12 +1914,18 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        _buildToggleRow(
-          scale,
-          title: 'Anime4K',
-          subtitle: 'Підвищує чіткість ліній і роздільність відео в реальному часі',
-          value: _a4kEnabled,
-          onChanged: (v) => setState(() => _a4kEnabled = v),
+        SettingsGroup(
+          scale: scale,
+          rows: [
+            SettingsToggleRow(
+              scale: scale,
+              icon: Symbols.auto_awesome_rounded,
+              title: 'Anime4K',
+              subtitle: 'Підвищує чіткість ліній і роздільність відео в реальному часі',
+              value: _a4kEnabled,
+              onChanged: (v) => setState(() => _a4kEnabled = v),
+            ),
+          ],
         ),
         AppSlideDownCollapse(
           isExpanded: _a4kEnabled,
@@ -1840,166 +1934,72 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              SizedBox(height: 28 * scale),
-              _buildSectionHeader(
-                scale,
-                'Режим',
-                'Можна змінювати й під час перегляду',
+              SettingsGroup(
+                scale: scale,
+                label: 'Режим',
+                hint: 'Можна змінювати й під час перегляду',
+                rows: [for (final mode in Anime4kMode.values) _buildAnime4kModeRow(scale, mode)],
               ),
-              SizedBox(height: 10 * scale),
-              for (final mode in Anime4kMode.values) _buildAnime4kModeCard(scale, mode),
-              SizedBox(height: 28 * scale),
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildSectionHeader(scale, 'Якість', 'Fast менше навантажує пристрій, HQ дає чіткіше зображення'),
+              SettingsGroup(
+                scale: scale,
+                label: 'Якість',
+                hint: AppPlatform.isMobile ? _a4kQuality.deviceHint : _a4kQuality.gpuHint,
+                rows: [
+                  SettingsChoiceRow<Anime4kQuality>(
+                    scale: scale,
+                    icon: Symbols.high_quality_rounded,
+                    title: 'Якість шейдерів',
+                    subtitle: 'Fast менше навантажує пристрій, HQ дає чіткіше зображення',
+                    options: [for (final q in Anime4kQuality.values) (q, '${q.label} · ${q.title}')],
+                    value: _a4kQuality,
+                    onChanged: (q) => setState(() => _a4kQuality = q),
                   ),
-                  SizedBox(width: 12 * scale),
-                  if (!AppPlatform.isMobile) AppKeyCombo(scale: scale, keys: const ['Ctrl', '9']),
+                  SettingsChoiceRow<int>(
+                    scale: scale,
+                    icon: Symbols.aspect_ratio_rounded,
+                    title: 'Вимикати для високої роздільності',
+                    subtitle: 'Шейдери не застосовуються, коли збільшення вже не потрібне',
+                    options: [for (final (value, label) in _skipHeights) (value, label)],
+                    value: _skipHeights.any((o) => o.$1 == _a4kSkipHeight) ? _a4kSkipHeight : 0,
+                    onChanged: (v) => setState(() => _a4kSkipHeight = v),
+                  ),
                 ],
-              ),
-              SizedBox(height: 10 * scale),
-              AppSegmentedBar<Anime4kQuality>(
-                scale: scale,
-                options: [
-                  for (final q in Anime4kQuality.values) AppSegmentOption(value: q, label: '${q.label} · ${q.title}'),
-                ],
-                selectedValue: _a4kQuality,
-                onSelected: (q) => setState(() => _a4kQuality = q),
-              ),
-              SizedBox(height: 8 * scale),
-              Text(
-                AppPlatform.isMobile ? _a4kQuality.deviceHint : _a4kQuality.gpuHint,
-                style: TextStyle(fontFamily: 'Arial', color: uiTheme.textMuted, fontSize: 11.5 * scale),
-              ),
-              SizedBox(height: 28 * scale),
-              _buildSectionHeader(
-                scale,
-                'Вимикати для високої роздільності',
-                'Шейдери не застосовуються, коли збільшення вже не потрібне',
-              ),
-              SizedBox(height: 10 * scale),
-              AppSegmentedBar<int>(
-                scale: scale,
-                options: [for (final (value, label) in _skipHeights) AppSegmentOption(value: value, label: label)],
-                selectedValue: _skipHeights.any((o) => o.$1 == _a4kSkipHeight) ? _a4kSkipHeight : 0,
-                onSelected: (v) => setState(() => _a4kSkipHeight = v),
               ),
             ],
           ),
         ),
-        SizedBox(height: 28 * scale),
-        _buildAnime4kStatus(scale),
-        SizedBox(height: 12 * scale),
+        SettingsGroup(scale: scale, label: 'Стан', rows: [SettingsPad(scale: scale, child: _buildAnime4kStatus(scale))]),
         // Ctrl + digit key combinations are keyboard-only; we do not show them on a phone
-        if (!AppPlatform.isMobile) ...[
-          _buildAnime4kKeys(scale),
-          SizedBox(height: 14 * scale),
-        ],
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: EdgeInsets.only(top: 1 * scale),
-              child: Icon(Symbols.info_rounded, color: uiTheme.textDarkMuted, size: 15 * scale),
-            ),
-            SizedBox(width: 8 * scale),
-            Expanded(
-              child: Text(
-                AppPlatform.isMobile
-                    ? 'Шейдери bloc97/Anime4K v4.0.1 (ліцензія MIT) вбудовані в застосунок. Режими A+A, B+B і C+A мають сенс лише тоді, '
-                        'коли картинку збільшують удвічі й більше.'
-                    : 'Шейдери bloc97/Anime4K v4.0.1 (ліцензія MIT) вбудовані в застосунок. Поки Anime4K увімкнений, '
-                        'він замінює список glsl-shaders із вашого mpv.conf. Режими A+A, B+B і C+A мають сенс лише тоді, '
-                        'коли картинку збільшують удвічі й більше.',
-                style: TextStyle(
-                  fontFamily: 'Arial',
-                  color: uiTheme.textDarkMuted,
-                  fontSize: 11.5 * scale,
-                  height: 1.4,
-                ),
-              ),
-            ),
-          ],
+        if (!AppPlatform.isMobile) SettingsGroup(scale: scale, label: 'Клавіші', rows: [SettingsPad(scale: scale, child: _buildAnime4kKeys(scale))]),
+        Padding(
+          padding: EdgeInsets.fromLTRB(12 * scale, 8 * scale, 12 * scale, 0),
+          child: Text(
+            AppPlatform.isMobile
+                ? 'Шейдери bloc97/Anime4K v4.0.1 (ліцензія MIT) вбудовані в застосунок. Режими A+A, B+B і C+A мають сенс лише тоді, '
+                    'коли картинку збільшують удвічі й більше.'
+                : 'Шейдери bloc97/Anime4K v4.0.1 (ліцензія MIT) вбудовані в застосунок. Поки Anime4K увімкнений, '
+                    'він замінює список glsl-shaders із вашого mpv.conf. Режими A+A, B+B і C+A мають сенс лише тоді, '
+                    'коли картинку збільшують удвічі й більше.',
+            style: TextStyle(fontFamily: 'Arial', color: uiTheme.textDarkMuted, fontSize: 12 * scale, height: 1.4),
+          ),
         ),
       ],
     );
   }
 
-  Widget _buildAnime4kModeCard(double scale, Anime4kMode mode) {
+  /// A mode row: a radio mark, title, what it is best for; the chosen one shows a note; on a PC the Ctrl+digit keys on the right
+  Widget _buildAnime4kModeRow(double scale, Anime4kMode mode) {
     final selected = _a4kMode == mode;
-    return Padding(
-      padding: EdgeInsets.only(bottom: 8 * scale),
-      child: AppCard(
-        scale: scale,
-        isHighlighted: selected,
-        padding: EdgeInsets.symmetric(horizontal: 12 * scale, vertical: 10 * scale),
-        onTap: () => setState(() {
-          _a4kMode = mode;
-          _a4kEnabled = true;
-        }),
-        child: Row(
-          children: [
-            Container(
-              width: 42 * scale,
-              height: 42 * scale,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: selected ? uiTheme.accentWash : uiTheme.bgElevated,
-                borderRadius: uiTheme.borderRadius(11 * scale),
-                border: Border.all(color: selected ? uiTheme.accentBorder : uiTheme.borderSubtle),
-              ),
-              child: Text(
-                mode.label,
-                style: TextStyle(
-                  fontFamily: 'Arial',
-                  color: selected ? uiTheme.accentColor : uiTheme.textPrimary,
-                  fontSize: (mode.label.length > 1 ? 12.5 : 15) * scale,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-            SizedBox(width: 12 * scale),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    '${mode.title}  ·  ${mode.tagline}',
-                    style: TextStyle(
-                      fontFamily: 'Arial',
-                      color: uiTheme.textPrimary,
-                      fontSize: 13 * scale,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  SizedBox(height: 2 * scale),
-                  Text(
-                    mode.bestFor,
-                    style: TextStyle(fontFamily: 'Arial', color: uiTheme.textMuted, fontSize: 11.5 * scale),
-                  ),
-                  AppSlideDownCollapse(
-                    isExpanded: selected,
-                    duration: AppAnim.normal,
-                    child: Padding(
-                      padding: EdgeInsets.only(top: 5 * scale),
-                      child: Text(
-                        mode.note,
-                        style: TextStyle(fontFamily: 'Arial', color: uiTheme.textDarkMuted, fontSize: 11.5 * scale),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (!AppPlatform.isMobile) ...[
-              SizedBox(width: 12 * scale),
-              AppKeyCombo(scale: scale, keys: ['Ctrl', '${mode.digit}'], accent: selected),
-            ],
-          ],
-        ),
-      ),
+    return SettingsRadioRow(
+      scale: scale,
+      title: '${mode.title}  ·  ${mode.tagline}',
+      subtitle: selected ? '${mode.bestFor}\n${mode.note}' : mode.bestFor,
+      selected: selected,
+      onTap: () => setState(() {
+        _a4kMode = mode;
+        _a4kEnabled = true;
+      }),
+      trailing: AppPlatform.isMobile ? null : AppKeyCombo(scale: scale, keys: ['Ctrl', '${mode.digit}'], accent: selected),
     );
   }
 
@@ -2059,51 +2059,31 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        _buildSectionHeader(
-          scale,
-          'Схема клавіш',
-          'Схеми по-різному використовують клавіші ↑ ↓ J L O',
-        ),
-        SizedBox(height: 10 * scale),
-        AppSegmentedBar<KeyScheme>(
+        SettingsRadioGroup<KeyScheme>(
           scale: scale,
-          options: [for (final s in KeyScheme.values) AppSegmentOption(value: s, label: s.title)],
-          selectedValue: _keyScheme,
-          onSelected: (s) => setState(() => _keyScheme = s),
+          label: 'Схема клавіш',
+          hint: 'Схеми по-різному використовують клавіші ↑ ↓ J L O. J діє лише в цій схемі: ${_keyScheme.summary}',
+          options: [for (final s in KeyScheme.values) (s, s.title, null)],
+          value: _keyScheme,
+          onChanged: (s) => setState(() => _keyScheme = s),
         ),
-        SizedBox(height: 8 * scale),
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                _keyScheme.summary,
-                style: TextStyle(fontFamily: 'Arial', color: uiTheme.textMuted, fontSize: 11.5 * scale),
+        SettingsGroup(
+          scale: scale,
+          label: 'Усі комбінації',
+          hint: 'Працюють у будь-якій розкладці. Довідка в плеєрі — клавіша ? або F1',
+          rows: [
+            SettingsPad(
+              scale: scale,
+              child: AppSearchField(
+                scale: scale,
+                controller: _hotkeysSearch,
+                hint: 'Пошук за дією або клавішею',
+                onChanged: (v) => setState(() => _hotkeysQuery = v),
               ),
             ),
-            SizedBox(width: 12 * scale),
-            AppKeyCap(scale: scale, text: 'J', accent: true),
-            SizedBox(width: 6 * scale),
-            Text(
-              'діє лише в цій схемі',
-              style: TextStyle(fontFamily: 'Arial', color: uiTheme.textDarkMuted, fontSize: 11.5 * scale),
-            ),
+            SettingsPad(scale: scale, child: ShortcutsView(scale: scale, scheme: _keyScheme, query: _hotkeysQuery)),
           ],
         ),
-        SizedBox(height: 28 * scale),
-        _buildSectionHeader(
-          scale,
-          'Усі комбінації',
-          'Працюють у будь-якій розкладці. Довідка в плеєрі — клавіша ? або F1',
-        ),
-        SizedBox(height: 10 * scale),
-        AppSearchField(
-          scale: scale,
-          controller: _hotkeysSearch,
-          hint: 'Пошук за дією або клавішею',
-          onChanged: (v) => setState(() => _hotkeysQuery = v),
-        ),
-        SizedBox(height: 14 * scale),
-        ShortcutsView(scale: scale, scheme: _keyScheme, query: _hotkeysQuery),
       ],
     );
   }
@@ -2174,142 +2154,6 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
                   ),
                 ],
               ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildNavItem(double scale, {required int index, required IconData icon, required String label}) {
-    final isSelected = _activeTab == index;
-    return Padding(
-      padding: EdgeInsets.only(bottom: 4 * scale),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: uiTheme.borderRadius(10 * scale),
-        child: InkWell(
-          borderRadius: uiTheme.borderRadius(10 * scale),
-          splashColor: Colors.transparent,
-          highlightColor: uiTheme.touchHighlight,
-          hoverColor: uiTheme.isLight ? Colors.black.withValues(alpha: 0.04) : Colors.white.withValues(alpha: 0.05),
-          onTap: () => setState(() => _activeTab = index),
-          child: AppAnimatedContainer(
-            duration: AppAnim.fast,
-            curve: AppAnim.easeOut,
-            height: 42 * scale,
-            padding: EdgeInsets.symmetric(horizontal: 10 * scale),
-            decoration: BoxDecoration(
-              color: isSelected ? uiTheme.bgElevated : Colors.transparent,
-              borderRadius: uiTheme.borderRadius(10 * scale),
-              border: Border.all(
-                color: isSelected ? uiTheme.borderSubtle : Colors.transparent,
-                width: 1.0,
-              ),
-            ),
-            child: Row(
-              children: [
-                AppActivePillIndicator(
-                  isSelected: isSelected,
-                  scale: scale,
-                  color: _accentColor,
-                ),
-                SizedBox(width: 8 * scale),
-                Icon(
-                  icon,
-                  color: isSelected ? _accentColor : uiTheme.textMuted,
-                  size: 17 * scale,
-                ),
-                SizedBox(width: 10 * scale),
-                Expanded(
-                  child: Text(
-                    label,
-                    style: TextStyle(
-                      fontFamily: 'Arial',
-                      color: isSelected ? uiTheme.accentColor : uiTheme.textMuted,
-                      fontSize: 12.5 * scale,
-                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNavGroupLabel(double scale, String text) {
-    return Padding(
-      padding: EdgeInsets.only(left: 10 * scale, bottom: 6 * scale, top: 4 * scale),
-      child: Text(
-        text,
-        style: TextStyle(
-          fontFamily: 'Arial',
-          color: uiTheme.textDarkMuted,
-          fontSize: 10 * scale,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 0.8,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAlignedSlider(
-    double scale, {
-    required String label,
-    required String valueText,
-    required double value,
-    required double min,
-    required double max,
-    required ValueChanged<double> onChanged,
-  }) {
-    return Padding(
-      padding: EdgeInsets.symmetric(vertical: 7 * scale),
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                label,
-                style: TextStyle(
-                  fontFamily: 'Arial',
-                  color: uiTheme.textPrimary,
-                  fontSize: 13 * scale,
-                  fontWeight: FontWeight.w400,
-                ),
-              ),
-              Text(
-                valueText,
-                style: TextStyle(
-                  fontFamily: 'Arial',
-                  color: uiTheme.textMuted,
-                  fontSize: 12.5 * scale,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: 4 * scale),
-          SliderTheme(
-            data: SliderThemeData(
-              trackShape: EdgeToEdgeSliderTrackShape(),
-              trackHeight: 3.0 * scale,
-              activeTrackColor: _accentColor,
-              inactiveTrackColor: uiTheme.isLight ? const Color(0xFFE2E2E8) : const Color(0xFF202024),
-              thumbColor: _accentColor,
-              thumbShape: DotSliderThumbShape(enabledThumbRadius: 6.5 * scale, innerDotRadius: 2.8 * scale),
-              overlayShape: RoundSliderOverlayShape(overlayRadius: 8.0 * scale),
-            ),
-            child: Slider(
-              value: value.clamp(min, max),
-              min: min,
-              max: max,
-              onChanged: onChanged,
             ),
           ),
         ],
@@ -2388,168 +2232,10 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
     );
   }
 
-  Widget _buildToggleRow(
-    double scale, {
-    required String title,
-    required String subtitle,
-    required bool value,
-    required ValueChanged<bool> onChanged,
-  }) {
-    final bool phone = AppPlatform.isMobile;
-    final row = Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: TextStyle(
-                  fontFamily: 'Arial',
-                  color: uiTheme.textPrimary,
-                  fontSize: 13.5 * scale,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              if (subtitle.isNotEmpty) ...[
-                SizedBox(height: 2 * scale),
-                Text(
-                  subtitle,
-                  style: TextStyle(
-                    fontFamily: 'Arial',
-                    color: uiTheme.textDarkMuted,
-                    fontSize: 11.5 * scale,
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-        SizedBox(width: 16 * scale),
-        GestureDetector(
-          onTap: () => onChanged(!value),
-          behavior: HitTestBehavior.opaque,
-          child: AppAnimatedContainer(
-            duration: AppAnim.fast,
-            curve: AppAnim.easeOut,
-            width: 44 * scale,
-            height: 24 * scale,
-            padding: EdgeInsets.all(2.5 * scale),
-            decoration: BoxDecoration(
-              color: value
-                  ? _accentColor
-                  : (uiTheme.isLight ? const Color(0xFFD4D4DE) : const Color(0xFF28282C)),
-              borderRadius: uiTheme.borderRadius(12 * scale),
-              border: Border.all(
-                color: value
-                    ? _accentColor
-                    : (uiTheme.isLight ? const Color(0xFFC0C0CC) : const Color(0xFF38383E)),
-                width: 1.0,
-              ),
-            ),
-            alignment: value ? Alignment.centerRight : Alignment.centerLeft,
-            child: Container(
-              width: 17 * scale,
-              height: 17 * scale,
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                shape: BoxShape.circle,
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-    // Phone: the switch is too small for a finger only visually: tapping the whole row (≥ 48 dp) toggles it
-    if (!phone) return row;
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () => onChanged(!value),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: AppPlatform.touchTarget),
-        child: Align(alignment: Alignment.center, child: row),
-      ),
-    );
-  }
+  String _getTitle() => _titleOf(_activeTab);
 
-  Widget _buildSectionHeader(double scale, String title, String subtitle) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title,
-          style: TextStyle(
-            fontFamily: 'Arial',
-            color: uiTheme.textPrimary,
-            fontSize: 13.5 * scale,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        if (subtitle.isNotEmpty) ...[
-          SizedBox(height: 2 * scale),
-          Text(
-            subtitle,
-            style: TextStyle(
-              fontFamily: 'Arial',
-              color: uiTheme.textDarkMuted,
-              fontSize: 11.5 * scale,
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildActionPill(
-    double scale, {
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-  }) {
-    final radiusObj = uiTheme.borderRadius(10 * scale);
-    return Material(
-      color: uiTheme.bgSurface,
-      borderRadius: radiusObj,
-      child: InkWell(
-        borderRadius: radiusObj,
-        onTap: onTap,
-        splashColor: Colors.transparent,
-        highlightColor: uiTheme.touchHighlight,
-        hoverColor: uiTheme.isLight ? Colors.black.withValues(alpha: 0.04) : Colors.white.withValues(alpha: 0.08),
-        child: Container(
-          padding: EdgeInsets.symmetric(horizontal: 14 * scale, vertical: 8 * scale),
-          decoration: BoxDecoration(
-            borderRadius: radiusObj,
-            border: Border.all(color: uiTheme.borderSubtle),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, color: _accentColor, size: 17 * scale),
-              SizedBox(width: 8 * scale),
-              Flexible(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontFamily: 'Arial',
-                    color: uiTheme.textPrimary,
-                    fontSize: 12 * scale,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  String _getTitle() {
-    switch (_activeTab) {
+  String _titleOf(int tab) {
+    switch (tab) {
       case 0:
         return 'Вигляд';
       case 1:
@@ -2575,12 +2261,17 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
     }
   }
 
-  String _getSubtitle() {
-    switch (_activeTab) {
+  String _getSubtitle() => _subtitleOf(_activeTab);
+
+  /// What a section holds (the start screen)
+  String _summaryOf(int tab) => _subtitleOf(tab);
+
+  String _subtitleOf(int tab) {
+    switch (tab) {
       case 0:
-        return 'Тема, кольори та заокруглення';
+        return 'Тема, акцентний колір, заокруглення';
       case 1:
-        return 'Мови, шрифт і стиль';
+        return 'Мови, шрифт і вигляд тексту';
       case 2:
         return 'Швидкість, перемотування та пропуск';
       case 3:
@@ -2590,9 +2281,9 @@ class _AppSettingsDialogState extends State<AppSettingsDialog> {
       case 5:
         return 'Журнал, ключі та експериментальні функції';
       case 6:
-        return 'Версія та збірка';
+        return 'Версія, оновлення та джерела';
       case 7:
-        return 'Покращення якості зображення';
+        return 'Покращення якості зображення шейдерами';
       case 8:
         return 'Схема та перелік клавіш';
       case 9:

@@ -1,0 +1,175 @@
+{
+ "slug": "gintama-661699",
+ "mal_id": 918,
+ "episodes_total": 201,
+ "ost": [
+  {
+   "index": 1,
+   "title": "Pray",
+   "author": "Tommy",
+   "spotify": "https://open.spotify.com/track/5DBOBP2zmNUXSOzb7Syywd",
+   "ost_type": "opening"
+  },
+  {
+   "index": 2,
+   "title": "Tooi Nioi (遠い匂い)",
+   "author": "YO-KING",
+   "spotify": "https://open.spotify.com/track/2dA887WZMuvwkFn31iO2KB",
+   "ost_type": "opening"
+  },
+  {
+   "index": 3,
+   "title": "Giniro no Sora (銀色の空)",
+   "author": "redballoon",
+   "spotify": "https://open.spotify.com/track/1tO8t9vyYH50deBcscI8fm",
+   "ost_type": "opening"
+  },
+  {
+   "index": 4,
+   "title": "Kasanaru Kage (かさなる影)",
+   "author": "Hearts",
+   "spotify": "https://open.spotify.com/track/6uFNwD4hgDJ8Ecj8Au0MEU",
+   "ost_type": "opening"
+  },
+  {
+   "index": 5,
+   "title": "DONTEN (曇天)",
+   "author": "DOES",
+   "spotify": "https://open.spotify.com/track/2TSvt58BhzWoQuJokBUlLJ",
+   "ost_type": "opening"
+  },
+  {
+   "index": 6,
+   "title": "Anata MAGIC (アナタMAGIC)",
+   "author": "monobright",
+   "spotify": "https://open.spotify.com/track/7DpmSF99j1QlBkIUXp68jQ",
+   "ost_type": "opening"
+  },
+  {
+   "index": 7,
+   "title": "Stairway Generation",
+   "author": "Base",
+   "spotify": "https://open.spotify.com/track/1MjPkI6wzEzNJKcnXGYtcm",
+   "ost_type": "opening"
+  },
+  {
+   "index": 8,
+   "title": "Light Infection",
+   "author": "Prague",
+   "spotify": "https://open.spotify.com/track/0ZTL90aDkb5Veh7bAEppL7",
+   "ost_type": "opening"
+  },
+  {
+   "index": 1,
+   "title": "Fuusen Gum",
+   "author": "Captain",
+   "spotify": "https://open.spotify.com/track/6kltaRFHGDDyyvS6EvqMEx",
+   "ost_type": "ending"
+  },
+  {
+   "index": 2,
+   "title": "MR.RAINDROP",
+   "author": "amplified",
+   "spotify": "https://open.spotify.com/track/4iFQb6e71bVYmny4yZwNuD",
+   "ost_type": "ending"
+  },
+  {
+   "index": 3,
+   "title": "Yuki no Tsubasa",
+   "author": "redballoon",
+   "spotify": "https://open.spotify.com/track/7qZKI00IllPiorcZ3A4YtG",
+   "ost_type": "ending"
+  },
+  {
+   "index": 4,
+   "title": "Candy Line",
+   "author": "Hitomi",
+   "spotify": "https://open.spotify.com/track/7BF2HwG8Cp31SyIKjGozuG",
+   "ost_type": "ending"
+  },
+  {
+   "index": 5,
+   "title": "Shura",
+   "author": "DOES",
+   "spotify": "https://open.spotify.com/track/3PWBXkJsHYC6sCgz6Ua5Px",
+   "ost_type": "ending"
+  },
+  {
+   "index": 6,
+   "title": "Kiseki",
+   "author": "Snowkel",
+   "spotify": "https://open.spotify.com/track/1QE10bvac3E9fgRd1Wm2iA",
+   "ost_type": "ending"
+  },
+  {
+   "index": 7,
+   "title": "SIGNAL",
+   "author": "KELUN",
+   "spotify": "https://open.spotify.com/track/3lXxSwd0lhvllNbiUYLE9R",
+   "ost_type": "ending"
+  },
+  {
+   "index": 8,
+   "title": "Speed of Flow",
+   "author": "The",
+   "spotify": "https://open.spotify.com/track/2dV51lY2gd6ZhS9UPU9TvI",
+   "ost_type": "ending"
+  },
+  {
+   "index": 9,
+   "title": "Sanagi",
+   "author": "POSSIBILITY",
+   "spotify": "https://open.spotify.com/track/7LZQfHC2hg9RFxZW5HkpIA",
+   "ost_type": "ending"
+  },
+  {
+   "index": 10,
+   "title": "This World is yours",
+   "author": "plingmin",
+   "spotify": "https://open.spotify.com/track/3ynkTCsiKvCnKCXkItBet2",
+   "ost_type": "ending"
+  },
+  {
+   "index": 11,
+   "title": "Ai, Ai, Ai",
+   "author": "GHOSTNOTE",
+   "spotify": "https://open.spotify.com/track/7nuGmBdmRQ4CC47nrROsw6",
+   "ost_type": "ending"
+  },
+  {
+   "index": 12,
+   "title": "Kagayaita",
+   "author": "SHIGI",
+   "spotify": "https://open.spotify.com/track/3Ncn1jHLPFyI21J1lXhk4J",
+   "ost_type": "ending"
+  },
+  {
+   "index": 13,
+   "title": "Asa Answer",
+   "author": "PENGIN",
+   "spotify": "https://open.spotify.com/track/7oQbWRGDUlhXplEwZpj0z8",
+   "ost_type": "ending"
+  },
+  {
+   "index": 14,
+   "title": "Wo Ai Ni",
+   "author": "Hitomi",
+   "spotify": "https://open.spotify.com/track/37ogBjnBfDh3H30wx2PkQL",
+   "ost_type": "ending"
+  },
+  {
+   "index": 15,
+   "title": "Wonderful Days",
+   "author": "ONE☆DRAFT",
+   "spotify": "https://open.spotify.com/track/19E3L50TCf4fKsc37Hi5QR",
+   "ost_type": "ending"
+  },
+  {
+   "index": 16,
+   "title": "SAYONARA no Sora",
+   "author": "Qwai",
+   "spotify": "https://open.spotify.com/track/5upoKfRGTzi5irZFzDNTI6",
+   "ost_type": "ending"
+  }
+ ]
+}

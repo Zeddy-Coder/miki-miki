@@ -1,3 +1,5 @@
+import 'dart:collection';
+
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
@@ -26,6 +28,12 @@ class HikkaPagedList<T> extends StatefulWidget {
   /// Maximum width of one card; wider windows split the row into columns
   final double maxCardWidth;
 
+  /// Rows that carry their own padding (the lists' rows): no gaps and no side padding of the list
+  final bool flush;
+
+  /// Its own empty state instead of the icon with [emptyText]
+  final Widget? empty;
+
   const HikkaPagedList({
     super.key,
     required this.pager,
@@ -37,6 +45,8 @@ class HikkaPagedList<T> extends StatefulWidget {
     this.bottomInset = 0,
     this.header,
     this.maxCardWidth = 560,
+    this.flush = false,
+    this.empty,
   });
 
   @override
@@ -46,6 +56,23 @@ class HikkaPagedList<T> extends StatefulWidget {
 class _HikkaPagedListState<T> extends State<HikkaPagedList<T>> {
   ScrollController? _own;
   ScrollController get _controller => widget.controller ?? (_own ??= AppSmoothScrollController());
+
+  /// The cards made by this widget's [HikkaPagedList.itemBuilder], by item: a new page or the loading footer hands the
+  /// cards on screen back as they are instead of rebuilding them (as in `HikkaPagedGrid`)
+  final Map<Object?, Widget> _cards = HashMap<Object?, Widget>.identity();
+  HikkaPagedList<T>? _cardsFor;
+
+  /// The list sliver of the last build and what it was made of
+  Widget? _sliver;
+  Object? _sliverKey;
+
+  Widget _card(BuildContext context, T item) {
+    if (!identical(_cardsFor, widget)) {
+      _cards.clear();
+      _cardsFor = widget;
+    }
+    return _cards[item] ??= widget.itemBuilder(context, item);
+  }
 
   @override
   void initState() {
@@ -77,6 +104,7 @@ class _HikkaPagedListState<T> extends State<HikkaPagedList<T>> {
 
   void _onPager() {
     if (!mounted) return;
+    if (widget.pager.items.isEmpty) _cards.clear(); // reloaded: the old cards are not coming back
     setState(() {});
     WidgetsBinding.instance.addPostFrameCallback((_) => _fillViewport());
   }
@@ -93,12 +121,44 @@ class _HikkaPagedListState<T> extends State<HikkaPagedList<T>> {
     if (c.hasClients && c.position.maxScrollExtent <= 0 && p.hasMore && !p.loading && p.error == null) p.loadMore();
   }
 
+  /// The rows of cards; made again only when the items, the widget or the layout changed (the loading footer coming
+  /// and going leaves it, and so the cards, as they are)
+  Widget _rowsSliver(List<T> items, int columns, double side, double gap) {
+    final key = (widget, items, columns, side, gap);
+    if (_sliver != null && _sliverKey == key) return _sliver!;
+    _sliverKey = key;
+    return _sliver = SliverPadding(
+      padding: EdgeInsets.symmetric(horizontal: side),
+      sliver: SliverList(
+        delegate: SliverChildBuilderDelegate(
+          (context, row) {
+            final from = row * columns;
+            final to = (from + columns).clamp(0, items.length);
+            return Padding(
+              padding: EdgeInsets.only(bottom: gap),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (int i = from; i < from + columns; i++) ...[
+                    if (i > from) SizedBox(width: gap),
+                    Expanded(child: i < to ? _card(context, items[i]) : const SizedBox.shrink()),
+                  ],
+                ],
+              ),
+            );
+          },
+          childCount: (items.length / columns).ceil(),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final scale = widget.scale;
     final pager = widget.pager;
-    final pad = HikkaLayout.sidePad(context, scale);
-    final gap = HikkaLayout.compact(context) ? 12.0 : 14 * scale;
+    final pad = widget.flush ? 0.0 : HikkaLayout.sidePad(context, scale);
+    final gap = widget.flush ? 0.0 : (HikkaLayout.compact(context) ? 12.0 : 14 * scale);
 
     final Widget footer;
     if (pager.error != null && pager.items.isNotEmpty) {
@@ -116,59 +176,40 @@ class _HikkaPagedListState<T> extends State<HikkaPagedList<T>> {
       // A placeholder instead of a spinner: the tab looks "like a page" at once
       body = HikkaListSkeleton(scale: scale, maxCardWidth: widget.maxCardWidth);
     } else if (pager.isEmpty) {
-      body = SizedBox(height: 260, child: AppEmptyState(scale: scale, icon: widget.emptyIcon, text: widget.emptyText));
+      body = widget.empty ?? SizedBox(height: 260, child: AppEmptyState(scale: scale, icon: widget.emptyIcon, text: widget.emptyText));
     }
 
-    return AppScrollbar(
-      scale: scale,
-      controller: _controller,
-      child: CustomScrollView(
-        controller: _controller,
-        physics: const AlwaysScrollableScrollPhysics(),
-        slivers: [
-          SliverToBoxAdapter(child: SizedBox(height: AppHeaderInset.of(context))), // room under the overlay header
-          if (widget.header != null) SliverToBoxAdapter(child: widget.header),
-          if (pager.items.isEmpty)
-            SliverToBoxAdapter(child: body)
-          else
-            SliverLayoutBuilder(
-              builder: (context, constraints) {
-                // One column on a phone and in a narrow window, two or more when cards are not stretched unnecessarily
-                final width = (constraints.crossAxisExtent - pad * 2).clamp(0.0, HikkaLayout.maxContentWidth);
-                final maxW = widget.maxCardWidth * (AppPlatform.isMobile ? 1.0 : scale);
-                final columns = ((width + gap) / (maxW + gap)).floor().clamp(1, 3);
-                final side = ((constraints.crossAxisExtent - width) / 2).clamp(pad, double.infinity);
-                final items = pager.items;
-                return SliverPadding(
-                  padding: EdgeInsets.symmetric(horizontal: side),
-                  sliver: SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (context, row) {
-                        final from = row * columns;
-                        final to = (from + columns).clamp(0, items.length);
-                        return Padding(
-                          padding: EdgeInsets.only(bottom: gap),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              for (int i = from; i < from + columns; i++) ...[
-                                if (i > from) SizedBox(width: gap),
-                                Expanded(child: i < to ? widget.itemBuilder(context, items[i]) : const SizedBox.shrink()),
-                              ],
-                            ],
-                          ),
-                        );
-                      },
-                      childCount: (items.length / columns).ceil(),
-                    ),
-                  ),
-                );
-              },
-            ),
-          SliverToBoxAdapter(child: footer),
-          SliverToBoxAdapter(child: SizedBox(height: 24 * scale + widget.bottomInset)),
-        ],
-      ),
+    // The columns come from the width alone, outside the scroll view. A SliverLayoutBuilder here ran on every scroll
+    // frame (its constraints carry the scroll offset), and its new delegate rebuilt every visible card each frame
+    // (~700 widgets per frame in the collections list)
+    return LayoutBuilder(
+      builder: (context, box) {
+        final crossAxisExtent = box.maxWidth;
+        // One column on a phone and in a narrow window, two or more when cards are not stretched unnecessarily
+        final width = (crossAxisExtent - pad * 2).clamp(0.0, HikkaLayout.maxContentWidth);
+        final maxW = widget.maxCardWidth * (AppPlatform.isMobile ? 1.0 : scale);
+        final columns = ((width + gap) / (maxW + gap)).floor().clamp(1, 3);
+        final side = ((crossAxisExtent - width) / 2).clamp(pad, double.infinity);
+        final items = pager.items;
+        return AppScrollbar(
+          scale: scale,
+          controller: _controller,
+          child: CustomScrollView(
+            controller: _controller,
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              SliverToBoxAdapter(child: SizedBox(height: AppHeaderInset.of(context))), // room under the overlay header
+              if (widget.header != null) SliverToBoxAdapter(child: widget.header),
+              if (items.isEmpty)
+                SliverToBoxAdapter(child: body)
+              else
+                _rowsSliver(items, columns, side, gap),
+              SliverToBoxAdapter(child: footer),
+              SliverToBoxAdapter(child: SizedBox(height: 24 * scale + widget.bottomInset)),
+            ],
+          ),
+        );
+      },
     );
   }
 }

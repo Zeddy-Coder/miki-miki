@@ -1,0 +1,42 @@
+{
+ "id": 65942,
+ "name": "Re:Zero. Життя з нуля в іншому світі",
+ "number_of_seasons": 4,
+ "seasons": [
+  {
+   "air_date": "2016-06-22",
+   "episode_count": 12,
+   "id": 1,
+   "name": "Спецвипуски",
+   "season_number": 0
+  },
+  {
+   "air_date": "2016-04-04",
+   "episode_count": 25,
+   "id": 72066,
+   "name": "Сезон 1",
+   "season_number": 1
+  },
+  {
+   "air_date": "2020-07-08",
+   "episode_count": 25,
+   "id": 153271,
+   "name": "Сезон 2",
+   "season_number": 2
+  },
+  {
+   "air_date": "2024-10-02",
+   "episode_count": 16,
+   "id": 393000,
+   "name": "Сезон 3",
+   "season_number": 3
+  },
+  {
+   "air_date": "2026-04-08",
+   "episode_count": 19,
+   "id": 500000,
+   "name": "Сезон 4",
+   "season_number": 4
+  }
+ ]
+}

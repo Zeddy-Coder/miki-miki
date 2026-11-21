@@ -60,13 +60,21 @@ class EpisodeCheck {
   /// Short form: "5 з 12"
   final String summary;
 
-  /// Explanation for the disclaimer (empty when all is well)
+  /// Explanation for the disclaimer: only where the numbers do not name Hikka's episodes (merged parts, repeats,
+  /// several seasons, an OVA among the main ones…) or an OVA at the end will not be synced. Fewer or more episodes than
+  /// on Hikka say nothing: the marks follow the episode's number, the count shows in the dub's row
   final String note;
 
   /// If set, only episodes up to this number inclusive can be synced with Hikka (extras at the end are ignored)
   final int? syncLimit;
 
-  const EpisodeCheck(this.level, this.count, this.expected, this.summary, this.note, {this.syncLimit});
+  /// Each number still names Hikka's (MyAnimeList's) episode of that number — what AniSkip and the songs go by. A gap
+  /// moves nothing (the first two often aired as one: Gintama's dubs go 1, 3, 4…), nor does a 0 before 1; repeats,
+  /// several seasons, an extra among the main episodes, a start past 1 or numbers past Hikka's total do
+  final bool numbersHold;
+
+  const EpisodeCheck(this.level, this.count, this.expected, this.summary, this.note, {this.syncLimit, bool? numbersHold})
+      : numbersHold = numbersHold ?? level != EpisodeCheckLevel.mismatch;
 
   /// Show the disclaimer
   bool get hasNote => note.isNotEmpty;
@@ -109,10 +117,11 @@ bool looksLikeExtra(String name) {
   return _extraBracket.hasMatch(name);
 }
 
-const String _syncOff = 'Відмітки «переглянуто» передаватимуться на Hikka за номером серії, не більше за кількість серій там.';
-
 /// Reconciles the [episodes] with Hikka's [info].
-EpisodeCheck checkEpisodes(List<SEpisode> episodes, HikkaEpisodeInfo info) {
+/// [othersFrom] — the lowest episode number among the site's other dubs of the title: 1 there, and a dub that starts
+/// later (Re:Zero 4 by «Далі Буде»: 10–19 of 19) joined mid-season, its numbers are the season's own
+/// ([EpisodeCheck.numbersHold]); the level and the note stay as they are
+EpisodeCheck checkEpisodes(List<SEpisode> episodes, HikkaEpisodeInfo info, {int? othersFrom}) {
   final expected = info.expected;
   if (episodes.isEmpty) {
     // "0 з 12": the page was found but has no episodes (often they were added to another part's page)
@@ -142,8 +151,14 @@ EpisodeCheck checkEpisodes(List<SEpisode> episodes, HikkaEpisodeInfo info) {
     }
   }
 
-  EpisodeCheck mismatch(int count, String note) =>
-      EpisodeCheck(EpisodeCheckLevel.mismatch, count, expected, expected == null ? '$count' : '$count з $expected', '$note $_syncOff');
+  EpisodeCheck mismatch(int count, String note) => EpisodeCheck(
+        EpisodeCheckLevel.mismatch,
+        count,
+        expected,
+        expected == null ? '$count' : '$count з $expected',
+        note,
+        numbersHold: false,
+      );
 
   if (seasons.length > 1) {
     return mismatch(seen.length, 'У цьому варіанті зібрано кілька сезонів (${seasons.length}), а Hikka рахує серії одного сезону окремо.');
@@ -175,7 +190,26 @@ EpisodeCheck checkEpisodes(List<SEpisode> episodes, HikkaEpisodeInfo info) {
   final count = main.length;
   final head = expected == null ? '$count з ?' : '$count з $expected';
 
-  if (main.first != 1) {
+  // Whether the numbers still name Hikka's episodes where the list is not 1, 2, 3…: 1, 3, 4… or 0, 1, 2… do (then it is
+  // no mismatch, only fewer episodes); counting from zero (0…N−1 for N episodes) or past the total does not
+  bool holds() {
+    final positive = [for (final n in main) if (n > 0) n];
+    if (positive.isEmpty) return false;
+    // A later start is the season's own numbers only beside a dub of the site that starts at 1 — else it is likely
+    // counted on from a previous season (13–24 for a part of 12)
+    final late = positive.first > 1;
+    if (late && othersFrom != 1) return false;
+    if (main.first == 0 && expected != null && main.length == expected && main.last == expected - 1) return false;
+    // Within Hikka's count: its total, else what aired (a day or two of Hikka's lag allowed); a late start needs one
+    final total = (info.total ?? 0) > 0 ? info.total : null;
+    final aired = (info.released ?? 0) > 0 ? info.released! + (info.finished ? 0 : 2) : null;
+    final bound = total ?? (info.finished || late ? aired : null);
+    if (bound == null) return !late;
+    return positive.last <= bound;
+  }
+
+  final numbersHold = holds();
+  if (main.first != 1 && !numbersHold) {
     final span = main.last - main.first + 1;
     final hint = (expected != null && span == expected)
         ? ' Схоже на наскрізну нумерацію: серії ${main.first}–${main.last} відповідають 1–$span на Hikka.'
@@ -183,7 +217,7 @@ EpisodeCheck checkEpisodes(List<SEpisode> episodes, HikkaEpisodeInfo info) {
     return mismatch(count, 'Нумерація починається з ${main.first}, а на Hikka — з 1.$hint');
   }
   final gaps = [for (int i = 1; i <= main.last; i++) if (!main.contains(i)) i];
-  if (gaps.isNotEmpty) {
+  if (gaps.isNotEmpty && !numbersHold) {
     return mismatch(count, 'У нумерації є пропуски (немає серій: ${_list(gaps)}).');
   }
   final total = info.total;
@@ -194,21 +228,17 @@ EpisodeCheck checkEpisodes(List<SEpisode> episodes, HikkaEpisodeInfo info) {
   }
   if (!info.known) return EpisodeCheck(EpisodeCheckLevel.unknown, count, null, '$count з ?', '');
 
-  final released = info.released ?? 0;
   final want = expected;
   if (want != null && count > want) {
     if (info.finished) {
+      // A 0 before 1 (a prologue) is one more, the others are Hikka's
+      if (numbersHold && main.last <= want) return EpisodeCheck(EpisodeCheckLevel.match, count, want, head, '');
       final parts = (count % want == 0) ? count ~/ want : 0;
       final hint = parts >= 2 ? ' Схоже, тут об’єднано $parts частини підряд — тоді на сторінці наступної частини серій не буде.' : '';
       return mismatch(count, 'Тут $count серій, а на Hikka їх $want.$hint');
     }
-    return EpisodeCheck(
-      EpisodeCheckLevel.lead,
-      count,
-      want,
-      head,
-      'Кількість епізодів не збігається з Hikka: $count з ${released > 0 ? released : want}. Відмітки «переглянуто» зʼявляться на Hikka, коли він оновить дані.',
-    );
+    // More aired than Hikka knows yet: the marks of the new ones reach Hikka by their numbers when it catches up
+    return EpisodeCheck(EpisodeCheckLevel.lead, count, want, head, '');
   }
 
   String? extraNote() => tailExtras == 0
@@ -220,27 +250,23 @@ EpisodeCheck checkEpisodes(List<SEpisode> episodes, HikkaEpisodeInfo info) {
     final n = extraNote();
     return n == null ? EpisodeCheck(EpisodeCheckLevel.match, count, want, head, '') : EpisodeCheck(EpisodeCheckLevel.extra, count, want, head, n, syncLimit: limit);
   }
-  // count < want
-  final prefix = extraNote();
-  if (info.finished) {
-    return EpisodeCheck(
-      EpisodeCheckLevel.incomplete,
-      count,
-      want,
-      head,
-      'У цього озвучення є відсутні серії: $count/$want.${prefix == null ? '' : ' $prefix'}',
-      syncLimit: limit,
-    );
-  }
-  return EpisodeCheck(
-    EpisodeCheckLevel.lag,
-    count,
-    want,
-    head,
-    'Озвучено $count з $want серій, що вже вийшли; решта зʼявиться пізніше.${prefix == null ? '' : ' $prefix'}',
-    syncLimit: limit,
-  );
+  // count < want: fewer episodes (a dub still behind, or one that started mid-season) — the row shows «10 з 19», no note
+  return EpisodeCheck(info.finished ? EpisodeCheckLevel.incomplete : EpisodeCheckLevel.lag, count, want, head, extraNote() ?? '', syncLimit: limit);
 }
 
-/// The same for a group
-EpisodeCheck checkGroup(WatchGroup group, HikkaEpisodeInfo info) => checkEpisodes(group.episodes, info);
+/// The same for a group; [all] — the title's dubs (for one that started mid-season: `othersFrom`)
+EpisodeCheck checkGroup(WatchGroup group, HikkaEpisodeInfo info, {Iterable<WatchGroup> all = const []}) =>
+    checkEpisodes(group.episodes, info, othersFrom: othersFromOf(group, all));
+
+/// The lowest whole episode number among [all]'s dubs of [g]'s site other than [g] (see `othersFrom`)
+int? othersFromOf(WatchGroup g, Iterable<WatchGroup> all) {
+  int? low;
+  for (final o in all) {
+    if (o.id == g.id || o.sourceId != g.sourceId) continue;
+    for (final e in o.episodes) {
+      final n = e.number;
+      if (n != null && n >= 1 && n == n.roundToDouble() && (low == null || n < low)) low = n.toInt();
+    }
+  }
+  return low;
+}

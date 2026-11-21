@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
 import 'package:media_kit/media_kit.dart';
 
 import '../models/media_models.dart';
@@ -8,7 +7,8 @@ import '../utils/formatters.dart';
 import '../utils/platform_info.dart';
 import 'app_animation_kit.dart';
 import 'app_dock_widgets.dart';
-import 'app_ui_kit.dart';
+import 'line_icons.dart';
+import 'player_kit.dart';
 
 /// Playback controls for a phone (portrait and landscape).
 ///
@@ -100,7 +100,6 @@ class MobileControls extends StatelessWidget {
   static const double _button = AppPlatform.touchTarget;
   static const double _centerSmall = 56;
   static const double _centerBig = 72;
-  static const double _icon = 26;
 
   @override
   Widget build(BuildContext context) {
@@ -126,7 +125,7 @@ class MobileControls extends StatelessWidget {
                   left: 0,
                   right: 0,
                   child: Padding(
-                    padding: EdgeInsets.fromLTRB(left, pad.top + 6, right, 0),
+                    padding: EdgeInsets.fromLTRB(left - 6, pad.top + 4, right - 6, 0),
                     child: _topBar(),
                   ),
                 ),
@@ -144,8 +143,8 @@ class MobileControls extends StatelessWidget {
                   left: 0,
                   right: 0,
                   child: Padding(
-                    padding: EdgeInsets.fromLTRB(left, 0, right, (pad.bottom > 6 ? pad.bottom : 6) + 6),
-                    child: _bottomBar(),
+                    padding: EdgeInsets.fromLTRB(left, 0, right, (pad.bottom > 6 ? pad.bottom : 6) + 4),
+                    child: _bottomBar(mq.size.width),
                   ),
                 ),
               ],
@@ -171,11 +170,13 @@ class MobileControls extends StatelessWidget {
 
   // ── Top bar ──────────────────────────────────────────────────────────
 
+  /// "Back", the title with the grey "серія · озвучка" line (a tap opens the information), PiP, rotation, settings:
+  /// line icons straight on the video
   Widget _topBar() {
     return Row(
       children: [
-        _round(Symbols.arrow_back_rounded, onBack, label: 'Назад'),
-        const SizedBox(width: 6),
+        PlayerIconButton(icon: LineIcon.back, onTap: onBack, label: 'Назад', size: _button, iconSize: 24),
+        const SizedBox(width: 4),
         Expanded(
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
@@ -191,58 +192,74 @@ class MobileControls extends StatelessWidget {
                     title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontFamily: 'Arial', color: Colors.white, fontWeight: FontWeight.w600, fontSize: 16, height: 1.15),
+                    style: const TextStyle(fontFamily: 'Arial', fontFamilyFallback: ['MikiSans'], color: PlayerTones.fg, fontWeight: FontWeight.bold, fontSize: 16, height: 1.2),
                   ),
                   if (subtitle.isNotEmpty)
-                    Text(
-                      subtitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontFamily: 'Arial', color: Colors.white70, fontSize: 12.5, height: 1.2),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontFamily: 'Arial', fontFamilyFallback: ['MikiSans'], color: PlayerTones.sub, fontSize: 12.5, height: 1.2),
+                      ),
                     ),
                 ],
               ),
             ),
           ),
         ),
-        const SizedBox(width: 6),
-        if (pipSupported) ...[
-          _round(Symbols.picture_in_picture_alt_rounded, onPip, label: 'Картинка в картинці'),
-          const SizedBox(width: 8),
-        ],
-        _round(
-          rotationLocked ? Symbols.screen_lock_rotation_rounded : Symbols.screen_rotation_rounded,
-          onRotate,
+        const SizedBox(width: 4),
+        if (pipSupported) PlayerIconButton(icon: LineIcon.pictureInPicture, onTap: onPip, label: 'Картинка в картинці', size: _button, iconSize: 23),
+        PlayerIconButton(
+          icon: LineIcon.rotate,
+          onTap: onRotate,
           onLongPress: onRotateAuto,
           active: rotationLocked,
-          label: 'Повернути екран',
+          label: rotationLocked ? 'Поворот заблоковано' : 'Повернути екран',
+          size: _button,
+          iconSize: 23,
         ),
-        const SizedBox(width: 8),
-        _round(Symbols.settings_rounded, onSettings, active: drawerOwner == 'settings', label: 'Налаштування'),
+        PlayerIconButton(icon: LineIcon.gear, onTap: onSettings, active: drawerOwner == 'settings', label: 'Налаштування', size: _button, iconSize: 23),
       ],
     );
   }
 
   // ── Center: seek and pause ───────────────────────────────────────────────
 
+  /// Previous · −N s · pause · +N s · next in translucent circles
   Widget _transport(double width) {
-    // Narrow screen (≈360 dp): the buttons are a bit smaller so the row does not touch the edges
+    // Narrow screen (≈360 dp): the buttons are a bit smaller so the row does not touch the edges; landscape: the
+    // circles stand wider apart, as in the concept
     final bool narrow = width < 400;
+    final bool wide = width >= 600;
     final double small = narrow ? 50 : _centerSmall;
-    final double big = narrow ? 68 : _centerBig;
-    final double gap = narrow ? 8 : 14;
+    final double big = narrow ? 68 : (wide ? 76 : _centerBig);
+    final double gap = narrow ? 10 : (wide ? 30 : 18);
+    final prev = hasQueue ? (onPrevious ?? () => player.previous()) : null;
+    final next = hasQueue ? (onNext ?? () => player.next()) : null;
     return FittedBox(
       fit: BoxFit.scaleDown,
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _round(Symbols.skip_previous_rounded, hasQueue ? (onPrevious ?? () => player.previous()) : null, size: small, label: 'Попередній'),
+          PlayerCircleButton(
+            size: small,
+            onTap: prev,
+            label: 'Попередній',
+            child: LineIconView(LineIcon.skipPrevious, size: 25, color: PlayerTones.fg),
+          ),
           SizedBox(width: gap),
-          if (seekButtons) ...[_seekButton(false, small), SizedBox(width: gap + 2)] else SizedBox(width: 2),
+          if (seekButtons) ...[_seekButton(false, small), SizedBox(width: gap)],
           _playPause(big),
-          if (seekButtons) ...[SizedBox(width: gap + 2), _seekButton(true, small)] else SizedBox(width: 2),
+          if (seekButtons) ...[SizedBox(width: gap), _seekButton(true, small)],
           SizedBox(width: gap),
-          _round(Symbols.skip_next_rounded, hasQueue ? (onNext ?? () => player.next()) : null, size: small, label: 'Наступний'),
+          PlayerCircleButton(
+            size: small,
+            onTap: next,
+            label: 'Наступний',
+            child: LineIconView(LineIcon.skipNext, size: 25, color: PlayerTones.fg),
+          ),
         ],
       ),
     );
@@ -254,35 +271,21 @@ class MobileControls extends StatelessWidget {
       initialData: player.state.playing,
       builder: (context, snapshot) {
         final playing = snapshot.data ?? player.state.playing;
-        return Semantics(
-          button: true,
+        return PlayerCircleButton(
+          size: size,
+          big: true,
+          onTap: () => player.playOrPause(),
           label: playing ? 'Пауза' : 'Відтворити',
-          child: AppOverlayButton(
-            scale: 1.3,
-            width: size,
-            height: size,
-            borderRadius: size / 2,
-            opacity: 0.68,
-            onTap: () => player.playOrPause(),
-            child: AppFadeSwitcher(
-              alignment: Alignment.center,
-              child: Icon(
-                playing ? Symbols.pause_rounded : Symbols.play_arrow_rounded,
-                key: ValueKey(playing),
-                color: Colors.white,
-                size: size * 0.56,
-                fill: 1,
-                weight: 400,
-                opticalSize: 24,
-              ),
-            ),
+          child: AppFadeSwitcher(
+            alignment: Alignment.center,
+            child: LineIconView(playing ? LineIcon.pause : LineIcon.play, key: ValueKey(playing), size: size * 0.44, color: PlayerTones.fg, stroke: 1.2),
           ),
         );
       },
     );
   }
 
-  /// A step-seek button: ready icons exist for 5 / 10 / 30 s, arrows with a number for the others
+  /// A step-seek button: a round arrow with the step in the middle
   Widget _seekButton(bool forward, double size) {
     final step = seekStep;
     final Duration d = Duration(seconds: step);
@@ -295,41 +298,24 @@ class MobileControls extends StatelessWidget {
       player.seek(target);
     }
 
-    final IconData? glyph = switch (step) {
-      5 => forward ? Symbols.forward_5_rounded : Symbols.replay_5_rounded,
-      10 => forward ? Symbols.forward_10_rounded : Symbols.replay_10_rounded,
-      30 => forward ? Symbols.forward_30_rounded : Symbols.replay_30_rounded,
-      _ => null,
-    };
-    return Semantics(
-      button: true,
+    return PlayerCircleButton(
+      key: ValueKey(forward ? 'seek-forward' : 'seek-back'),
+      size: size,
+      onTap: seek,
       label: forward ? 'Вперед на $step с' : 'Назад на $step с',
-      child: AppOverlayButton(
-        scale: 1.2,
-        width: size,
-        height: size,
-        borderRadius: size / 2,
-        opacity: 0.6,
-        onTap: seek,
-        child: glyph != null
-            ? Icon(glyph, color: Colors.white, size: _icon + 2, weight: 300, opticalSize: 24)
-            : Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(forward ? Symbols.fast_forward_rounded : Symbols.fast_rewind_rounded, color: Colors.white, size: 22, weight: 300, opticalSize: 24),
-                  Text('$step', style: const TextStyle(fontFamily: 'Arial', color: Colors.white, fontSize: 11, height: 1.0, fontWeight: FontWeight.w600)),
-                ],
-              ),
-      ),
+      child: PlayerSeekGlyph(forward: forward, seconds: step, size: 28),
     );
   }
 
   // ── Bottom bar: slider and quick buttons ─────────────────────────────────
 
-  Widget _bottomBar() {
+  /// The time and the slider; under them "1×", Anime4K, subtitles, sound and, on the right, "Серії"
+  Widget _bottomBar(double width) {
     final clock = PlaybackClock.of(player);
     final String durText = AppFormatters.formatTime(player.state.duration);
-    final double timeW = durText.length * 8.4 + 6;
+    final double timeW = durText.length * 8.2 + 6;
+    // A narrow portrait screen: "Серії" is only an icon
+    final bool wide = width >= 520;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -360,25 +346,41 @@ class MobileControls extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 2),
         Row(
           children: [
             _speedChip(),
-            const SizedBox(width: 8),
-            _round(
-              Symbols.auto_awesome_rounded,
-              onAnime4k,
+            const SizedBox(width: 4),
+            PlayerIconButton(
+              icon: LineIcon.sparkle,
+              onTap: onAnime4k,
               onLongPress: onAnime4kToggle,
               active: drawerOwner == 'anime4k',
               badge: anime4kActive,
               label: 'Anime4K',
+              size: _button,
+              iconSize: 23,
             ),
-            const SizedBox(width: 8),
-            _round(Symbols.subtitles_rounded, onSubs, active: drawerOwner == 'subs', badge: subtitlesOn, label: 'Субтитри'),
-            const SizedBox(width: 8),
-            _round(Symbols.music_note_rounded, onAudio, active: drawerOwner == 'audio', fill: 1, label: 'Аудіодоріжка'),
+            PlayerIconButton(
+              icon: LineIcon.subtitles,
+              onTap: onSubs,
+              active: drawerOwner == 'subs',
+              badge: subtitlesOn,
+              label: 'Субтитри',
+              size: _button,
+              iconSize: 23,
+            ),
+            PlayerIconButton(icon: LineIcon.musicNote, onTap: onAudio, active: drawerOwner == 'audio', label: 'Аудіодоріжка', size: _button, iconSize: 23),
             const Spacer(),
-            _round(Symbols.video_library_rounded, onEpisodes, active: isEpisodesOpen, label: 'Епізоди'),
+            PlayerPill(
+              key: const ValueKey('player-episodes'),
+              icon: LineIcon.list,
+              text: wide ? 'Серії' : null,
+              label: 'Серії',
+              active: isEpisodesOpen,
+              onTap: onEpisodes,
+              hitHeight: _button,
+            ),
           ],
         ),
       ],
@@ -394,66 +396,25 @@ class MobileControls extends StatelessWidget {
         maxLines: 1,
         style: const TextStyle(
           fontFamily: 'Arial',
-          color: Colors.white,
-          fontSize: 14,
-          fontWeight: FontWeight.w500,
+          color: PlayerTones.fg,
+          fontSize: 13.5,
           fontFeatures: [FontFeature.tabularFigures()],
         ),
       ),
     );
   }
 
+  /// "1×": a pill; accent while its menu is open or the speed is not normal
   Widget _speedChip() {
     final bool open = drawerOwner == 'speed';
     final bool custom = (currentSpeed - 1.0).abs() > 0.01;
-    final Color fg = open || custom ? AppOverlayButton.foreground(true) : Colors.white;
-    return Semantics(
-      button: true,
+    return PlayerPill(
+      key: const ValueKey('player-speed'),
+      text: AppFormatters.formatSpeed(currentSpeed),
       label: 'Швидкість відтворення',
-      child: AppOverlayButton(
-        scale: 1.2,
-        width: 68,
-        height: _button,
-        borderRadius: _button / 2,
-        isActive: open,
-        onTap: onSpeed,
-        child: Text(
-          AppFormatters.formatSpeed(currentSpeed),
-          style: TextStyle(fontFamily: 'Arial', color: fg, fontWeight: FontWeight.w600, fontSize: 15),
-        ),
-      ),
-    );
-  }
-
-  /// A round glass button with a touch target ≥ 48 dp
-  Widget _round(
-    IconData icon,
-    VoidCallback? onTap, {
-    double size = _button,
-    VoidCallback? onLongPress,
-    bool active = false,
-    bool badge = false,
-    double fill = 0,
-    String? label,
-  }) {
-    final bool enabled = onTap != null;
-    final Color fg = enabled ? AppOverlayButton.foreground(active) : Colors.white38;
-    return Semantics(
-      button: true,
-      enabled: enabled,
-      label: label,
-      child: AppOverlayButton(
-        scale: 1.2,
-        width: size,
-        height: size,
-        borderRadius: size / 2,
-        isActive: active,
-        showBadge: badge,
-        opacity: enabled ? 0.55 : 0.35,
-        onTap: onTap,
-        onLongPress: onLongPress,
-        child: Icon(icon, color: fg, size: size >= 56 ? _icon + 2 : _icon, fill: fill, weight: 300, opticalSize: 24),
-      ),
+      active: open || custom,
+      onTap: onSpeed,
+      hitHeight: _button,
     );
   }
 }

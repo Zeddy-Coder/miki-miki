@@ -10,6 +10,7 @@ import 'package:desktop_drop/desktop_drop.dart';
 
 import '../constants/app_constants.dart';
 import '../models/media_models.dart';
+import '../utils/formatters.dart';
 import '../utils/platform_info.dart';
 import '../services/ui_theme_service.dart';
 import '../services/storage_service.dart';
@@ -20,6 +21,8 @@ import '../widgets/app_animation_kit.dart';
 import '../widgets/home_hub.dart';
 import '../widgets/side_panel.dart';
 import '../widgets/skip_button.dart';
+import '../widgets/song_card.dart';
+import '../services/songs/song_service.dart';
 import '../widgets/controls_overlay.dart';
 import '../widgets/stats_overlay.dart';
 import '../widgets/video_viewport.dart';
@@ -44,6 +47,9 @@ class PlayerScreen extends StatefulWidget {
 }
 
 class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver {
+  /// No songs (a file, not an episode from a site)
+  static final ValueNotifier<EpisodeSongs?> _noSongs = ValueNotifier<EpisodeSongs?>(null);
+
   final PlayerStateController state = PlayerStateController();
   final FocusNode _keyboardFocusNode = FocusNode();
   final ScrollController _drawerScrollController = AppSmoothScrollController();
@@ -256,7 +262,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
               onOpenFile: state.openFileOrPlaylist,
               onOpenMultipleFiles: state.openMultipleFiles,
               onOpenQueue: (items, i) => state.openQueue(items, startIndex: i),
-              onOpenSettings: ({int? tab}) => AppSettingsDialog.show(context, scale, state, initialTab: tab ?? 0),
+              onOpenSettings: ({int? tab}) => AppSettingsDialog.show(context, scale, state, initialTab: tab),
               settingsBuilder: mobile ? (ctx) => AppSettingsDialog(scale: scale, controller: state, embedded: true, initialTab: HikkaNav.instance.settingsTab) : null,
             ),
           ),
@@ -312,15 +318,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                     scale: scale,
                     controller: state.videoController,
                     isSpeeding: state.isSpeeding,
-                    onSpeedStart: () {
-                      state.prevSpeed = state.currentSpeed;
-                      state.player.setRate(2.0);
-                      state.isSpeeding = true;
-                    },
-                    onSpeedEnd: () {
-                      state.player.setRate(state.prevSpeed);
-                      state.isSpeeding = false;
-                    },
+                    onSpeedStart: _holdSpeedStart,
+                    onSpeedEnd: _holdSpeedEnd,
+                    speedLabel: AppFormatters.formatSpeed(StorageService.getHoldToSpeedRate()),
                     doubleTapLabel: '${StorageService.getSeekStep()} с',
                     onDoubleTapSide: _doubleTapSeek(),
                     onTap: () {
@@ -341,6 +341,15 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                         chapters: state.currentChapters,
                         dismissedChapterStartTime: state.dismissedChapterStartTime,
                       ),
+                      SongCard(
+                        scale: scale,
+                        showControls: state.showControls,
+                        hidden: state.activeDrawer != null || state.activeSidePanel != null,
+                        player: state.player,
+                        chapters: state.currentChapters,
+                        songs: state.remote.songs?.current ?? _noSongs,
+                        onOpen: (kind, key) => state.openSongDrawer(kind, key),
+                      ),
                       RemoteStatusOverlay(
                         scale: scale,
                         driver: state.remote,
@@ -352,7 +361,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                         showControls: state.showControls,
                         isSpeeding: state.isSpeeding,
                         isDraggingFile: state.isDraggingFile,
-                        currentTitle: state.currentTitle,
+                        currentTitle: state.chromeTitle,
+                        currentSubtitle: state.chromeSubtitle(quality: true),
                         player: state.player,
                         currentSpeed: state.currentSpeed,
                         volume: state.volumeState,
@@ -405,6 +415,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                         audioDelayKey: state.audioDelayKey,
                         onHwdecSelected: (h) => state.changeHwdec(h),
                         onOpenStats: state.openStatsOverlay,
+                        onOpenAppSettings: () => _openAppSettings(scale),
+                        remote: state.remote,
                         onPrevious: state.playPrevious,
                         onNext: state.playNext,
                       ),
@@ -438,6 +450,26 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   }
 
   /// Double tap: seek by a step (null means disabled in settings)
+  /// "Усі налаштування" from the player's menu: the app settings over the video, on the playback section
+  void _openAppSettings(double scale) {
+    state.closeDrawers();
+    AppSettingsDialog.show(context, scale, state, initialTab: AppSettingsDialog.tabPlayback);
+  }
+
+  /// Holding a finger / the mouse on the video speeds it up ("Прискорення утримуванням": on/off and the rate)
+  void _holdSpeedStart() {
+    if (!StorageService.getHoldToSpeedEnabled() || state.isSpeeding) return;
+    state.prevSpeed = state.currentSpeed;
+    state.player.setRate(StorageService.getHoldToSpeedRate());
+    state.isSpeeding = true;
+  }
+
+  void _holdSpeedEnd() {
+    if (!state.isSpeeding) return;
+    state.player.setRate(state.prevSpeed);
+    state.isSpeeding = false;
+  }
+
   ValueChanged<bool>? _doubleTapSeek() {
     if (!StorageService.getDoubleTapSeek()) return null;
     return (forward) {
@@ -491,15 +523,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         zoom: _zoom,
         controller: state.videoController,
         isSpeeding: state.isSpeeding,
-        onSpeedStart: () {
-          state.prevSpeed = state.currentSpeed;
-          state.player.setRate(2.0);
-          state.isSpeeding = true;
-        },
-        onSpeedEnd: () {
-          state.player.setRate(state.prevSpeed);
-          state.isSpeeding = false;
-        },
+        onSpeedStart: _holdSpeedStart,
+        onSpeedEnd: _holdSpeedEnd,
+        speedLabel: AppFormatters.formatSpeed(StorageService.getHoldToSpeedRate()),
         doubleTapLabel: '${StorageService.getSeekStep()} с',
         onDoubleTapSide: _doubleTapSeek(),
         onTap: () {
@@ -530,6 +556,16 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                   chapters: state.currentChapters,
                   dismissedChapterStartTime: state.dismissedChapterStartTime,
                 ),
+                SongCard(
+                  touch: true,
+                  scale: scale,
+                  showControls: state.showControls,
+                  hidden: panelOpen,
+                  player: state.player,
+                  chapters: state.currentChapters,
+                  songs: rd.songs?.current ?? _noSongs,
+                  onOpen: (kind, key) => state.openSongDrawer(kind, key),
+                ),
                 RemoteStatusOverlay(
                   scale: scale,
                   driver: rd,
@@ -539,8 +575,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                 MobileControls(
                   visible: state.showControls && !state.isSpeeding,
                   player: state.player,
-                  title: state.currentTitle,
-                  subtitle: rd.active ? rd.nowPlaying(withKind: false) : (queue > 1 ? 'Серія ${state.currentPlaylistIndex + 1} з $queue' : ''),
+                  title: state.chromeTitle,
+                  subtitle: state.chromeSubtitle(),
                   chapters: state.currentChapters,
                   currentSpeed: state.currentSpeed,
                   anime4kActive: state.anime4k.active,
@@ -599,6 +635,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                           onOpenChaptersSidePanel: () => state.toggleSidePanel(SidePanelType.chapters),
                           onOpenStats: state.openStatsOverlay,
                           anime4k: state.anime4k,
+                          remote: rd,
+                          onOpenAppSettings: () => _openAppSettings(scale),
                         ),
                 ),
                 MobileSheetFrame(

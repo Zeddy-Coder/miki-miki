@@ -1,16 +1,20 @@
 import 'dart:async';
+import 'dart:io';
 
+import 'package:flutter/gestures.dart' show kSecondaryButton;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:material_symbols_icons/symbols.dart';
 import 'package:miki_miki/models/source_models.dart';
 import 'package:miki_miki/services/episode_check.dart';
+import 'package:miki_miki/services/episode_guide.dart';
+import 'package:miki_miki/services/hikka_images.dart';
 import 'package:miki_miki/services/remote_driver.dart';
 import 'package:miki_miki/services/remote_playback.dart';
 import 'package:miki_miki/services/ui_theme_service.dart';
 import 'package:miki_miki/services/watch_models.dart';
 import 'package:miki_miki/utils/platform_info.dart';
 import 'package:miki_miki/widgets/app_ui_kit.dart';
+import 'package:miki_miki/widgets/line_icons.dart';
 import 'package:miki_miki/widgets/remote_panel.dart';
 import 'package:miki_miki/widgets/remote_status_overlay.dart';
 
@@ -48,7 +52,7 @@ Widget statusHost(Rig rig, {VoidCallback? onClose, VoidCallback? onPanel}) => Ma
   ),
 );
 
-Widget panelHost(Rig rig, {bool sheet = false, ValueChanged<int>? onEpisode}) => MaterialApp(
+Widget panelHost(Rig rig, {bool sheet = false, ValueChanged<int>? onEpisode, double width = 380, double height = 560}) => MaterialApp(
   debugShowCheckedModeBanner: false,
   home: Scaffold(
     body: ListenableBuilder(
@@ -57,14 +61,57 @@ Widget panelHost(Rig rig, {bool sheet = false, ValueChanged<int>? onEpisode}) =>
           (context, _) => Align(
             alignment: Alignment.topRight,
             child: SizedBox(
-              width: 380,
-              height: 560,
-              child: RemotePanelBody(scale: 1, driver: rig.driver, sheet: sheet, onEpisodeSelected: onEpisode ?? (_) {}),
+              width: width,
+              height: height,
+              child: ColoredBox(
+                color: uiTheme.bgSurface,
+                child: RemotePanelBody(scale: 1, driver: rig.driver, sheet: sheet, onEpisodeSelected: onEpisode ?? (_) {}, onClose: () {}),
+              ),
             ),
           ),
     ),
   ),
 );
+
+/// A line icon (the panel draws icons with [LineIconView], not font glyphs)
+Finder lineIcon(LineIcon icon) => find.byWidgetPredicate((w) => w is LineIconView && w.icon == icon);
+
+/// Titles and stills as [make] gives them for the numbers asked, after [wait] when it is set (titles on their way);
+/// what was asked is kept
+class FakeGuide extends EpisodeGuideService {
+  final EpisodeGuide? Function(int from, int to) make;
+  final List<(int, int)> asked = [];
+  Future<void>? wait;
+
+  FakeGuide(this.make, {this.wait}) : super(persist: false, malId: (_) async => null);
+
+  @override
+  EpisodeGuide? peek(String animeKey, int from, int to) => null;
+
+  @override
+  Future<EpisodeGuide?> load(String animeKey, int from, int to) async {
+    asked.add((from, to));
+    if (wait != null) await wait;
+    return make(from, to);
+  }
+}
+
+/// Episodes [from]–[to] weekly from 8 April: Ukrainian titles for the odd ones, English for all, a still for all but
+/// the fifth ([stills]), 24 minutes, the sixth a filler, the third with a description
+EpisodeGuide guideFor(int from, int to, {bool stills = true}) => EpisodeGuide(1, {
+      for (var n = from; n <= to; n++)
+        n: GuideEpisode(
+          n,
+          uk: n.isOdd ? 'Українська назва $n' : null,
+          en: 'English title $n',
+          ja: 'タイトル$n',
+          aired: DateTime.utc(2026, 4, 8).add(Duration(days: 7 * (n - 1))),
+          still: stills && n != 5 ? '${EpisodeGuideService.stills}/s$n.jpg' : null,
+          runtime: 24,
+          filler: n == 6,
+          about: n == 3 ? 'Опис третьої серії.' : null,
+        ),
+    });
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -75,6 +122,8 @@ void main() {
 
   setUp(() {
     uiTheme.setThemeMode('dark');
+    // No titles unless a test gives them: the episodes are plates, and nothing goes to the network
+    EpisodeGuideService.instance = EpisodeGuideService(persist: false, malId: (_) async => null);
   });
 
   tearDown(() {
@@ -241,8 +290,10 @@ void main() {
     });
   });
 
-  group('панель серій із сайту', () {
-    testWidgets('серії: поточна виділена, переглянуті позначені, тап обирає серію', (tester) async {
+  group('панель «Перегляд» серій із сайту', () {
+    Finder plate(String n) => find.descendant(of: find.byKey(const ValueKey('watch-episodes')), matching: find.text(n));
+
+    testWidgets('озвучення рядком, серії плашками: поточна виділена, переглянуті з галочкою, тап обирає серію', (tester) async {
       setScreen(tester, kDesktop);
       final rig = newRig();
       rig.store.setWatched('hikka:test', '2', true);
@@ -252,15 +303,25 @@ void main() {
       rig.started();
       await settle(tester);
 
-      for (final t in ['Серія 1', 'Серія 2', 'Серія 3']) {
-        expect(find.text(t), findsOneWidget, reason: t);
+      expect(find.text('Перегляд'), findsOneWidget);
+      expect(find.text('Аніме'), findsOneWidget, reason: 'назва аніме під заголовком');
+      expect(find.text('Команда А'), findsOneWidget);
+      expect(find.text('1–3 сер.'), findsOneWidget, reason: 'які серії є в озвученні');
+      for (final n in ['1', '2', '3']) {
+        expect(plate(n), findsOneWidget, reason: n);
       }
-      expect(find.text('Зараз відтворюється'), findsOneWidget);
-      expect(find.text('Переглянуто'), findsOneWidget);
-      expect(find.textContaining('Команда А · Moon · 1080p'), findsOneWidget); // what is playing now
+      // the current plate is selected, the watched one has a check mark
+      final current = tester.widget<Semantics>(find.descendant(of: find.byKey(const ValueKey('ep-0')), matching: find.byType(Semantics)).first);
+      expect(current.properties.selected, isTrue);
+      expect(find.descendant(of: find.byKey(const ValueKey('ep-1')), matching: lineIcon(LineIcon.check)), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const ValueKey('ep-2')), matching: lineIcon(LineIcon.check)), findsNothing);
+      // quality and the site's player as rows with the current value
+      expect(find.descendant(of: find.byKey(const ValueKey('watch-quality')), matching: find.text('1080p')), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const ValueKey('watch-player')), matching: find.text('Moon')), findsOneWidget);
 
-      await tester.tap(find.text('Серія 3'));
+      await tester.tap(plate('3'));
       expect(picked, [2]);
+      await expectLater(find.byType(RemotePanelBody), matchesGoldenFile('shots/remote_panel_desktop.png'));
       rig.driver.stop();
     });
 
@@ -272,51 +333,63 @@ void main() {
       await tester.runAsync(() => rig.driver.start(rig.launch()));
       rig.started();
       await settle(tester);
-      expect(find.text('Переглянуто'), findsOneWidget);
 
-      await tester.longPress(find.text('Серія 3'));
+      await tester.longPress(plate('3'));
       await settle(tester);
-      expect(find.text('Переглянуто'), findsNWidgets(2));
       expect(rig.store.isWatched('hikka:test', '3'), isTrue);
+      expect(find.descendant(of: find.byKey(const ValueKey('ep-2')), matching: lineIcon(LineIcon.check)), findsOneWidget);
 
-      await tester.longPress(find.text('Серія 2'));
+      await tester.longPress(plate('2'));
       await settle(tester);
       expect(rig.store.isWatched('hikka:test', '2'), isFalse);
-      expect(find.text('Переглянуто'), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const ValueKey('ep-1')), matching: lineIcon(LineIcon.check)), findsNothing);
       rig.driver.stop();
     });
 
-    testWidgets('довгий список: при відкритті поточна серія вже видна, решта будується ліниво', (tester) async {
+    testWidgets('довгий серіал: діапазони по 100, відкрито той, де поточна серія; решта плашок не будується', (tester) async {
       setScreen(tester, kDesktop);
       final rig = newRig(episodes: [for (var i = 1; i <= 300; i++) i]);
       await tester.runAsync(() => rig.driver.start(rig.launch(epKey: '200')));
       rig.started();
       await tester.pumpWidget(panelHost(rig));
       await settle(tester);
-      expect(find.text('Серія 200'), findsOneWidget);
-      expect(find.text('Серія 1'), findsNothing);
-      expect(find.text('Серія 300'), findsNothing);
+      for (final r in ['1–100', '101–200', '201–300']) {
+        expect(find.text(r), findsOneWidget, reason: r);
+      }
+      expect(plate('200'), findsOneWidget);
+      expect(plate('101'), findsOneWidget);
+      expect(plate('1'), findsNothing);
+      expect(plate('300'), findsNothing);
+      expect(tester.getRect(plate('200')).bottom, lessThan(560), reason: 'поточна серія видна одразу');
+
+      // the strip is above the plates: scrolled away while the current episode is in view
+      await tester.ensureVisible(find.text('201–300'));
+      await settle(tester);
+      await tester.tap(find.text('201–300'));
+      await settle(tester);
+      expect(plate('300'), findsOneWidget);
+      expect(plate('200'), findsNothing);
       rig.driver.stop();
     });
 
-    testWidgets('список стежить за поточною серією: перехід на далеку серію прокручує до неї', (tester) async {
+    testWidgets('панель стежить за поточною серією: перехід на далеку серію відкриває її діапазон', (tester) async {
       setScreen(tester, kDesktop);
       final rig = newRig(episodes: [for (var i = 1; i <= 300; i++) i]);
       await tester.runAsync(() => rig.driver.start(rig.launch()));
       rig.started();
       await tester.pumpWidget(panelHost(rig));
       await settle(tester);
-      expect(find.text('Серія 1'), findsOneWidget);
+      expect(plate('1'), findsOneWidget);
 
       await tester.runAsync(() => rig.driver.open(250));
       rig.started();
       await settle(tester);
-      expect(find.text('Серія 251'), findsOneWidget);
-      expect(find.text('Серія 1'), findsNothing);
+      expect(plate('251'), findsOneWidget);
+      expect(plate('1'), findsNothing);
       rig.driver.stop();
     });
 
-    testWidgets('озвучка: усі варіанти з підписами, тап перемикає з тієї ж серії', (tester) async {
+    testWidgets('озвучення: окрема сторінка з озвученнями й субтитрами; вибір перемикає з тієї ж серії й повертає назад', (tester) async {
       setScreen(tester, kDesktop);
       final rig = newRig();
       final g2 = WatchGroup(id: 'g2', sourceId: 'src', label: 'Команда Б', isSub: true, episodes: [ep(1), ep(2)]);
@@ -331,18 +404,20 @@ void main() {
       rig.started();
       await settle(tester);
 
-      await tester.tap(find.text('Озвучка'));
+      await tester.tap(find.byKey(const ValueKey('watch-variant')));
       await settle(tester);
-      expect(find.text('Команда А'), findsOneWidget);
-      expect(find.text('Команда Б'), findsOneWidget);
-      expect(find.text('Озвучення · 1–3 сер. · src'), findsOneWidget);
-      expect(find.text('Субтитри · 1–2 сер. · src'), findsOneWidget);
+      expect(find.text('Озвучення й субтитри'), findsOneWidget);
+      expect(find.text('Озвучення · 1'), findsOneWidget);
+      expect(find.text('Субтитри · 1'), findsOneWidget);
+      expect(find.text('1–3 сер. · src'), findsOneWidget);
+      expect(find.text('1–2 сер. · src'), findsOneWidget);
 
       await tester.tap(find.text('Команда Б'));
       await settle(tester);
       expect(rig.driver.groupId, 'g2');
       expect(rig.driver.entry!.epKey, '2'); // the same episode in another variant
       expect(rig.driver.session!.entries, hasLength(2));
+      expect(find.text('Перегляд'), findsOneWidget, reason: 'після вибору — назад до панелі');
       rig.driver.stop();
     });
 
@@ -366,32 +441,32 @@ void main() {
       );
       rig.started();
       await settle(tester);
-      await tester.tap(find.text('Озвучка'));
+      await tester.tap(find.byKey(const ValueKey('watch-variant')));
       await settle(tester);
       return (rig, merged, exact, part);
     }
 
-    Finder warnIn(String label) => find.descendant(of: find.widgetWithText(AppSelectableTile, label), matching: find.byIcon(Symbols.warning_rounded));
+    Finder warnIn(String id) => find.byKey(ValueKey('watch-variant-warn-$id'));
 
-    testWidgets('озвучка: розбіжність з Hikka — пояснення над списком, жовта позначка в рядках, підпис про вибір', (tester) async {
+    testWidgets('озвучення: розбіжність з Hikka — пояснення над списком, жовта позначка в рядках, підпис про вибір', (tester) async {
       setScreen(tester, kDesktop);
       final (rig, _, _, _) = await mismatchRig(tester);
 
       expect(find.text('Перемикається з того ж місця. Вибір запамʼятовується'), findsOneWidget);
       // The current variant is merged: an explanation above the list
       expect(find.textContaining('Тут 24 серій, а на Hikka їх лише 12.'), findsOneWidget);
-      expect(find.textContaining('передаватимуться на Hikka за номером серії'), findsOneWidget);
-      expect(find.text('Озвучення · 1–24 сер. · src'), findsOneWidget);
-      expect(find.text('Озвучення · 1–12 сер. · src'), findsOneWidget);
-      expect(find.text('Озвучення · 1–7 сер. · src'), findsOneWidget);
+      expect(find.textContaining('передаватимуться на Hikka'), findsNothing, reason: 'за номером серії — і так зрозуміло');
+      expect(find.text('1–24 з 12 · src'), findsOneWidget);
+      expect(find.text('12 з 12 серій · src'), findsOneWidget);
+      expect(find.text('1–7 з 12 · src'), findsOneWidget);
       // A yellow mark by the merged and the incomplete one, the correct variant without it
-      expect(warnIn('Склеєні'), findsOneWidget);
-      expect(warnIn('Неповна'), findsOneWidget);
-      expect(warnIn('Рівно'), findsNothing);
+      expect(warnIn('m'), findsOneWidget);
+      expect(warnIn('p'), findsOneWidget);
+      expect(warnIn('e'), findsNothing);
       rig.driver.stop();
     });
 
-    testWidgets('озвучка: перехід на правильний варіант прибирає пояснення й запамʼятовує вибір', (tester) async {
+    testWidgets('озвучення: перехід на правильний варіант прибирає пояснення й запамʼятовує вибір', (tester) async {
       setScreen(tester, kDesktop);
       final (rig, _, exact, _) = await mismatchRig(tester);
       expect(rig.store.favoriteChoices, isEmpty);
@@ -400,27 +475,27 @@ void main() {
       await settle(tester);
       expect(rig.driver.groupId, 'e');
       expect(rig.driver.session!.entries, hasLength(12));
-      expect(find.textContaining('Тут 24 серій'), findsNothing);
+      // back on the panel: the dub row without the warning
+      expect(find.descendant(of: find.byKey(const ValueKey('watch-variant')), matching: lineIcon(LineIcon.warning)), findsNothing);
       expect(rig.store.preferredGroup('hikka:test'), 'e');
       expect(rig.store.favoriteChoices, [choiceKeyOf(exact)]);
       rig.driver.stop();
     });
 
-    testWidgets('телефон: озвучка з поясненням і жовтими позначками — рядки не нижчі за 48 dp, без переповнення', (tester) async {
+    testWidgets('телефон: озвучення з поясненням і жовтими позначками — рядки не нижчі за 48 dp, без переповнення', (tester) async {
       AppPlatform.debugMobile = true;
       setScreen(tester, kPhone);
       final (rig, _, _, _) = await mismatchRig(tester, sheet: true);
 
       expect(find.textContaining('Тут 24 серій, а на Hikka їх лише 12.'), findsOneWidget);
-      for (final label in ['Склеєні', 'Рівно', 'Неповна']) {
-        final tile = find.widgetWithText(AppSelectableTile, label);
-        expect(tester.getSize(tile).height, greaterThanOrEqualTo(48), reason: label);
+      for (final id in ['m', 'e', 'p']) {
+        expect(tester.getSize(find.byKey(ValueKey('watch-variant-$id'))).height, greaterThanOrEqualTo(48), reason: id);
       }
       expect(tester.takeException(), isNull);
       rig.driver.stop();
     });
 
-    testWidgets('плеєр і якість: тап по плеєру й по якості відкриває потрібне посилання', (tester) async {
+    testWidgets('якість і плеєр: рядки відкривають вибір, тап вмикає потрібне посилання', (tester) async {
       setScreen(tester, kDesktop);
       final rig = newRig();
       await tester.pumpWidget(panelHost(rig));
@@ -428,17 +503,21 @@ void main() {
       rig.started();
       await settle(tester);
 
-      await tester.tap(find.text('Плеєр'));
+      await tester.tap(find.byKey(const ValueKey('watch-quality')));
       await settle(tester);
-      for (final t in ['Moon', 'Sibnet', 'Авто', '1080p', '720p']) {
+      for (final t in ['Авто', '1080p', '720p']) {
         expect(find.text(t), findsOneWidget, reason: t);
       }
-
       await tester.tap(find.text('720p'));
       await settle(tester);
       expect(rig.engine.lastUrl, 'https://moon/e1/720.m3u8');
       rig.started();
+      await settle(tester);
+      expect(find.descendant(of: find.byKey(const ValueKey('watch-quality')), matching: find.text('720p')), findsOneWidget);
 
+      await tester.tap(find.byKey(const ValueKey('watch-player')));
+      await settle(tester);
+      expect(find.text('Moon'), findsOneWidget);
       await tester.tap(find.text('Sibnet'));
       await settle(tester);
       expect(rig.engine.lastUrl, 'https://sibnet/e1.m3u8');
@@ -446,22 +525,319 @@ void main() {
       rig.driver.stop();
     });
 
-    testWidgets('телефон: рядки й вкладки не нижчі за 48 dp, нічого не переповнює екран', (tester) async {
+    testWidgets('телефон: плашки й рядки не нижчі за 40 / 48 dp, сторінки відкриваються без переповнення', (tester) async {
       AppPlatform.debugMobile = true;
       setScreen(tester, kPhone);
-      final rig = newRig();
-      await tester.pumpWidget(panelHost(rig, sheet: true));
-      await tester.runAsync(() => rig.driver.start(rig.launch()));
+      final rig = newRig(episodes: [for (var i = 1; i <= 28; i++) i]);
+      rig.store.setWatched('hikka:test', '1', true);
+      await tester.pumpWidget(panelHost(rig, sheet: true, width: kPhone.width, height: 640));
+      await tester.runAsync(() => rig.driver.start(rig.launch(epKey: '2')));
       rig.started();
       await settle(tester);
-      expect(tester.getSize(find.byWidgetPredicate((w) => w is AppSegmentedBar)).height, greaterThanOrEqualTo(48));
-      expect(tester.getSize(find.byType(AppSelectableSurface).first).height, greaterThanOrEqualTo(48));
-      for (final tab in ['Озвучка', 'Плеєр', 'Серії']) {
-        await tester.tap(find.text(tab));
+      expect(tester.getSize(find.byKey(const ValueKey('ep-5'))).height, greaterThanOrEqualTo(40));
+      for (final k in ['watch-variant', 'watch-quality', 'watch-player']) {
+        expect(tester.getSize(find.byKey(ValueKey(k))).height, greaterThanOrEqualTo(48), reason: k);
+      }
+      await expectLater(find.byType(RemotePanelBody), matchesGoldenFile('shots/remote_panel_phone.png'));
+      for (final k in ['watch-quality', 'watch-player']) {
+        await tester.tap(find.byKey(ValueKey(k)));
+        await settle(tester);
+        await tester.tap(find.byKey(const ValueKey('watch-back')));
         await settle(tester);
       }
       expect(tester.takeException(), isNull);
       rig.driver.stop();
+    });
+
+    group('список із назвами', () {
+      late Directory images;
+      late HikkaImageStore store;
+      final stills = [for (final c in ['a', 'b', 'c']) File('test/data/guide/still_$c.jpg').readAsBytesSync()];
+
+      setUp(() {
+        store = HikkaImageStore.instance;
+        images = Directory.systemTemp.createTempSync('stills');
+        HikkaImageStore.instance = HikkaImageStore(dir: images, fetcher: (url) async => stills[url.length % 3]);
+      });
+
+      tearDown(() {
+        HikkaImageStore.instance = store;
+        images.deleteSync(recursive: true);
+      });
+
+      /// The stills of episodes [numbers] decoded before the panel asks for them (they load outside the test's clock:
+      /// one asked for inside it would never come)
+      Future<void> precacheStills(WidgetTester tester, Iterable<int> numbers) async {
+        await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+        final ctx = tester.element(find.byType(SizedBox));
+        await tester.runAsync(() async {
+          for (final n in numbers) {
+            await precacheImage(ResizeImage(HikkaImage('${EpisodeGuideService.stills}/s$n.jpg'), width: 104), ctx);
+          }
+        });
+      }
+
+      testWidgets('з кадрами: кадр із номером, назва (українська, інакше англійська), дата; переглянута з галочкою, поточна з поступом', (tester) async {
+        setScreen(tester, kDesktop);
+        final guide = FakeGuide((from, to) => guideFor(from, to));
+        EpisodeGuideService.instance = guide;
+        final rig = newRig(episodes: [for (var n = 1; n <= 12; n++) n]);
+        rig.store.setWatched('hikka:test', '1', true);
+        final picked = <int>[];
+        await precacheStills(tester, [for (var n = 1; n <= 12; n++) if (n != 5) n]);
+        await tester.pumpWidget(panelHost(rig, onEpisode: picked.add));
+        await tester.runAsync(() => rig.driver.start(rig.launch(epKey: '2')));
+        rig.started();
+        rig.engine.position = const Duration(minutes: 3);
+        await settle(tester);
+
+        expect(guide.asked, [(1, 12)]);
+        expect(find.text('Українська назва 1'), findsOneWidget);
+        expect(find.text('English title 2'), findsOneWidget, reason: 'української нема — англійська');
+        expect(find.text('Українська назва 3'), findsOneWidget);
+        expect(plate('3'), findsOneWidget, reason: 'номер на кадрі');
+        expect(find.textContaining('22 квітня'), findsOneWidget);
+        expect(find.textContaining('філер'), findsOneWidget);
+        final current = tester.widget<Semantics>(find.descendant(of: find.byKey(const ValueKey('ep-1')), matching: find.byType(Semantics)).first);
+        expect(current.properties.selected, isTrue);
+        expect(current.properties.label, 'Серія 2: English title 2');
+        expect(find.descendant(of: find.byKey(const ValueKey('ep-0')), matching: lineIcon(LineIcon.check)), findsOneWidget);
+        expect(find.descendant(of: find.byKey(const ValueKey('ep-1')), matching: find.byType(LinearProgressIndicator)), findsOneWidget);
+        expect(find.descendant(of: find.byKey(const ValueKey('ep-1')), matching: find.textContaining('ще 21 хв')), findsOneWidget);
+        await expectLater(find.byType(RemotePanelBody), matchesGoldenFile('shots/remote_panel_list_desktop.png'));
+
+        await tester.tap(find.text('Українська назва 3'));
+        expect(picked, [2]);
+        await tester.longPress(find.text('Українська назва 3'));
+        await settle(tester);
+        await tester.tap(find.byKey(const ValueKey('detail-watched')));
+        await settle(tester);
+        expect(rig.store.isWatched('hikka:test', '3'), isTrue);
+        expect(find.descendant(of: find.byKey(const ValueKey('ep-2')), matching: lineIcon(LineIcon.check)), findsOneWidget);
+        rig.driver.stop();
+      });
+
+      testWidgets('без кадрів: номер, назва, дата й тривалість; на телефоні рядки не нижчі за 56 dp', (tester) async {
+        AppPlatform.debugMobile = true;
+        setScreen(tester, kPhone);
+        EpisodeGuideService.instance = FakeGuide((from, to) => guideFor(from, to, stills: false));
+        final rig = newRig(episodes: [for (var n = 1; n <= 28; n++) n]);
+        rig.store.setWatched('hikka:test', '1', true);
+        await tester.pumpWidget(panelHost(rig, sheet: true, width: kPhone.width, height: 640));
+        await tester.runAsync(() => rig.driver.start(rig.launch(epKey: '2')));
+        rig.started();
+        await settle(tester);
+        expect(find.textContaining('15 квітня · ще 24 хв'), findsOneWidget, reason: 'поточна: скільки лишилось');
+        expect(find.textContaining('22 квітня · 24 хв'), findsOneWidget);
+        expect(tester.getSize(find.byKey(const ValueKey('ep-4'))).height, greaterThanOrEqualTo(56));
+        expect(find.descendant(of: find.byKey(const ValueKey('ep-1')), matching: find.byType(LinearProgressIndicator)), findsOneWidget);
+        await expectLater(find.byType(RemotePanelBody), matchesGoldenFile('shots/remote_panel_list_phone.png'));
+        expect(tester.takeException(), isNull);
+        rig.driver.stop();
+      });
+
+      testWidgets('довгий серіал: поточна серія в полі зору, далекі рядки не будуються, діапазон перемикається без плашок', (tester) async {
+        setScreen(tester, kDesktop);
+        final guide = FakeGuide((from, to) => guideFor(from, to, stills: false));
+        EpisodeGuideService.instance = guide;
+        final rig = newRig(episodes: [for (var i = 1; i <= 300; i++) i]);
+        await tester.runAsync(() => rig.driver.start(rig.launch(epKey: '200')));
+        rig.started();
+        await tester.pumpWidget(panelHost(rig));
+        await settle(tester);
+        expect(guide.asked, [(101, 200)]);
+        final r = tester.getRect(find.text('English title 200'));
+        expect((r.top > 0, r.bottom < 560), (true, true), reason: 'поточна серія видна одразу');
+        expect(find.text('Українська назва 101'), findsNothing, reason: 'далеко вгорі — не будується');
+
+        await tester.ensureVisible(find.text('201–300', skipOffstage: false));
+        await settle(tester);
+        await tester.tap(find.text('201–300'));
+        await tester.pump();
+        expect(find.byKey(const ValueKey('ep-200')), findsOneWidget);
+        expect(find.descendant(of: find.byKey(const ValueKey('watch-episodes')), matching: find.byType(Wrap)), findsNothing, reason: 'поки назви йдуть — рядки, а не плашки');
+        await settle(tester);
+        expect(guide.asked.last, (201, 300));
+        expect(find.text('Українська назва 201'), findsOneWidget);
+        rig.driver.stop();
+      });
+
+      testWidgets('поки назви йдуть — сірі рядки-заготовки на місцях рядків, а не плашки; потім вони заповнюються', (tester) async {
+        setScreen(tester, kDesktop);
+        final ready = Completer<void>();
+        EpisodeGuideService.instance = FakeGuide((from, to) => guideFor(from, to), wait: ready.future);
+        final rig = newRig(episodes: [for (var n = 1; n <= 12; n++) n]);
+        rig.store.setWatched('hikka:test', '1', true);
+        await precacheStills(tester, [for (var n = 1; n <= 12; n++) if (n != 5) n]);
+        await tester.pumpWidget(panelHost(rig));
+        await tester.runAsync(() => rig.driver.start(rig.launch(epKey: '2')));
+        rig.started();
+        await settle(tester);
+        final episodes = find.byKey(const ValueKey('watch-episodes'));
+        expect(find.descendant(of: episodes, matching: find.byType(Wrap)), findsNothing, reason: 'не плашки');
+        expect(find.text('Серія 3'), findsNothing, reason: 'замість назви — сіра риска');
+        expect(plate('3'), findsOneWidget, reason: 'номер на сірому кадрі');
+        expect(find.descendant(of: find.byKey(const ValueKey('ep-0')), matching: lineIcon(LineIcon.check)), findsOneWidget);
+        final height = tester.getSize(find.byKey(const ValueKey('ep-3'))).height;
+
+        ready.complete();
+        await settle(tester);
+        expect(find.text('Українська назва 3'), findsOneWidget);
+        expect(tester.getSize(find.byKey(const ValueKey('ep-3'))).height, height, reason: 'рядки на тих самих місцях');
+        rig.driver.stop();
+      });
+
+      testWidgets('тайтл без назв: плашки лишаються плашками, поки йде інший діапазон', (tester) async {
+        setScreen(tester, kDesktop);
+        final guide = FakeGuide((from, to) => null);
+        EpisodeGuideService.instance = guide;
+        final rig = newRig(episodes: [for (var i = 1; i <= 150; i++) i]);
+        await tester.pumpWidget(panelHost(rig));
+        await tester.runAsync(() => rig.driver.start(rig.launch(epKey: '1')));
+        rig.started();
+        await settle(tester);
+        final wrap = find.descendant(of: find.byKey(const ValueKey('watch-episodes')), matching: find.byType(Wrap));
+        expect(wrap, findsOneWidget);
+
+        guide.wait = Completer<void>().future;
+        await tester.tap(find.text('101–150'));
+        await tester.pump();
+        expect(guide.asked.last, (101, 150));
+        expect(wrap, findsOneWidget, reason: 'без заготовок: назв у тайтла не було');
+        rig.driver.stop();
+      });
+
+      testWidgets('телефон вертикально: утримання рядка — картка з описом, «Дивитися» й «Переглянуто»; дотик поза нею закриває', (tester) async {
+        AppPlatform.debugMobile = true;
+        setScreen(tester, kPhone);
+        EpisodeGuideService.instance = FakeGuide((from, to) => guideFor(from, to, stills: false));
+        final rig = newRig(episodes: [for (var n = 1; n <= 12; n++) n]);
+        final picked = <int>[];
+        await tester.pumpWidget(panelHost(rig, sheet: true, width: kPhone.width, height: 640, onEpisode: picked.add));
+        await tester.runAsync(() => rig.driver.start(rig.launch(epKey: '2')));
+        rig.started();
+        await settle(tester);
+        final card = find.byKey(const ValueKey('episode-card'));
+
+        await tester.longPress(find.text('Українська назва 3'));
+        await settle(tester);
+        expect(card, findsOneWidget);
+        expect(find.descendant(of: card, matching: find.text('Опис третьої серії.')), findsOneWidget);
+        expect(find.descendant(of: card, matching: find.text('English title 3')), findsOneWidget, reason: 'оригінальна назва');
+        expect(find.descendant(of: card, matching: find.textContaining('22 квітня')), findsOneWidget);
+        await tester.tap(find.byKey(const ValueKey('detail-watched')));
+        await settle(tester);
+        expect(rig.store.isWatched('hikka:test', '3'), isTrue);
+        expect(card, findsNothing);
+
+        await tester.longPress(find.text('Українська назва 3'));
+        await settle(tester);
+        expect(find.descendant(of: card, matching: find.text('Зняти позначку')), findsOneWidget);
+        expect(rig.driver.panelBack!(), isTrue, reason: '«Назад» закриває картку');
+        await settle(tester);
+        expect(card, findsNothing);
+        expect(rig.driver.panelBack!(), isFalse, reason: 'далі «Назад» закриває саму панель');
+
+        await tester.longPress(find.text('Українська назва 5'));
+        await settle(tester);
+        await tester.tap(find.byKey(const ValueKey('detail-play')));
+        await settle(tester);
+        expect(picked, [4]);
+        expect(card, findsNothing);
+
+        await tester.longPress(find.text('Українська назва 7'));
+        await settle(tester);
+        await tester.tapAt(const Offset(40, 160));
+        await settle(tester);
+        expect(card, findsNothing, reason: 'дотик по затемненому списку закриває картку');
+        expect(picked, [4], reason: 'і нічого не вмикає');
+        expect(tester.takeException(), isNull);
+        rig.driver.stop();
+      });
+
+      testWidgets('бічна панель: права кнопка відкриває сторінку серії; «Назад» повертає на те саме місце списку', (tester) async {
+        setScreen(tester, kDesktop);
+        EpisodeGuideService.instance = FakeGuide((from, to) => guideFor(from, to, stills: false));
+        final rig = newRig(episodes: [for (var n = 1; n <= 28; n++) n]);
+        final picked = <int>[];
+        await tester.pumpWidget(panelHost(rig, onEpisode: picked.add));
+        await tester.runAsync(() => rig.driver.start(rig.launch(epKey: '1')));
+        rig.started();
+        await settle(tester);
+        await tester.drag(find.byType(CustomScrollView), const Offset(0, -400));
+        await settle(tester);
+        double offset() => tester.state<ScrollableState>(find.byType(Scrollable).first).position.pixels;
+        final before = offset();
+        expect(before, greaterThan(0));
+
+        await tester.tap(find.text('Українська назва 13'), buttons: kSecondaryButton);
+        await settle(tester);
+        expect(find.text('Серія 13'), findsOneWidget, reason: 'заголовок сторінки');
+        expect(find.byKey(const ValueKey('episode-card')), findsNothing);
+        expect(find.byKey(const ValueKey('detail-play')), findsOneWidget);
+        await tester.tap(find.byKey(const ValueKey('watch-back')));
+        await settle(tester);
+        expect(find.text('Українська назва 13'), findsOneWidget);
+        expect(offset(), before, reason: 'список на тому ж місці');
+
+        await tester.tap(find.text('Українська назва 13'), buttons: kSecondaryButton);
+        await settle(tester);
+        await tester.tap(find.byKey(const ValueKey('detail-watched')));
+        await settle(tester);
+        expect(rig.store.isWatched('hikka:test', '13'), isTrue);
+        expect(find.text('Українська назва 13'), findsOneWidget, reason: 'назад до списку');
+        expect(picked, isEmpty);
+        rig.driver.stop();
+      });
+
+      testWidgets('телефон набік (бічна панель): утримання рядка — сторінка, не картка', (tester) async {
+        AppPlatform.debugMobile = true;
+        setScreen(tester, const Size(997, 448));
+        EpisodeGuideService.instance = FakeGuide((from, to) => guideFor(from, to, stills: false));
+        final rig = newRig(episodes: [for (var n = 1; n <= 12; n++) n]);
+        await tester.pumpWidget(panelHost(rig, sheet: true, height: 448));
+        await tester.runAsync(() => rig.driver.start(rig.launch(epKey: '2')));
+        rig.started();
+        await settle(tester);
+        await tester.longPress(find.text('Українська назва 3'));
+        await settle(tester);
+        expect(find.byKey(const ValueKey('episode-card')), findsNothing);
+        expect(find.text('Серія 3'), findsOneWidget);
+        expect(find.byKey(const ValueKey('detail-watched')), findsOneWidget);
+        expect(rig.driver.panelBack!(), isTrue);
+        await settle(tester);
+        expect(find.text('Українська назва 3'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        rig.driver.stop();
+      });
+
+      testWidgets('назви з сайту, без MyAnimeList: список без кадрів', (tester) async {
+        setScreen(tester, kDesktop);
+        final rig = newRig();
+        final named = WatchGroup(
+          id: 'n',
+          sourceId: 'src',
+          label: 'Команда В',
+          episodes: [
+            const SEpisode(url: 'e1', name: 'Серія 1 - Хвіст Феї', number: 1),
+            const SEpisode(url: 'e2', name: 'Серія 2 - Вогняний дракон', number: 2),
+          ],
+        );
+        final title = WatchTitle(
+          animeKey: 'hikka:test',
+          offers: [
+            WatchOffer(source: rig.source, anime: const SAnime(url: 'a', title: 'A'), groups: [named]),
+          ],
+        );
+        await tester.pumpWidget(panelHost(rig));
+        await tester.runAsync(() => rig.driver.start(RemoteLaunch(title: title, group: named, animeTitle: 'Аніме')));
+        rig.started();
+        await settle(tester);
+        expect(find.text('Хвіст Феї'), findsOneWidget);
+        expect(find.text('Вогняний дракон'), findsOneWidget);
+        expect(plate('2'), findsOneWidget);
+        rig.driver.stop();
+      });
     });
 
     testWidgets('сесію зупинено, а панель ще на екрані — порожній стан без помилок', (tester) async {

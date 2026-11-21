@@ -13,6 +13,7 @@ import 'package:flutter/widgets.dart';
 import '../utils/platform_info.dart';
 import 'app_log.dart';
 import 'episode_alerts.dart';
+import 'exit_reports.dart';
 import 'push_notifications.dart';
 import 'settings_sync.dart';
 import 'storage_service.dart';
@@ -24,7 +25,7 @@ class AppDiagnostics with WidgetsBindingObserver {
   static final AppDiagnostics instance = AppDiagnostics._();
 
   /// Build marker in the log
-  static const String build = 'b93';
+  static const String build = 'b112';
 
   bool _installed = false;
   Timer? _sampleTimer;
@@ -102,6 +103,12 @@ class AppDiagnostics with WidgetsBindingObserver {
     AppLog.instance.environment
       ..clear()
       ..addAll(env);
+    // Why the last runs ended, when it was not the person closing the app (a crash in native code leaves no trace)
+    try {
+      await ExitReports.logRecent();
+    } catch (e) {
+      AppLog.d('аварія', 'причини завершення недоступні: $e');
+    }
   }
 
   static String _yes(Object? v) => v == true ? 'так' : 'ні';

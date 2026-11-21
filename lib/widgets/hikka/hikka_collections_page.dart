@@ -8,6 +8,7 @@ import '../../services/hikka_prefs.dart';
 import '../app_animation_kit.dart';
 import 'hikka_common.dart';
 import 'hikka_community_cards.dart';
+import 'hikka_page_kit.dart';
 import 'hikka_paged_list.dart';
 
 /// The "Колекції" section: anime collections from Hikka users; the most popular by default, newest optionally.
@@ -69,24 +70,27 @@ class _HikkaCollectionsPageState extends State<HikkaCollectionsPage> {
   @override
   Widget build(BuildContext context) {
     final scale = widget.scale;
+    final pad = HikkaLayout.sidePad(context, scale);
     return HikkaPagedList<HikkaCollection>(
       pager: _pager,
       scale: scale,
       controller: _scroll,
       bottomInset: widget.bottomInset,
+      flush: true,
       emptyIcon: Symbols.collections_bookmark_rounded,
       emptyText: 'Колекцій не знайдено',
       header: Padding(
-        padding: EdgeInsets.only(top: 4 * scale, bottom: 8 * scale),
-        child: HikkaChipRow(
+        padding: EdgeInsets.only(bottom: 4 * scale),
+        child: HikkaSortLine<String>(
+          key: const ValueKey('collections-sort'),
           scale: scale,
-          children: [
-            HikkaChip(label: 'Популярні', icon: Symbols.local_fire_department_rounded, scale: scale, selected: _sort == 'popular', onTap: () => _setSort('popular')),
-            HikkaChip(label: 'Нові', icon: Symbols.schedule_rounded, scale: scale, selected: _sort == 'new', onTap: () => _setSort('new')),
-          ],
+          pad: pad,
+          value: _sort,
+          options: const [('popular', 'Популярні'), ('new', 'Нові')],
+          onChanged: _setSort,
         ),
       ),
-      itemBuilder: (context, c) => HikkaCollectionCard(collection: c, scale: scale),
+      itemBuilder: (context, c) => HikkaCollectionRow(collection: c, scale: scale, pad: pad),
     );
   }
 }

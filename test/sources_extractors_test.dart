@@ -109,6 +109,18 @@ void main() {
       expect(calls.any((c) => c.startsWith('https://api.moonanime.net/premium/api/1.0/video/ne17f39gtidf642')), isTrue);
     });
 
+    test('поля відповіді для журналу: ключі, вкладені на рівень, короткі назви; без посилань', () {
+      final f = MoonExtractor.fieldsOf({
+        'video': {'hls': {'url': 'https://s.moonanime.art/x.m3u8'}, 'duration': 1420},
+        'subtitles': [1, 2],
+        'title': 'Re:Zero 4 — 14 серія',
+        'episode': 14,
+        'poster': 'https://moonanime.art/p.jpg',
+        'episode_title': 'https://moonanime.art/x',
+      });
+      expect(f, 'video{hls{…}, duration}, subtitles[2], title=«Re:Zero 4 — 14 серія», episode=14, poster, episode_title');
+    });
+
     test('основний хост .net недоступний → запасний .art', () async {
       SourcePrefs.instance.moonKey = 'KEY123';
       final http = SourceHttp(sender: (r) async {

@@ -163,7 +163,11 @@ class TimeStamp {
   final String name;
   final ChapterType type;
 
-  const TimeStamp(this.start, this.end, this.name, [this.type = ChapterType.other]);
+  /// The times are known for this very video (the site's own, or found by listening). `false`: moved over from
+  /// another version of the episode with a margin — offered as a button, never skipped by itself
+  final bool exact;
+
+  const TimeStamp(this.start, this.end, this.name, [this.type = ChapterType.other, this.exact = true]);
 }
 
 /// A video ready for playback: a direct link + everything the player needs.

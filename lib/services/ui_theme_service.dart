@@ -77,7 +77,10 @@ class AppThemePalette {
 
 class UiThemeService extends ChangeNotifier {
   static final UiThemeService instance = UiThemeService._();
-  UiThemeService._();
+  // The default (yellow) accent right away, before init() reads the saved one
+  UiThemeService._() {
+    _rebuildAccents();
+  }
 
   static const Map<String, (String, Color)> presets = {
     '#E46767': ('Кораловий', Color(0xFFE46767)),

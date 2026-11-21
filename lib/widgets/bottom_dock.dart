@@ -1,16 +1,17 @@
-import 'dart:ui' show FontFeature;
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
 import 'package:media_kit/media_kit.dart';
 import '../models/media_models.dart';
 import '../services/playback_clock.dart';
 import '../services/storage_service.dart';
 import '../utils/formatters.dart';
-import 'app_ui_kit.dart';
-import 'app_animation_kit.dart';
 import 'app_dock_widgets.dart';
+import 'line_icons.dart';
+import 'player_kit.dart';
 
+/// The PC player's bottom panel: the progress bar over the whole width; under it pause, previous, next, the volume,
+/// "8:12 / 24:00" and the chapter's name; on the right Anime4K, subtitles, sound, speed, "Серії", the mini player and
+/// full screen. Line icons straight on the video; the open menu's button and an engaged feature are in the accent.
 class BottomDock extends StatefulWidget {
   final double scale;
   final Player player;
@@ -123,7 +124,7 @@ class _BottomDockState extends State<BottomDock> {
 
   @override
   Widget build(BuildContext context) {
-    final scale = widget.scale;
+    final s = widget.scale;
     final player = widget.player;
 
     // The button's active state = its menu is open (even if you entered a submenu via "Налаштування", then only the settings button is active)
@@ -131,22 +132,42 @@ class _BottomDockState extends State<BottomDock> {
     final bool isSubActive = widget.drawerOwner == 'subs';
     final bool isAudActive = widget.drawerOwner == 'audio';
     final bool isSpdActive = widget.drawerOwner == 'speed';
-    // The same width of both labels (by the duration length) so the seek bar is centered
-    final String durText = AppFormatters.formatTime(player.state.duration);
-    final double timeW = (durText.length.clamp(4, 8) * 7.6 + 22) * scale;
+    final bool customSpeed = (widget.currentSpeed - 1.0).abs() > 0.01;
     final bool seekButtons = StorageService.getSeekButtons();
     final int seekStep = StorageService.getSeekStep();
     final bool hasSubsOn = player.state.track.subtitle.id != 'no' && player.state.track.subtitle.id.isNotEmpty && player.state.tracks.subtitle.any((t) => t.id != 'auto' && t.id != 'no');
+    // "8:12 / 24:00": two times as long as the duration, a digit ≈ 7.3 px at 13 px
+    final int durLen = AppFormatters.formatTime(player.state.duration).length.clamp(4, 8);
+    final double timeW = (durLen * 2 * 7.3 + 16) * s;
+
+    Widget icon(LineIcon icon, String label, VoidCallback? onTap, {Key? key, bool active = false, bool badge = false, VoidCallback? onSecondaryTap, Widget? glyph}) =>
+        PlayerIconButton(
+          key: key,
+          icon: icon,
+          glyph: glyph,
+          label: label,
+          active: active,
+          badge: badge,
+          onTap: onTap,
+          onSecondaryTap: onSecondaryTap,
+          size: 40 * s,
+          iconSize: 21 * s,
+        );
+
+    void seekBy(int seconds) {
+      final pos = player.state.position + Duration(seconds: seconds);
+      player.seek(pos < Duration.zero ? Duration.zero : pos);
+    }
 
     return Positioned(
       bottom: 0,
       left: 0,
       right: 0,
       child: Container(
-        padding: EdgeInsets.only(left: 35 * scale, right: 35 * scale, bottom: 20 * scale, top: 40 * scale),
+        padding: EdgeInsets.fromLTRB(14 * s, 64 * s, 14 * s, 8 * s),
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [Colors.transparent, Colors.black.withValues(alpha: 0.9)],
+            colors: [Colors.transparent, Colors.black.withValues(alpha: 0.78)],
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
           ),
@@ -154,340 +175,153 @@ class _BottomDockState extends State<BottomDock> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                AppClockBuilder<int>(
-                  listenable: _clock.seconds,
-                  live: widget.live,
-                  builder: (context, sec) => _timeText(scale, AppFormatters.formatTime(Duration(seconds: sec)), timeW),
-                ),
-                SizedBox(width: 12 * scale),
-                Expanded(child: AppSeekBar(scale: scale, player: player, chapters: widget.chapters, live: widget.live)),
-                SizedBox(width: 12 * scale),
-                AppClockBuilder<Duration>(
-                  listenable: _clock.duration,
-                  live: widget.live,
-                  builder: (context, dur) => _timeText(scale, AppFormatters.formatTime(dur), timeW),
-                ),
-              ],
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: 10 * s),
+              child: AppSeekBar(scale: s, player: player, chapters: widget.chapters, live: widget.live),
             ),
-            SizedBox(height: 8 * scale),
             LayoutBuilder(builder: (context, cons) {
               final double w = cons.maxWidth;
-              final double centerW = (seekButtons ? 212 : 128) * scale;
-              final double rightFull = 412 * scale;
-              final bool symmetric = w >= 2 * rightFull + centerW + 48 * scale;
-              // Little room: "Епізоди" becomes an icon (we do not squeeze the buttons)
-              final bool compactEp = !symmetric && (w - centerW - rightFull - 24 * scale) < 52 * scale;
-              final double rightW = (compactEp ? 340 : 412) * scale;
-              final double needed = 52 * scale + centerW + rightW + 24 * scale;
+              // Little room: "Серії" becomes an icon, the chapter name goes (the buttons are not squeezed)
+              final bool compact = w < 900 * s;
 
               final Widget left = Row(
-                      children: [
-                        ValueListenableBuilder<VolumeState>(
-                          valueListenable: widget.volume,
-                          builder: (context, vol, _) => AppVolumeControl(
-                            key: widget.volumeKey,
-                            scale: scale,
-                            volume: vol.volume,
-                            isMuted: vol.muted,
-                            onVolumeChanged: widget.onVolumeChanged,
-                            onToggleMute: widget.onToggleMute,
-                          ),
+                children: [
+                  StreamBuilder<bool>(
+                    stream: player.stream.playing,
+                    initialData: player.state.playing,
+                    builder: (context, snapshot) {
+                      final playing = snapshot.data ?? player.state.playing;
+                      return PlayerIconButton(
+                        key: const ValueKey('dock-play'),
+                        icon: playing ? LineIcon.pause : LineIcon.play,
+                        label: playing ? 'Пауза' : 'Відтворити',
+                        onTap: () => player.playOrPause(),
+                        size: 42 * s,
+                        iconSize: 24 * s,
+                      );
+                    },
+                  ),
+                  icon(LineIcon.skipPrevious, 'Попередній', widget.onPrevious ?? () => player.previous()),
+                  icon(LineIcon.skipNext, 'Наступний', widget.onNext ?? () => player.next()),
+                  if (seekButtons) ...[
+                    icon(LineIcon.replay, 'Назад на $seekStep с', () => seekBy(-seekStep), glyph: PlayerSeekGlyph(forward: false, seconds: seekStep, size: 22 * s)),
+                    icon(LineIcon.forward, 'Вперед на $seekStep с', () => seekBy(seekStep), glyph: PlayerSeekGlyph(forward: true, seconds: seekStep, size: 22 * s)),
+                  ],
+                  ValueListenableBuilder<VolumeState>(
+                    valueListenable: widget.volume,
+                    builder: (context, vol, _) => AppVolumeControl(
+                      key: widget.volumeKey,
+                      scale: s,
+                      volume: vol.volume,
+                      isMuted: vol.muted,
+                      onVolumeChanged: widget.onVolumeChanged,
+                      onToggleMute: widget.onToggleMute,
+                    ),
+                  ),
+                  SizedBox(width: 12 * s),
+                  // A box as wide as "24:00 / 24:00" in tabular digits: the row does not jump while the time runs
+                  SizedBox(
+                    width: timeW,
+                    child: AppClockBuilder<int>(
+                      listenable: _clock.seconds,
+                      live: widget.live,
+                      builder: (context, sec) => AppClockBuilder<Duration>(
+                        listenable: _clock.duration,
+                        live: widget.live,
+                        builder: (context, dur) => Text(
+                          '${AppFormatters.formatTime(Duration(seconds: sec))} / ${AppFormatters.formatTime(dur)}',
+                          key: const ValueKey('dock-time'),
+                          maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.fade,
+                          style: playerText(13 * s, color: const Color(0xFFE8E8EC), features: const [FontFeature.tabularFigures()]),
                         ),
-                        SizedBox(width: 12 * scale),
-                        Flexible(
-                          child: AppClockBuilder<int>(
-                            listenable: _chapterIdx,
-                            live: widget.live,
-                            builder: (context, chIndex) {
-                              final chTitle = (chIndex >= 0 && chIndex < widget.chapters.length)
-                                  ? AppFormatters.translateChapterTitle(widget.chapters[chIndex].title)
-                                  : '';
-                              if (chTitle.isEmpty) return const SizedBox.shrink();
-                              return Align(
-                                alignment: Alignment.centerLeft,
-                                child: IntrinsicWidth(child: AppOverlayButton(
-                                  scale: scale,
-                                  height: 30 * scale,
-                                  borderRadius: 8 * scale,
-                                  padding: EdgeInsets.only(left: 12 * scale, right: 6 * scale),
-                                  onTap: widget.onChaptersTap,
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Flexible(
-                                        child: Text(
-                                          chTitle,
-                                          style: TextStyle(
-                                            fontFamily: 'Arial',
-                                            color: Colors.white,
-                                            fontSize: 12.5 * scale,
-                                            fontWeight: FontWeight.w400,
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                      SizedBox(width: 2 * scale),
-                                      Icon(Symbols.chevron_right_rounded, color: Colors.white70, size: 16 * scale),
-                                    ],
-                                  ),
-                                )),
-                              );
-                            },
-                          ),
-                        ),
-                      ],
-                    );
-              final Widget center = Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _navButton(scale, Symbols.skip_previous_rounded, widget.onPrevious ?? () => player.previous()),
-                      if (seekButtons) ...[
-                        SizedBox(width: 8 * scale),
-                        _navButton(scale, Symbols.fast_rewind_rounded, () => player.seek(player.state.position - Duration(seconds: seekStep))),
-                      ],
-                      SizedBox(width: 8 * scale),
-                      StreamBuilder<bool>(
-                        stream: player.stream.playing,
-                        initialData: player.state.playing,
-                        builder: (context, snapshot) {
-                          final playing = snapshot.data ?? player.state.playing;
-                          return AppOverlayButton(
-                            scale: scale,
-                            width: 44 * scale,
-                            height: 30 * scale,
-                            borderRadius: 8 * scale,
-                            onTap: () => player.playOrPause(),
-                            child: AppFadeSwitcher(
-                              alignment: Alignment.center,
-                              child: Icon(
-                                playing ? Symbols.pause_rounded : Symbols.play_arrow_rounded,
-                                key: ValueKey(playing),
-                                color: Colors.white,
-                                size: 22 * scale,
-                                fill: 1,
-                                weight: 300,
-                                opticalSize: 24,
+                      ),
+                    ),
+                  ),
+                  if (!compact)
+                    Flexible(
+                      child: AppClockBuilder<int>(
+                        listenable: _chapterIdx,
+                        live: widget.live,
+                        builder: (context, chIndex) {
+                          final chTitle = (chIndex >= 0 && chIndex < widget.chapters.length)
+                              ? AppFormatters.translateChapterTitle(widget.chapters[chIndex].title)
+                              : '';
+                          if (chTitle.isEmpty) return const SizedBox.shrink();
+                          return MouseRegion(
+                            cursor: SystemMouseCursors.click,
+                            child: GestureDetector(
+                              key: const ValueKey('dock-chapter'),
+                              behavior: HitTestBehavior.opaque,
+                              onTap: widget.onChaptersTap,
+                              child: Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 8 * s, vertical: 8 * s),
+                                child: Text(
+                                  '· $chTitle',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: playerText(13 * s, color: const Color(0xFF9A9AA2)),
+                                ),
                               ),
                             ),
                           );
                         },
                       ),
-                      SizedBox(width: 8 * scale),
-                      if (seekButtons) ...[
-                        _navButton(scale, Symbols.fast_forward_rounded, () => player.seek(player.state.position + Duration(seconds: seekStep))),
-                        SizedBox(width: 8 * scale),
-                      ],
-                      _navButton(scale, Symbols.skip_next_rounded, widget.onNext ?? () => player.next()),
-                    ],
-                  );
-              final Widget right = Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  AppOverlayButton(
-                    key: widget.anime4kKey,
-                    scale: scale,
-                    width: 38 * scale,
-                    height: 30 * scale,
-                    borderRadius: 8 * scale,
-                    isActive: isA4kOpen,
-                    showBadge: widget.anime4kActive,
-                    onTap: widget.onAnime4kTap,
-                    onSecondaryTap: widget.onAnime4kSecondaryTap,
-                    child: Icon(
-                      Symbols.auto_awesome_rounded,
-                      color: AppOverlayButton.foreground(isA4kOpen),
-                      size: 17 * scale,
-                      weight: 300,
-                      opticalSize: 24,
                     ),
-                  ),
-                  SizedBox(width: 8 * scale),
-                  AppOverlayButton(
-                    key: widget.subsKey,
-                    scale: scale,
-                    width: 38 * scale,
-                    height: 30 * scale,
-                    borderRadius: 8 * scale,
-                    isActive: isSubActive,
-                    showBadge: hasSubsOn,
-                    onTap: widget.onSubsTap,
-                    child: Icon(
-                      Symbols.subtitles_rounded,
-                      color: AppOverlayButton.foreground(isSubActive),
-                      size: 17 * scale,
-                      weight: 300,
-                      opticalSize: 24,
-                    ),
-                  ),
-                  SizedBox(width: 8 * scale),
-                  AppOverlayButton(
-                    key: widget.audioKey,
-                    scale: scale,
-                    width: 38 * scale,
-                    height: 30 * scale,
-                    borderRadius: 8 * scale,
-                    isActive: isAudActive,
-                    onTap: widget.onAudioTap,
-                    child: Icon(
-                      Symbols.music_note_rounded,
-                      color: AppOverlayButton.foreground(isAudActive),
-                      size: 17 * scale,
-                      fill: 1,
-                      weight: 300,
-                      opticalSize: 24,
-                    ),
-                  ),
-                  SizedBox(width: 8 * scale),
-                  AppOverlayButton(
-                      key: widget.speedKey,
-                      scale: scale,
-                      width: 64 * scale,
-                      height: 30 * scale,
-                      borderRadius: 8 * scale,
-                      isActive: isSpdActive,
-                      onTap: widget.onSpeedTap,
-                      onSecondaryTap: widget.onSpeedSecondaryTap,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            AppFormatters.getSpeedIcon(widget.currentSpeed),
-                            size: 16 * scale,
-                            color: AppOverlayButton.foreground(isSpdActive),
-                            weight: 300,
-                            opticalSize: 24,
-                          ),
-                          SizedBox(width: 5 * scale),
-                          Text(
-                            AppFormatters.formatSpeed(widget.currentSpeed),
-                            style: TextStyle(
-                              fontFamily: 'Arial',
-                              color: AppOverlayButton.foreground(isSpdActive),
-                              fontWeight: FontWeight.w500,
-                              fontSize: 11.5 * scale,
-                            ),
-                          ),
-                        ],
-                      ),
-                  ),
-                  SizedBox(width: 8 * scale),
-                  AppOverlayButton(
-                    scale: scale,
-                    width: (compactEp ? 38 : 110) * scale,
-                    height: 32 * scale,
-                    borderRadius: 16 * scale,
-                    isActive: widget.isEpisodesOpen,
-                    onTap: widget.onEpisodesTap,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        if (!compactEp) ...[
-                        Text(
-                          'Епізоди',
-                          style: TextStyle(
-                            fontFamily: 'Arial',
-                            color: AppOverlayButton.foreground(widget.isEpisodesOpen),
-                            fontWeight: FontWeight.w500,
-                            fontSize: 11.5 * scale,
-                          ),
-                        ),
-                        SizedBox(width: 8 * scale),
-                        ],
-                        Icon(Symbols.video_library_rounded, color: AppOverlayButton.foreground(widget.isEpisodesOpen), size: 16 * scale, weight: 300, opticalSize: 24),
-                      ],
-                    ),
-                  ),
-                  SizedBox(width: 8 * scale),
-                  AppOverlayButton(
-                    scale: scale,
-                    width: 38 * scale,
-                    height: 30 * scale,
-                    borderRadius: 8 * scale,
-                    onTap: widget.onMiniPlayer,
-                    child: Icon(
-                      Symbols.picture_in_picture_alt_rounded,
-                      color: Colors.white,
-                      size: 18 * scale,
-                      weight: 300,
-                      opticalSize: 24,
-                    ),
-                  ),
-                  SizedBox(width: 8 * scale),
-                  AppOverlayButton(
-                    scale: scale,
-                    width: 38 * scale,
-                    height: 30 * scale,
-                    borderRadius: 8 * scale,
-                    onTap: widget.onToggleFullscreen,
-                    child: Icon(
-                      widget.isFullscreen ? Symbols.fullscreen_exit_rounded : Symbols.fullscreen_rounded,
-                      color: Colors.white,
-                      size: 18 * scale,
-                      weight: 300,
-                      opticalSize: 24,
-                    ),
-                  ),
                 ],
               );
 
-              Widget row = Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: symmetric
-                    ? [
-                        Expanded(child: left),
-                        center,
-                        Expanded(child: Align(alignment: Alignment.centerRight, child: right)),
-                      ]
-                    : [
-                        Expanded(child: left),
-                        SizedBox(width: 8 * scale),
-                        center,
-                        SizedBox(width: 16 * scale),
-                        right,
-                      ],
+              final Widget right = Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  icon(LineIcon.sparkle, 'Anime4K', widget.onAnime4kTap,
+                      key: widget.anime4kKey, active: isA4kOpen, badge: widget.anime4kActive, onSecondaryTap: widget.onAnime4kSecondaryTap),
+                  icon(LineIcon.subtitles, 'Субтитри', widget.onSubsTap, key: widget.subsKey, active: isSubActive, badge: hasSubsOn),
+                  icon(LineIcon.musicNote, 'Аудіодоріжка', widget.onAudioTap, key: widget.audioKey, active: isAudActive),
+                  PlayerPill(
+                    key: widget.speedKey,
+                    text: AppFormatters.formatSpeed(widget.currentSpeed),
+                    label: 'Швидкість відтворення',
+                    plain: true,
+                    active: isSpdActive || customSpeed,
+                    height: 34 * s,
+                    fontSize: 13.5 * s,
+                    onTap: widget.onSpeedTap,
+                    onSecondaryTap: widget.onSpeedSecondaryTap,
+                  ),
+                  SizedBox(width: 6 * s),
+                  PlayerPill(
+                    key: const ValueKey('dock-episodes'),
+                    icon: LineIcon.list,
+                    text: compact ? null : 'Серії',
+                    label: 'Серії',
+                    active: widget.isEpisodesOpen,
+                    height: 34 * s,
+                    fontSize: 13.5 * s,
+                    onTap: widget.onEpisodesTap,
+                  ),
+                  SizedBox(width: 6 * s),
+                  icon(LineIcon.pictureInPicture, 'Міні-плеєр', widget.onMiniPlayer),
+                  icon(widget.isFullscreen ? LineIcon.fullscreenExit : LineIcon.fullscreen, widget.isFullscreen ? 'Вийти з повного екрана' : 'На весь екран', widget.onToggleFullscreen),
+                ],
               );
-              // Edge case: a very narrow window, so we shrink the whole row as one piece
+
+              // The narrowest windows: the row shrinks as one piece instead of overflowing
+              final double needed = (compact ? 600 : 650) * s + timeW + (seekButtons ? 80 * s : 0);
+              Widget row = Row(
+                children: [
+                  Expanded(child: left),
+                  SizedBox(width: 12 * s),
+                  right,
+                ],
+              );
               if (w < needed) {
-                row = FittedBox(fit: BoxFit.scaleDown, child: SizedBox(width: needed, child: row));
+                row = FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: SizedBox(width: needed, child: row));
               }
-              return SizedBox(height: 32 * scale, child: row);
+              return SizedBox(height: 44 * s, child: row);
             }),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _navButton(double scale, IconData icon, VoidCallback onTap) {
-    return AppOverlayButton(
-      scale: scale,
-      width: 34 * scale,
-      height: 30 * scale,
-      borderRadius: 8 * scale,
-      onTap: onTap,
-      child: Icon(icon, color: Colors.white, size: 18 * scale, weight: 300, opticalSize: 24),
-    );
-  }
-
-  Widget _timeText(double scale, String text, double width) {
-    return AppOverlayButton(
-      scale: scale,
-      width: width,
-      height: 26 * scale,
-      borderRadius: 8 * scale,
-      child: Text(
-        text,
-        maxLines: 1,
-        style: TextStyle(
-          fontFamily: 'Arial',
-          color: Colors.white,
-          fontSize: 12.5 * scale,
-          fontWeight: FontWeight.w400,
-          fontFeatures: const [FontFeature.tabularFigures()],
         ),
       ),
     );

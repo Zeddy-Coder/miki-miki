@@ -2,11 +2,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:miki_miki/models/hikka_profile_models.dart';
 import 'package:miki_miki/models/hikka_models.dart';
 import 'package:miki_miki/models/hikka_user_models.dart';
-import 'dart:math' as math;
 
-import 'package:flutter/widgets.dart' show Offset;
 import 'package:miki_miki/services/hikka_markdown.dart';
-import 'package:miki_miki/widgets/hikka/hikka_user_profile.dart';
 
 /// api.hikka.io responses for the ZEDDY profile (shortened)
 const _anime = {'data_type': 'anime', 'slug': 'masamune-kun-no-revenge-r', 'title_ua': 'Помста Масамуне - 2 сезон', 'episodes_total': 12};
@@ -127,56 +124,6 @@ void main() {
       expect(HikkaProfileText.historyDay(DateTime(2026, 11, 13, 23), now), 'Вчора');
       expect(HikkaProfileText.historyDay(DateTime(2026, 11, 11, 22, 44), now), '11 листопада, середа');
       expect(HikkaProfileText.historyDay(DateTime(2025, 11, 11, 10), now), '11 листопада 2025, вівторок');
-    });
-  });
-
-  group('кільцева діаграма', () {
-    // Переглянуто, Дивлюсь, У планах, Кинуто, Відкладено, as in ZEDDY
-    const zeddy = [488, 21, 69, 77, 18];
-    const thickness = 12.4;
-    const radius = (124 - thickness) / 2;
-    final l = HikkaDonutLayout.compute(zeddy, radius: radius, thickness: thickness, gap: thickness * 0.8);
-
-    test('усі статуси видно: дрібні — щонайменше крапля', () {
-      expect(l.indices, [0, 1, 2, 3, 4]);
-      for (final len in l.lengths) {
-        expect(len, greaterThanOrEqualTo(l.cap * 2 - 1e-9));
-      }
-      expect(l.lengths[0], greaterThan(l.lengths[3]));
-    });
-
-    test('просвіти однакові, коло замкнене', () {
-      final total = l.lengths.fold<double>(0, (a, b) => a + b) + l.gapAngle * l.indices.length;
-      expect(total, closeTo(math.pi * 2, 1e-9));
-      for (int j = 1; j < l.indices.length; j++) {
-        expect(l.starts[j] - (l.starts[j - 1] + l.lengths[j - 1]), closeTo(l.gapAngle, 1e-9));
-      }
-      final wrap = (l.starts.first + math.pi * 2) - (l.starts.last + l.lengths.last);
-      expect(wrap, closeTo(l.gapAngle, 1e-9));
-    });
-
-    test('крапля для зовсім малого значення, решта — пропорційно', () {
-      final d = HikkaDonutLayout.compute([1000, 1], radius: 50, thickness: 10, gap: 8);
-      expect(d.lengths[1], closeTo(d.cap * 2, 1e-9));
-      final one = HikkaDonutLayout.compute([0, 5, 0], radius: 50, thickness: 10, gap: 8);
-      expect(one.indices, [1]);
-      expect(one.lengths.single, closeTo(math.pi * 2, 1e-9));
-      expect(HikkaDonutLayout.compute([0, 0], radius: 50, thickness: 10, gap: 8).indices, isEmpty);
-    });
-
-    test('натискання: дуга під кутом, центр, повз', () {
-      for (int j = 0; j < l.indices.length; j++) {
-        expect(l.hit(l.starts[j] + l.lengths[j] / 2), l.indices[j], reason: 'середина дуги $j');
-      }
-      const donut = HikkaStatusDonut(size: 124, scale: 1, values: zeddy, colors: [], labels: [], total: 673);
-      expect(donut.hitAt(const Offset(62, 62)), -1, reason: 'центр — усі');
-      expect(donut.hitAt(const Offset(-40, -40)), isNull);
-      // At the top, slightly right of 12 o'clock: the start of "Переглянуто"
-      final r = (124 - donut.thickness) / 2;
-      final a = l.starts[0] + l.lengths[0] * 0.1;
-      expect(donut.hitAt(Offset(62 + math.cos(a) * r, 62 + math.sin(a) * r)), 0);
-      final b = l.starts[4] + l.lengths[4] / 2;
-      expect(donut.hitAt(Offset(62 + math.cos(b) * r, 62 + math.sin(b) * r)), 4, reason: '«Відкладено» — крапля, але влучає');
     });
   });
 

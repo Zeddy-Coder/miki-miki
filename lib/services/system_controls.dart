@@ -23,6 +23,19 @@ class SystemControls {
   /// Another app took / returned audio focus: `loss` (permanent), `transient` (a call etc.), `gain`
   static void Function(String event)? onAudioFocus;
 
+  /// The audio output devices changed (Bluetooth, wired, USB, HDMI): `change` is `added` / `removed`, `devices` what came
+  /// or went, `route` where the sound goes now
+  static void Function({required String change, List<String> devices, String route})? onAudioRoute;
+
+  /// Headphones came off (Android's "becoming noisy")
+  static void Function()? onAudioNoisy;
+
+  /// The network changed (Android): online, metered (mobile data), type (`wifi`, `cellular` …)
+  static void Function(bool online, bool metered, String type)? onNetwork;
+
+  /// A button of the downloads notification: `pause`
+  static void Function(String action)? onDownloadsAction;
+
   static bool _bound = false;
 
   /// Tests only: allows working with the channel off Android
@@ -39,6 +52,20 @@ class SystemControls {
       if (call.method == 'pipChanged') inPip.value = call.arguments == true;
       if (call.method == 'pipToggle') onPipToggle?.call();
       if (call.method == 'audioFocus' && call.arguments is String) onAudioFocus?.call(call.arguments as String);
+      if (call.method == 'audioRoute' && call.arguments is Map) {
+        final a = (call.arguments as Map).cast<String, Object?>();
+        onAudioRoute?.call(
+          change: '${a['change'] ?? ''}',
+          devices: [for (final d in (a['devices'] as List?) ?? const []) '$d'],
+          route: '${a['route'] ?? ''}',
+        );
+      }
+      if (call.method == 'audioNoisy') onAudioNoisy?.call();
+      if (call.method == 'network' && call.arguments is Map) {
+        final a = call.arguments as Map;
+        onNetwork?.call(a['online'] == true, a['metered'] == true, '${a['type'] ?? ''}');
+      }
+      if (call.method == 'downloadsAction' && call.arguments is String) onDownloadsAction?.call(call.arguments as String);
       if (call.method == 'deepLink' && call.arguments is String) DeepLinks.handle(call.arguments as String);
       return null;
     });
@@ -100,6 +127,16 @@ class SystemControls {
     return raw?.map((k, v) => MapEntry('$k', v));
   }
 
+  /// How the app's recent processes ended after [since] (Android 11+, `ApplicationExitInfo`): reason, status,
+  /// description, importance, memory, and the raw trace of a native crash / freeze. Off Android or older, empty.
+  static Future<List<Map<String, Object?>>> exits(int since) async {
+    final raw = await _call<List<Object?>>('exits', {'since': since});
+    return [
+      for (final e in raw ?? const <Object?>[])
+        if (e is Map) e.map((k, v) => MapEntry('$k', v)),
+    ];
+  }
+
   /// Opens an http(s) link in the default browser. false: the address is invalid or there is no browser.
   static Future<bool> openUrl(String url, {bool chooser = false}) async {
     final uri = Uri.tryParse(url.trim());
@@ -121,6 +158,39 @@ class SystemControls {
       debugPrint('[SystemControls] openUrl: $e');
       return false;
     }
+  }
+
+  /// Android: hands a downloaded APK to the system installer. `started`: the installer opened; `permission`: the
+  /// settings opened so the person allows Miki Miki to install apps ([askPermission]); `denied`: that permission is
+  /// still missing ([askPermission] false). Anything else is why it failed
+  static Future<String> installApk(String path, {bool askPermission = true}) async {
+    if (!_active) return 'unsupported';
+    try {
+      return await _channel.invokeMethod<String>('installApk', {'path': path, 'ask': askPermission}) ?? 'failed';
+    } on PlatformException catch (e) {
+      return '${e.code}: ${e.message}';
+    } catch (e) {
+      return '$e';
+    }
+  }
+
+  /// The network now (Android): online, metered, type; null elsewhere
+  static Future<(bool, bool, String)?> networkState() async {
+    final m = await _call<Map>('networkState');
+    if (m == null) return null;
+    return (m['online'] == true, m['metered'] == true, '${m['type'] ?? ''}');
+  }
+
+  /// Android: keeps downloads going in the background and with the screen off (a foreground service with a progress
+  /// notification). [progress] 0…100, -1 — unknown; `active: false` stops the service
+  static Future<void> downloadService({required bool active, String title = '', String text = '', int progress = -1}) =>
+      _call<void>('downloadService', {'active': active, 'title': title, 'text': text, 'progress': progress});
+
+  /// Free and total bytes on the storage where [path] lies (Android); null elsewhere
+  static Future<(int, int)?> storageInfo(String path) async {
+    final m = await _call<Map>('storageInfo', {'path': path});
+    if (m == null) return null;
+    return ((m['free'] as num?)?.toInt() ?? 0, (m['total'] as num?)?.toInt() ?? 0);
   }
 
   /// FCM token of this phone; null if there is no Firebase in this build or off Android

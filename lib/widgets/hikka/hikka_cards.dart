@@ -1,134 +1,209 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../../models/hikka_models.dart';
-import '../../models/hikka_user_models.dart';
 import '../../services/hikka_lists.dart';
 import '../../services/hikka_nav.dart';
 import '../../services/hikka_prefs.dart';
+import '../../services/quick_play.dart';
 import '../../services/ui_theme_service.dart';
-import '../app_ui_kit.dart';
+import '../../services/watch_service.dart';
+import '../app_tones.dart';
+import '../design_kit.dart';
+import '../line_icons.dart';
 import 'hikka_common.dart';
+import 'hikka_list_sheet.dart';
 import 'hikka_my_list_bar.dart';
+import 'hikka_watch_dialogs.dart';
 
-/// Title context menu actions
-enum HikkaItemAction { open, markWatched, remove }
+/// How far the person got in a title: the Hikka list counter or the local marks, whichever is larger
+int hikkaSeenEpisodes(HikkaAnime a) {
+  final mine = HikkaMyList.instance.cached(a.slug)?.episodes ?? 0;
+  int local = 0;
+  try {
+    local = WatchService.instance.store.watched('hikka:${a.slug}').length;
+  } catch (_) {
+    // The watch service may be missing (tests of other parts): only the list counter then
+  }
+  return mine > local ? mine : local;
+}
 
-/// Title context menu (long press / right mouse button): "Відкрити", "Позначити як переглянуте" (only when
-/// the person is signed in) and, if [canRemove], "Прибрати зі списку". Returns the chosen action or null.
-Future<HikkaItemAction?> showHikkaItemMenu(BuildContext context, Offset at, double scale, {bool canRemove = true}) async {
-  final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
-  PopupMenuItem<HikkaItemAction> item(HikkaItemAction v, IconData icon, String text) => PopupMenuItem<HikkaItemAction>(
-        value: v,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 20 * scale, color: uiTheme.colors.textMuted),
-            SizedBox(width: 10 * scale),
-            Text(text, style: hikkaStyle(13.5 * scale, color: uiTheme.colors.textPrimary)),
-          ],
-        ),
-      );
-  return showMenu<HikkaItemAction>(
-    context: context,
-    color: uiTheme.colors.drawerBg,
-    shape: RoundedRectangleBorder(
-      borderRadius: uiTheme.borderRadius(12 * scale),
-      side: BorderSide(color: uiTheme.colors.drawerBorder),
-    ),
-    position: RelativeRect.fromRect(at & const Size(1, 1), Offset.zero & overlay.size),
-    items: [
-      item(HikkaItemAction.open, Symbols.open_in_new_rounded, 'Відкрити'),
-      if (HikkaMyList.instance.signedIn) item(HikkaItemAction.markWatched, Symbols.check_circle_rounded, 'Позначити як переглянуте'),
-      if (canRemove) item(HikkaItemAction.remove, Symbols.playlist_remove_rounded, 'Прибрати зі списку'),
+/// Plays the title from where the person stopped (as "Продовжити перегляд" does); if that fails, opens the title page
+Future<void> hikkaContinue(BuildContext context, HikkaAnime a, double scale) async {
+  final ok = await QuickPlay.resume(
+    a,
+    onMissingNext: (plan, next) => context.mounted ? WatchDialogs.missingNext(context, scale: scale, plan: plan, next: next) : Future.value(null),
+  );
+  if (!ok) HikkaNav.instance.openAnime(a.slug, seed: a);
+}
+
+/// The long-press menu of a title (on a PC, the right button): a dark tile with the title's name, "Продовжити · серія N"
+/// when the person has started it (otherwise "Відкрити"), "Мій список…" (the sheet) for a signed-in person and
+/// [removeLabel] in red when the card can be removed ([onRemove]). [lift] is the card drawn over the dimmed screen.
+Future<void> showHikkaCardMenu(
+  BuildContext context, {
+  required HikkaAnime anime,
+  required double scale,
+  required Rect anchor,
+  Widget? lift,
+  int? seen,
+  String removeLabel = 'Прибрати зі списку',
+  VoidCallback? onRemove,
+  VoidCallback? onOpen,
+}) async {
+  final a = anime;
+  final done = seen ?? hikkaSeenEpisodes(a);
+  final total = a.episodesTotal ?? 0;
+  final canContinue = done > 0 && (total <= 0 || done < total);
+  final signedIn = HikkaMyList.instance.signedIn;
+  final status = HikkaMyList.instance.statusOf(a.slug);
+  const open = 'open', cont = 'continue', list = 'list', remove = 'remove';
+  final picked = await showAppMenu<String>(
+    context,
+    scale: scale,
+    anchor: anchor,
+    lift: lift,
+    width: 250,
+    title: a.title(HikkaPrefs.instance.titleLang),
+    entries: [
+      if (canContinue)
+        AppMenuEntry(cont, 'Продовжити · серія ${done + 1}', icon: (c) => LineIconView(LineIcon.play, size: 18 * scale, color: c))
+      else
+        AppMenuEntry(open, 'Відкрити', icon: (c) => LineIconView(LineIcon.openOut, size: 19 * scale, color: c)),
+      if (signedIn) AppMenuEntry(list, 'Мій список…', icon: (c) => HikkaListMark(status: status, size: 19 * scale, color: c)),
+      if (onRemove != null) ...[
+        const AppMenuEntry<String>.divider(),
+        AppMenuEntry(remove, removeLabel, danger: true, icon: (c) => LineIconView(LineIcon.trash, size: 19 * scale, color: c)),
+      ],
     ],
   );
+  if (!context.mounted) return;
+  switch (picked) {
+    case open:
+      (onOpen ?? () => HikkaNav.instance.openAnime(a.slug, seed: a))();
+    case cont:
+      await hikkaContinue(context, a, scale);
+    case list:
+      await showHikkaListSheet(context, anime: a, scale: scale);
+    case remove:
+      onRemove?.call();
+  }
 }
 
-/// "Позначити як переглянуте": status "Переглянуто", the episode counter topped up to the end
-Future<void> markHikkaWatched(HikkaAnime a) async {
-  try {
-    await HikkaMyList.instance.save(a.slug, status: HikkaWatchStatus.completed, total: a.episodesTotal, anime: a);
-  } catch (_) {}
+/// A grey line under a card title: parts joined by " · "; every "★" becomes the line star
+class HikkaMetaLine extends StatelessWidget {
+  final String text;
+  final double scale;
+  final double size;
+  final Color? color;
+  final int maxLines;
+
+  const HikkaMetaLine({super.key, required this.text, required this.scale, this.size = 12, this.color, this.maxLines = 1});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = color ?? uiTheme.textMuted;
+    final style = TextStyle(fontFamily: 'Arial', color: c, fontSize: size * scale, height: 1.25);
+    final parts = text.split('★');
+    return Text.rich(
+      TextSpan(
+        style: style,
+        children: [
+          for (int i = 0; i < parts.length; i++) ...[
+            if (i > 0)
+              WidgetSpan(
+                alignment: PlaceholderAlignment.middle,
+                child: Padding(
+                  padding: EdgeInsets.only(bottom: 1 * scale),
+                  child: LineIconView(LineIcon.star, size: size * scale, color: c, stroke: 1.8),
+                ),
+              ),
+            TextSpan(text: parts[i]),
+          ],
+        ],
+      ),
+      maxLines: maxLines,
+      overflow: TextOverflow.ellipsis,
+    );
+  }
 }
 
-/// Anime card: a poster with a score, the title on two lines, type and year. A tap opens the anime page.
+/// Anime card: a clean poster (a thin progress bar at its bottom when given), the title on two lines and a grey line
+/// "2013 · ★ 8.58". A tap opens the anime page; a long press (on a PC, the right button) opens the card menu.
 class HikkaAnimeCard extends StatelessWidget {
   final HikkaAnime anime;
   final double scale;
 
-  /// A label instead of "type · year" (e.g. "Сьогодні, 18:30")
+  /// The grey line instead of "year · ★ score" (e.g. "6 з 25 · ★ 8"); "★" is drawn as the line star
   final String? caption;
 
-  /// A badge in the top left corner of the poster (e.g. "Серія 5")
-  final String? pill;
-
-  /// Badge color (accent by default)
-  final Color? pillColor;
+  /// Watched share 0…1: a thin accent bar at the bottom of the poster
+  final double? progress;
   final VoidCallback? onTap;
 
-  /// If set, the context menu (long press / right mouse button) also has "Прибрати зі списку"
+  /// If set, the card menu also has [removeLabel] in red
   final VoidCallback? onRemove;
+  final String removeLabel;
 
-  /// A status strip from "Списки" at the bottom of the poster (only when the person is signed in and the title is in their lists)
-  final bool showStatus;
+  /// Episodes watched, for "Продовжити · серія N" in the menu (by default from the list and local marks)
+  final int? seen;
 
   const HikkaAnimeCard({
     super.key,
     required this.anime,
     required this.scale,
     this.caption,
-    this.pill,
-    this.pillColor,
+    this.progress,
     this.onTap,
     this.onRemove,
-    this.showStatus = true,
+    this.removeLabel = 'Прибрати зі списку',
+    this.seen,
   });
 
-  Future<void> _menu(BuildContext context, Offset at) async {
-    final pick = await showHikkaItemMenu(context, at, scale, canRemove: onRemove != null);
-    switch (pick) {
-      case HikkaItemAction.open:
-        if (onTap != null) {
-          onTap!();
-        } else {
-          HikkaNav.instance.openAnime(anime.slug, seed: anime);
-        }
-      case HikkaItemAction.markWatched:
-        await markHikkaWatched(anime);
-      case HikkaItemAction.remove:
-        onRemove?.call();
-      case null:
-        break;
-    }
-  }
+  /// The default grey line: the year and the score
+  static String metaOf(HikkaAnime a) => [
+        if (a.year != null) '${a.year}',
+        if (a.hasScore) '★ ${a.score.toStringAsFixed(2)}',
+      ].join(' · ');
 
-  Offset _centerOf(BuildContext context) {
-    final box = context.findRenderObject() as RenderBox;
-    return box.localToGlobal(Offset(box.size.width / 2, box.size.height / 3));
-  }
+  /// "TV Серіал · 2023" (lists)
+  static String typeYearOf(HikkaAnime a) => [
+        if (a.typeLabel.isNotEmpty) a.typeLabel,
+        if (a.year != null) '${a.year}',
+      ].join(' · ');
 
-  static String metaOf(HikkaAnime a) {
-    final parts = <String>[
-      if (a.typeLabel.isNotEmpty) a.typeLabel,
-      if (a.year != null) '${a.year}',
-    ];
-    return parts.join(' · ');
+  Future<void> _menu(BuildContext context, {Offset? at}) async {
+    final rect = at != null ? Rect.fromLTWH(at.dx, at.dy, 1, 1) : appRectOf(context);
+    await showHikkaCardMenu(
+      context,
+      anime: anime,
+      scale: scale,
+      anchor: rect,
+      seen: seen,
+      // A long press lifts the card over the dimmed screen; the right button just opens the menu at the cursor
+      lift: at != null ? null : HikkaAnimeCard(anime: anime, scale: scale, caption: caption, progress: progress),
+      onRemove: onRemove,
+      removeLabel: removeLabel,
+      onOpen: onTap,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final title = anime.title(HikkaPrefs.instance.titleLang);
     final sub = caption ?? metaOf(anime);
-    final r = uiTheme.borderRadius(10 * scale);
+    final r = uiTheme.borderRadius(12 * scale);
+    final p = progress;
     return Semantics(
       button: true,
-      label: sub.isEmpty ? title : '$title. $sub',
+      label: sub.isEmpty ? title : '$title. ${sub.replaceAll('★', 'оцінка')}',
       excludeSemantics: true,
       child: InkWell(
         onTap: onTap ?? () => HikkaNav.instance.openAnime(anime.slug, seed: anime),
-        onLongPress: () => _menu(context, _centerOf(context)),
-        onSecondaryTapDown: (d) => _menu(context, d.globalPosition),
+        onLongPress: () => unawaited(_menu(context)),
+        onSecondaryTapDown: (d) => unawaited(_menu(context, at: d.globalPosition)),
         borderRadius: r,
         splashColor: Colors.transparent,
         highlightColor: uiTheme.touchHighlight,
@@ -140,46 +215,20 @@ class HikkaAnimeCard extends StatelessWidget {
               url: anime.image,
               malId: anime.malId,
               scale: scale,
+              radius: 12,
               icon: Symbols.movie_rounded,
-              overlay: ListenableBuilder(
-                listenable: HikkaMyList.instance,
-                builder: (context, _) {
-                  final status = showStatus ? HikkaMyList.instance.statusOf(anime.slug) : null;
-                  return Stack(
+              overlay: Stack(
                 children: [
-                  if (status != null || pill != null || anime.hasScore)
-                    Positioned(
-                      left: 6 * scale,
-                      right: (anime.isAdult ? 40 : 6) * scale,
-                      top: 6 * scale,
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.centerLeft,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (status != null)
-                              HikkaPill(text: status.label, scale: scale, background: Color.lerp(hikkaStatusColor(status), Colors.black, 0.22)!.withValues(alpha: 0.84), foreground: Colors.white, weight: FontWeight.w400, size: 11.5),
-                            if (pill != null)
-                              HikkaPill(
-                                text: pill!,
-                                scale: scale,
-                                background: pillColor != null ? Color.lerp(pillColor, Colors.black, 0.22)!.withValues(alpha: 0.84) : uiTheme.accentColor.withValues(alpha: 0.92),
-                                foreground: pillColor != null ? Colors.white : uiTheme.onAccent,
-                                weight: pillColor != null ? FontWeight.w400 : FontWeight.bold,
-                                size: pillColor != null ? 11.5 : 10.5,
-                              ),
-                            if ((status != null || pill != null) && anime.hasScore) SizedBox(width: 4 * scale),
-                            if (anime.hasScore) HikkaScoreBadge(score: anime.score, scale: scale),
-                          ],
-                        ),
-                      ),
-                    ),
                   if (anime.isAdult)
                     Positioned(right: 6 * scale, top: 6 * scale, child: HikkaPill(text: '18+', scale: scale, background: const Color(0xC7C62828))),
+                  if (p != null && p > 0)
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      child: HikkaProgressBar(value: p, height: 4 * scale, track: const Color(0xD9141416)),
+                    ),
                 ],
-              );
-                },
               ),
             ),
             SizedBox(height: 7 * scale),
@@ -187,20 +236,42 @@ class HikkaAnimeCard extends StatelessWidget {
               title,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontFamily: 'Arial', color: uiTheme.textPrimary, fontSize: 12.5 * scale, fontWeight: FontWeight.w600, height: 1.25),
+              style: TextStyle(fontFamily: 'Arial', color: uiTheme.textPrimary, fontSize: 13 * scale, height: 1.25),
             ),
             if (sub.isNotEmpty)
               Padding(
                 padding: EdgeInsets.only(top: 3 * scale),
-                child: Text(
-                  sub,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontFamily: 'Arial', color: uiTheme.textMuted, fontSize: 11 * scale, height: 1.25),
-                ),
+                child: HikkaMetaLine(text: sub, scale: scale),
               ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// A thin progress bar: the accent part over a dark track
+class HikkaProgressBar extends StatelessWidget {
+  final double value;
+  final double height;
+  final Color? track;
+
+  const HikkaProgressBar({super.key, required this.value, required this.height, this.track});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: height,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          ColoredBox(color: track ?? AppTones.track),
+          FractionallySizedBox(
+            alignment: Alignment.centerLeft,
+            widthFactor: value.clamp(0.0, 1.0),
+            child: ColoredBox(color: uiTheme.accentColor),
+          ),
+        ],
       ),
     );
   }
@@ -213,12 +284,15 @@ class HikkaCharacterCard extends StatelessWidget {
   final String? caption;
   final VoidCallback? onTap;
 
-  const HikkaCharacterCard({super.key, required this.character, required this.scale, this.caption, this.onTap});
+  /// The title page's look: a rounder portrait and only the name in one quiet line
+  final bool plain;
+
+  const HikkaCharacterCard({super.key, required this.character, required this.scale, this.caption, this.onTap, this.plain = false});
 
   @override
   Widget build(BuildContext context) {
-    final r = uiTheme.borderRadius(10 * scale);
-    final sub = caption ?? '';
+    final r = uiTheme.borderRadius(12 * scale);
+    final sub = plain ? '' : (caption ?? '');
     return Semantics(
       button: true,
       label: sub.isEmpty ? character.name : '${character.name}. $sub',
@@ -232,23 +306,21 @@ class HikkaCharacterCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            HikkaPoster(url: character.image, scale: scale, icon: Symbols.person_rounded),
-            SizedBox(height: 7 * scale),
+            HikkaPoster(url: character.image, scale: scale, icon: Symbols.person_rounded, radius: 12, aspect: plain ? 84 / 118 : 0.7),
+            SizedBox(height: (plain ? 5 : 7) * scale),
+            // The name in a regular face, as under an anime card; the anime (a voiced role) in a grey line
             Text(
               character.name,
-              maxLines: 2,
+              maxLines: plain ? 1 : 2,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontFamily: 'Arial', color: uiTheme.textPrimary, fontSize: 12.5 * scale, fontWeight: FontWeight.w600, height: 1.25),
+              style: plain
+                  ? TextStyle(fontFamily: 'Arial', color: Color.lerp(uiTheme.textSecondary, uiTheme.textPrimary, 0.5), fontSize: 12 * scale, height: 1.2)
+                  : hikkaStyle(13 * scale, height: 1.25),
             ),
             if (sub.isNotEmpty)
               Padding(
                 padding: EdgeInsets.only(top: 3 * scale),
-                child: Text(
-                  sub,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontFamily: 'Arial', color: uiTheme.textMuted, fontSize: 11 * scale, height: 1.25),
-                ),
+                child: Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: hikkaStyle(12 * scale, color: uiTheme.textMuted, height: 1.3)),
               ),
           ],
         ),
@@ -339,72 +411,89 @@ class HikkaAnimeRow extends StatelessWidget {
           if (anime.seasonLabel.isNotEmpty) anime.seasonLabel,
           if (anime.episodesLabel.isNotEmpty) anime.episodesLabel,
         ].join(' · ');
-    final double posterW = 54 * scale;
-    return AppCard(
-      scale: scale,
-      radius: 10,
-      isHighlighted: highlighted,
-      onTap: onTap ?? () => HikkaNav.instance.openAnime(anime.slug, seed: anime),
-      padding: EdgeInsets.all(10 * scale),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          SizedBox(
-            width: posterW,
-            child: HikkaPoster(url: anime.image, malId: anime.malId, scale: scale, radius: 7, icon: Symbols.movie_rounded),
-          ),
-          SizedBox(width: 12 * scale),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
+    final grey = AppTones.rowSub;
+    // The title one came from sits in a frame with "Ви тут"; the others are flat rows
+    final shape = RoundedRectangleBorder(
+      borderRadius: uiTheme.borderRadius(14 * scale),
+      side: highlighted ? BorderSide(color: AppTones.plateOutline) : BorderSide.none,
+    );
+    return Semantics(
+      button: true,
+      selected: highlighted,
+      child: Material(
+        color: highlighted ? AppTones.menu : Colors.transparent,
+        shape: shape,
+        child: InkWell(
+          customBorder: shape,
+          splashColor: Colors.transparent,
+          highlightColor: uiTheme.touchHighlight,
+          hoverColor: uiTheme.hoverOverlay,
+          onTap: onTap ?? () => HikkaNav.instance.openAnime(anime.slug, seed: anime),
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: 10 * scale, vertical: 10 * scale),
+            child: Row(
               children: [
-                if (label != null)
-                  Padding(
-                    padding: EdgeInsets.only(bottom: 3 * scale),
-                    child: Text(
-                      label!,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontFamily: 'Arial', color: uiTheme.accentColor, fontSize: 11 * scale, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                Text(
-                  title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontFamily: 'Arial', color: uiTheme.textPrimary, fontSize: 13 * scale, fontWeight: FontWeight.w600, height: 1.25),
+                SizedBox(
+                  width: 52 * scale,
+                  child: HikkaPoster(url: anime.image, malId: anime.malId, scale: scale, radius: 8, aspect: 52 / 74, icon: Symbols.movie_rounded),
                 ),
-                if (meta.isNotEmpty)
-                  Padding(
-                    padding: EdgeInsets.only(top: 3 * scale),
-                    child: Text(
-                      meta,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontFamily: 'Arial', color: uiTheme.textMuted, fontSize: 11.5 * scale),
-                    ),
-                  ),
-                if (anime.hasScore)
-                  Padding(
-                    padding: EdgeInsets.only(top: 4 * scale),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Symbols.star_rounded, color: const Color(0xFFFFC23D), size: 14 * scale, fill: 1),
-                        SizedBox(width: 3 * scale),
-                        Text(
-                          anime.score.toStringAsFixed(2),
-                          style: TextStyle(fontFamily: 'Arial', color: uiTheme.textPrimary, fontSize: 11.5 * scale, fontWeight: FontWeight.w600),
+                SizedBox(width: 12 * scale),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (label != null || highlighted)
+                        Padding(
+                          padding: EdgeInsets.only(bottom: 3 * scale),
+                          child: Row(
+                            children: [
+                              if (label != null) Flexible(child: Text(label!, maxLines: 1, overflow: TextOverflow.ellipsis, style: hikkaStyle(12 * scale, color: uiTheme.textMuted))),
+                              if (highlighted)
+                                Container(
+                                  key: const ValueKey('franchise-here'),
+                                  margin: EdgeInsets.only(left: label != null ? 6 * scale : 0),
+                                  padding: EdgeInsets.symmetric(horizontal: 7 * scale, vertical: 2 * scale),
+                                  decoration: BoxDecoration(color: AppTones.plateOn, borderRadius: uiTheme.borderRadius(6 * scale)),
+                                  child: Text('Ви тут', style: hikkaStyle(11.5 * scale, color: AppTones.plateText)),
+                                ),
+                            ],
+                          ),
                         ),
-                      ],
-                    ),
+                      Text(title, maxLines: 2, overflow: TextOverflow.ellipsis, style: hikkaStyle(15 * scale, weight: FontWeight.bold, height: 1.25)),
+                      if (meta.isNotEmpty || anime.hasScore)
+                        Padding(
+                          padding: EdgeInsets.only(top: 4 * scale),
+                          child: Text.rich(
+                            TextSpan(
+                              style: hikkaStyle(12.5 * scale, color: grey, height: 1.3),
+                              children: [
+                                TextSpan(text: meta),
+                                if (anime.hasScore) ...[
+                                  TextSpan(text: meta.isEmpty ? '' : ' · '),
+                                  WidgetSpan(
+                                    alignment: PlaceholderAlignment.middle,
+                                    child: Padding(
+                                      padding: EdgeInsets.only(right: 3 * scale),
+                                      child: LineIconView(LineIcon.star, size: 12 * scale, color: grey, stroke: 1.8),
+                                    ),
+                                  ),
+                                  TextSpan(text: anime.score.toStringAsFixed(2)),
+                                ],
+                              ],
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                    ],
                   ),
+                ),
+                if (trailing != null) ...[SizedBox(width: 8 * scale), trailing!],
               ],
             ),
           ),
-          if (trailing != null) ...[SizedBox(width: 8 * scale), trailing!],
-        ],
+        ),
       ),
     );
   }

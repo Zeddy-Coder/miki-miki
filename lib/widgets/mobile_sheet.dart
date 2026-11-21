@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../services/ui_theme_service.dart';
 import 'app_animation_kit.dart';
+import 'app_tones.dart';
 
 /// A frame for menus on a phone: in portrait a bottom sheet (up to ~68 % of the screen height),
 /// in landscape a side panel on the right. Under it a scrim: a tap on it closes the panel.
@@ -98,14 +99,16 @@ class MobileSheetFrame extends StatelessWidget {
     );
   }
 
+  /// The surface of the app's sheets (`showAppSheet`): the page colour with a thin line, rounded 22 / 24 dp
   Widget _surface({required bool landscape, required EdgeInsets pad, required Widget child}) {
-    final r = Radius.circular(uiTheme.radius(22));
-    final BorderRadius radius = landscape ? BorderRadius.horizontal(left: r) : BorderRadius.vertical(top: r);
+    final BorderRadius radius = landscape
+        ? BorderRadius.horizontal(left: Radius.circular(uiTheme.radius(22)))
+        : BorderRadius.vertical(top: Radius.circular(uiTheme.radius(24)));
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: uiTheme.colors.drawerBg,
+        color: uiTheme.bgSurface,
         borderRadius: radius,
-        border: Border.all(color: uiTheme.colors.drawerBorder, width: 1.0),
+        border: Border.all(color: AppTones.menuLine, width: 1.0),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: uiTheme.isLight ? 0.14 : 0.55),
@@ -150,15 +153,13 @@ class _GrabHandle extends StatelessWidget {
       },
       onTap: onDismiss,
       child: SizedBox(
-        height: 22,
-        child: Center(
+        height: 17,
+        child: Align(
+          alignment: const Alignment(0, 0.2),
           child: Container(
             width: 38,
             height: 4,
-            decoration: BoxDecoration(
-              color: uiTheme.colors.textDarkMuted.withValues(alpha: 0.55),
-              borderRadius: uiTheme.borderRadius(2),
-            ),
+            decoration: BoxDecoration(color: AppTones.dot, borderRadius: BorderRadius.circular(2)),
           ),
         ),
       ),

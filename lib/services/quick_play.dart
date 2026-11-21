@@ -7,6 +7,8 @@ import 'dart:math' as math;
 
 import '../models/hikka_models.dart';
 import 'app_log.dart';
+import 'downloads/download_manager.dart';
+import 'network_status.dart';
 import '../models/hikka_user_models.dart';
 import 'hikka_lists.dart';
 import 'hikka_prefs.dart';
@@ -59,13 +61,20 @@ class QuickPlay {
         svc.store.clearPinnedGroup(title.animeKey);
         group = picked;
       }
-      final point = continuePoint(episodeKeysOf(group), svc.store.watched(title.animeKey), svc.store.last(title.animeKey)?.epKey, hikkaEpisodes: mine?.episodes ?? 0);
+      final keys = episodeKeysOf(group);
+      final watched = svc.store.watched(title.animeKey);
+      final point = continuePoint(keys, watched, svc.store.last(title.animeKey)?.epKey, hikkaEpisodes: mine?.episodes ?? 0);
+      var epKey = point.epKey;
+      // No internet: from the nearest downloaded episode
+      if (!NetworkStatus.instance.online) {
+        epKey = DownloadManager.instance.offlineStart(title.animeKey, group.id, keys, point.allWatched ? 0 : point.index, watched) ?? epKey;
+      }
       return await WatchLauncher.play(
         RemoteLaunch(
           title: title,
           group: group,
           animeTitle: anime.title(HikkaPrefs.instance.titleLang),
-          epKey: point.epKey,
+          epKey: epKey,
           poster: anime.image,
           hikka: load.hikka,
         ),

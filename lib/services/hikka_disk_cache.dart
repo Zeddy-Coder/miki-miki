@@ -7,6 +7,7 @@ import 'dart:io';
 
 import '../constants/app_identity.dart';
 import 'app_log.dart';
+import 'json_worker.dart';
 
 class DiskHit {
   final Object? json;
@@ -55,7 +56,7 @@ class HikkaDiskCache {
     try {
       final f = File('${dir.path}/${fileName(key)}');
       if (!await f.exists()) return null;
-      final m = jsonDecode(await f.readAsString());
+      final m = await JsonWorker.decode(await f.readAsString());
       if (m is! Map || m['k'] != key) return null;
       return DiskHit(m['j'], DateTime.fromMillisecondsSinceEpoch((m['at'] as num).toInt()));
     } catch (_) {
@@ -63,8 +64,9 @@ class HikkaDiskCache {
     }
   }
 
-  /// Writes in the background; a write error does not interfere
-  Future<void> write(String key, Object? json, DateTime at) async {
+  /// Writes in the background; a write error does not interfere. [raw] — the response text as it came: it goes into
+  /// the file as is (encoding a big response again cost the UI thread as much as decoding it)
+  Future<void> write(String key, Object? json, DateTime at, {String? raw}) async {
     final dir = await _ensureDir();
     if (dir == null) return;
     try {
@@ -72,7 +74,10 @@ class HikkaDiskCache {
       // Identical requests run in parallel: each has its own temporary file, otherwise the second rename fails
       final tmp = File('${f.path}.${DateTime.now().microsecondsSinceEpoch}.${_seq++}.tmp');
       if (!await dir.exists()) await dir.create(recursive: true);
-      await tmp.writeAsString(jsonEncode({'k': key, 'at': at.millisecondsSinceEpoch, 'j': json}), flush: false);
+      final text = raw != null
+          ? '{"k":${jsonEncode(key)},"at":${at.millisecondsSinceEpoch},"j":$raw}'
+          : jsonEncode({'k': key, 'at': at.millisecondsSinceEpoch, 'j': json});
+      await tmp.writeAsString(text, flush: false);
       await tmp.rename(f.path);
       if (!_pruned) {
         _pruned = true;

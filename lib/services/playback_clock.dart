@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:media_kit/media_kit.dart';
 import '../models/media_models.dart';
 import '../utils/formatters.dart';
+import 'songs/theme_songs.dart';
 
 /// A single "playback clock" for the UI.
 ///
@@ -231,7 +232,7 @@ class ChapterMath {
     return -1;
   }
 
-  static const List<String> _skipMarkers = ['опенінґ', 'ендінґ', 'рекап', 'титри'];
+  static const List<String> _skipMarkers = ['опенінґ', 'ендінґ', 'рекап', 'титри', 'заставк'];
 
   static bool isSkippable(VideoChapter chapter) {
     final t = AppFormatters.translateChapterTitle(chapter.title).toLowerCase();
@@ -239,6 +240,26 @@ class ChapterMath {
       if (t.contains(m)) return true;
     }
     return false;
+  }
+
+  /// An opening or an ending chapter (its song can be shown); null — neither
+  static SongKind? songKindOf(VideoChapter chapter) {
+    final t = AppFormatters.translateChapterTitle(chapter.title).toLowerCase();
+    if (t.contains('опенінґ')) return SongKind.op;
+    if (t.contains('ендінґ') || t.contains('титри')) return SongKind.ed;
+    return null;
+  }
+
+  /// The opening's / ending's chapter at [pos]: `index * 2 + 1` within its first [early], `index * 2` after; -1 — none
+  static int songStateAt(List<VideoChapter> chapters, Duration pos, Duration total, {Duration early = const Duration(seconds: 8)}) {
+    for (int i = 0; i < chapters.length; i++) {
+      final start = chapters[i].startTime;
+      final end = (i + 1 < chapters.length) ? chapters[i + 1].startTime : (chapters[i].endTime ?? total);
+      if (pos < start || pos >= end) continue;
+      if (songKindOf(chapters[i]) == null) return -1;
+      return i * 2 + (pos - start < early ? 1 : 0);
+    }
+    return -1;
   }
 
   /// For each chapter: whether to offer "Skip" for it (computed once per list)

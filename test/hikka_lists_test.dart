@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:miki_miki/models/hikka_models.dart';
@@ -6,6 +7,7 @@ import 'package:miki_miki/models/hikka_user_models.dart';
 import 'package:miki_miki/services/hikka_api.dart';
 import 'package:miki_miki/services/hikka_auth.dart';
 import 'package:miki_miki/services/hikka_lists.dart';
+import 'package:miki_miki/services/storage_service.dart';
 
 import 'support/hikka_account_fakes.dart';
 import 'support/hikka_fakes.dart';
@@ -249,6 +251,26 @@ void main() {
       serveWatch(existing: watchJson(episodes: 9));
       await list.unmarkEpisode(slug, 12, total: 19);
       expect(server.of('PUT', '/watch/$slug'), isEmpty);
+    });
+
+    test('без мережі позначка чекає й іде на Hikka, щойно мережа є; дальша серія важить більше', () async {
+      StorageService.saveSection(HikkaMyList.pendingSection, {});
+      addTearDown(() => StorageService.saveSection(HikkaMyList.pendingSection, {}));
+      serveWatch();
+      var offline = true;
+      final get0 = server.routes['GET /watch/$slug']!;
+      final put0 = server.routes['PUT /watch/$slug']!;
+      server.routes['GET /watch/$slug'] = (r) => offline ? throw const SocketException('offline') : get0(r);
+      server.routes['PUT /watch/$slug'] = (r) => offline ? throw const SocketException('offline') : put0(r);
+      await list.syncEpisode(slug, 3, total: 12);
+      await list.syncEpisode(slug, 2, total: 12);
+      expect(list.pendingCount, 1);
+      offline = false;
+      await list.flushPending();
+      final sent = server.bodyOf(server.of('PUT', '/watch/$slug').last);
+      expect(sent['episodes'], 3);
+      expect(sent['status'], 'watching');
+      expect(list.pendingCount, 0);
     });
 
     test('остання серія: «Переглянуто»', () async {

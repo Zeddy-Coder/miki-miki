@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
 import 'package:media_kit/media_kit.dart';
 import '../models/media_models.dart';
 import '../services/app_log.dart';
 import '../services/playback_clock.dart';
 import '../services/storage_service.dart';
-import '../services/ui_theme_service.dart';
 import '../utils/formatters.dart';
 import 'app_animation_kit.dart';
 import 'app_dock_widgets.dart';
+import 'line_icons.dart';
+import 'player_kit.dart';
 
 class SkipButton extends StatefulWidget {
   final double scale;
@@ -19,6 +19,9 @@ class SkipButton extends StatefulWidget {
 
   /// Phone: the button is taller (44 dp), stands above the bottom control bar and does not go past the system insets
   final bool touch;
+
+  /// "заставка" → "заставку" (after «Пропустити»); "опенінґ", "ендінґ", "рекап" stay as they are
+  static String accusative(String title) => title.endsWith('ка') ? '${title.substring(0, title.length - 1)}у' : title;
 
   const SkipButton({
     super.key,
@@ -69,6 +72,8 @@ class _SkipButtonState extends State<SkipButton> {
       return;
     }
     if (!StorageService.getAutoSkipChapters() || index == _autoSkipped || index >= _chapters.length) return;
+    // Times moved over from another version with a margin: only the button, the person decides
+    if (!_chapters[index].autoSkip) return;
     if (widget.dismissedChapterStartTime == _chapters[index].startTime) return;
     final end = (index + 1 < _chapters.length) ? _chapters[index + 1].startTime : widget.player.state.duration;
     if (end <= _chapters[index].startTime) return;
@@ -130,55 +135,54 @@ class _SkipButtonState extends State<SkipButton> {
           );
 
 
+          // A dark plate over the video, always light on dark (whatever the app's theme), as the rest of the player
+          final double h = touch ? 48.0 : 38 * scale;
+          final radius = BorderRadius.circular(h / 2);
           return AppPresence(
             visible: true,
             slide: const Offset(0.12, 0),
             child: RepaintBoundary(
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: () {
-                  if (skippable.endTime != null) player.seek(skippable.endTime!);
-                },
-                borderRadius: uiTheme.borderRadius(touch ? 24.0 : 20 * scale),
-                splashColor: Colors.transparent,
-                highlightColor: uiTheme.touchHighlight,
-                hoverColor: uiTheme.isLight ? Colors.black.withValues(alpha: 0.08) : Colors.white.withValues(alpha: 0.15),
-                child: Container(
-                  height: touch ? 48.0 : 38 * scale,
-                  padding: EdgeInsets.symmetric(horizontal: (touch ? 16 : 14) * scale),
-                  decoration: BoxDecoration(
-                    color: uiTheme.colors.drawerBg.withValues(alpha: uiTheme.isLight ? 0.95 : 0.92),
-                    borderRadius: uiTheme.borderRadius(touch ? 24.0 : 20 * scale),
-                    border: Border.all(color: uiTheme.colors.borderMedium, width: 1.0),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.40),
-                        blurRadius: 10 * scale,
-                        offset: Offset(0, 3 * scale),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'Пропустити ${skippable.title.toLowerCase()}',
-                        style: TextStyle(
-                          fontFamily: 'Arial',
-                          color: uiTheme.colors.textPrimary,
-                          fontWeight: FontWeight.w600,
-                          fontSize: touch ? 14.5 : 12.5 * scale,
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  key: const ValueKey('skip-chapter'),
+                  onTap: () {
+                    if (skippable.endTime != null) player.seek(skippable.endTime!);
+                  },
+                  borderRadius: radius,
+                  splashColor: Colors.transparent,
+                  highlightColor: Colors.white.withValues(alpha: 0.12),
+                  hoverColor: Colors.white.withValues(alpha: 0.10),
+                  child: Ink(
+                    height: h,
+                    padding: EdgeInsets.only(left: touch ? 18.0 : 16 * scale, right: touch ? 14.0 : 12 * scale),
+                    decoration: BoxDecoration(
+                      color: const Color(0xC718181C),
+                      borderRadius: radius,
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Пропустити ${SkipButton.accusative(skippable.title.toLowerCase())}',
+                          style: TextStyle(
+                            fontFamily: 'Arial',
+                            fontFamilyFallback: const ['MikiSans'],
+                            color: PlayerTones.fg,
+                            fontWeight: FontWeight.bold,
+                            fontSize: touch ? 14.5 : 13 * scale,
+                          ),
                         ),
-                      ),
-                      SizedBox(width: 8 * scale),
-                      Icon(Symbols.skip_next_rounded, color: uiTheme.accentColor, size: touch ? 24.0 : 20 * scale),
-                    ],
+                        SizedBox(width: (touch ? 9 : 8) * (touch ? 1 : scale)),
+                        LineIconView(LineIcon.skipForward, size: touch ? 19.0 : 17 * scale, color: PlayerTones.fg, stroke: 1.8),
+                      ],
+                    ),
                   ),
                 ),
               ),
             ),
-          ));
+          );
         },
       ),
     );

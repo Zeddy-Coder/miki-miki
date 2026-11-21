@@ -1,9 +1,7 @@
 import '../../services/app_layers.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
 
-import '../../models/hikka_models.dart';
 import '../../services/hikka_api.dart';
 import '../../services/hikka_nav.dart';
 import '../../services/hikka_prefs.dart';
@@ -11,6 +9,9 @@ import '../../services/ui_theme_service.dart';
 import '../../utils/platform_info.dart';
 import '../app_animation_kit.dart';
 import '../app_ui_kit.dart';
+import '../line_icons.dart';
+import '../downloads/downloads_page.dart';
+import 'hikka_admin_page.dart';
 import 'hikka_anime_characters_page.dart';
 import 'hikka_anime_page.dart';
 import 'hikka_article_page.dart';
@@ -71,24 +72,55 @@ class _HikkaHubState extends State<HikkaHub> {
   /// The same for pages opened over them (the "Оновити" button in their heading does not touch the tabs underneath)
   int _routeRefresh = 0;
 
+  /// How far the title page under the status bar is scrolled: the veil behind the clock appears only once the content goes under it
+  final ValueNotifier<double> _immersiveScroll = ValueNotifier(0);
+
+  /// The tab pages, built once per set of inputs ([_rootKey]). Opening a page or switching a tab rebuilds the hub,
+  /// and handing Flutter the very same widget keeps it from rebuilding the hidden pages underneath (on a phone that
+  /// was ~2 000 widgets per tap: the "Головна" shelves while the title page opened)
+  final Map<MainTab, (Object, Widget)> _roots = {};
+
+  /// Bumped by the catalog settings and the theme: the tab pages read them while building, so then all of them rebuild
+  int _prefsTick = 0;
+  int _themeTick = 0;
+
   double get _scale => widget.scale;
+
+  Object get _rootKey => (_scale, widget.bottomInset, _refresh, _prefsTick, _themeTick);
 
   @override
   void initState() {
     super.initState();
     _mounted.add(_nav.main);
     _nav.addListener(_onChanged);
-    _prefs.addListener(_onChanged);
+    _prefs.addListener(_onPrefs);
+    uiTheme.addListener(_onTheme);
     _nav.refreshAll = _refreshAll;
   }
 
   @override
   void dispose() {
     _nav.removeListener(_onChanged);
-    _prefs.removeListener(_onChanged);
+    _prefs.removeListener(_onPrefs);
+    uiTheme.removeListener(_onTheme);
     if (_nav.refreshAll == _refreshAll) _nav.refreshAll = null;
+    _immersiveScroll.dispose();
     super.dispose();
   }
+
+  void _onPrefs() {
+    _prefsTick++;
+    _onChanged();
+  }
+
+  void _onTheme() {
+    if (!mounted) return;
+    setState(() => _themeTick++);
+  }
+
+  /// The settings opener handed to the pages: one tear-off for the hub's life, so a new callback from the shell does not
+  /// count as a change of the cached pages
+  void _openSettings({int? tab}) => widget.onOpenSettings(tab: tab);
 
   MainTab _shownMain = MainTab.values.first;
   double _tabDir = 1;
@@ -150,32 +182,9 @@ class _HikkaHubState extends State<HikkaHub> {
         HikkaRouteKind.notifications => 'Сповіщення',
         HikkaRouteKind.localLibrary => 'Локальна медіатека',
         HikkaRouteKind.settings => 'Налаштування',
+        HikkaRouteKind.admin => 'Адмін-панель',
+        HikkaRouteKind.downloads || HikkaRouteKind.downloadShelf => 'Завантаження',
       };
-
-  String? _routeSubtitle(HikkaRoute r) {
-    final lang = _prefs.titleLang;
-    switch (r.kind) {
-      case HikkaRouteKind.character:
-        final c = r.memo['character'] ?? r.seed;
-        return c is HikkaCharacter ? c.name : null;
-      case HikkaRouteKind.person:
-        final x = r.memo['person'] ?? r.seed;
-        return x is HikkaPerson ? x.name : null;
-      case HikkaRouteKind.collection:
-        final c = r.memo['collection'] ?? r.seed;
-        return c is HikkaCollection ? c.title : null;
-      case HikkaRouteKind.article:
-        final a = r.memo['article'] ?? r.seed;
-        return a is HikkaArticle ? a.title : null;
-      case HikkaRouteKind.user:
-        return '@${r.slug}';
-      case HikkaRouteKind.localLibrary || HikkaRouteKind.settings || HikkaRouteKind.notifications:
-        return null;
-      case HikkaRouteKind.anime || HikkaRouteKind.franchise || HikkaRouteKind.animeCharacters || HikkaRouteKind.animeStaff:
-        final a = r.memo['anime'] ?? r.seed;
-        return a is HikkaAnime ? a.title(lang) : null;
-    }
-  }
 
   /// Page address on hikka.io; `null` means the site has no corresponding page
   static String? _routeUrl(HikkaRoute r) => switch (r.kind) {
@@ -186,44 +195,67 @@ class _HikkaHubState extends State<HikkaHub> {
         HikkaRouteKind.collection => 'https://hikka.io/collections/${Uri.encodeComponent(r.slug)}',
         HikkaRouteKind.article => 'https://hikka.io/articles/${Uri.encodeComponent(r.slug)}',
         HikkaRouteKind.user => 'https://hikka.io/u/${Uri.encodeComponent(r.slug)}',
-        HikkaRouteKind.localLibrary || HikkaRouteKind.settings || HikkaRouteKind.notifications => null,
+        HikkaRouteKind.localLibrary ||
+        HikkaRouteKind.settings ||
+        HikkaRouteKind.notifications ||
+        HikkaRouteKind.admin ||
+        HikkaRouteKind.downloads ||
+        HikkaRouteKind.downloadShelf =>
+          null,
         _ => 'https://hikka.io/anime/${Uri.encodeComponent(r.slug)}',
+      };
+
+  /// Pages of the app itself (no Hikka data to refresh): an ordinary "Back" row that does not hide on scrolling
+  static bool _local(HikkaRoute r) => switch (r.kind) {
+        HikkaRouteKind.localLibrary || HikkaRouteKind.settings || HikkaRouteKind.admin || HikkaRouteKind.downloads || HikkaRouteKind.downloadShelf => true,
+        _ => false,
       };
 
   Widget _routeBar(HikkaRoute r) {
     final url = _routeUrl(r);
-    final local = r.kind == HikkaRouteKind.localLibrary || r.kind == HikkaRouteKind.settings;
+    final local = _local(r);
+    // Only the kind of the page: the page itself starts with the name, title or anime it is about
     return HikkaBackBar(
       scale: _scale,
       title: _routeTitle(r),
-      subtitle: _routeSubtitle(r),
       onBack: _nav.back,
       actions: [
         // On a phone a pull-down refreshes the page
-        if (!local && !AppPlatform.isMobile) HikkaIconButton(icon: Symbols.refresh_rounded, tooltip: 'Оновити', scale: _scale, onTap: _refreshRoute),
-        if (url != null)
-          HikkaIconButton(icon: Symbols.open_in_new_rounded, tooltip: 'Відкрити на hikka.io', scale: _scale, onTap: () => _nav.urlOpener(url)),
+        if (!local && !AppPlatform.isMobile) HikkaLineButton(scale: _scale, icon: LineIcon.refresh, tooltip: 'Оновити', iconSize: 21, onTap: _refreshRoute),
+        if (url != null) HikkaLineButton(scale: _scale, icon: LineIcon.openOut, tooltip: 'Відкрити на hikka.io', iconSize: 21, onTap: () => _nav.urlOpener(url)),
       ],
     );
   }
 
-  /// Round "Back" over the banner: a darkened circle so it is visible on any image
+  /// Round "Back" over the banner: a darkened circle so it is visible on any image. The circle is [floatingButtonSize],
+  /// the touch area around it is at least 48 dp
   Widget _floatingBack() {
-    final size = AppPlatform.isMobile ? AppPlatform.touchTarget : 38 * _scale;
+    final size = floatingButtonSize(_scale);
+    final hit = floatingButtonHit(_scale);
     return Semantics(
       button: true,
       label: 'Назад',
-      child: Material(
-        color: Colors.black.withValues(alpha: .45),
-        shape: RoundedRectangleBorder(borderRadius: uiTheme.borderRadius(size / 2)),
-        child: InkWell(
-          key: const ValueKey('anime-floating-back'),
-          customBorder: RoundedRectangleBorder(borderRadius: uiTheme.borderRadius(size / 2)),
-          onTap: _nav.back,
-          child: SizedBox(
-            width: size,
-            height: size,
-            child: Icon(Symbols.arrow_back_rounded, color: Colors.white, size: 22 * _scale, weight: 300, opticalSize: 24),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _nav.back,
+        child: SizedBox(
+          width: hit,
+          height: hit,
+          child: Center(
+            child: Material(
+              color: Colors.black.withValues(alpha: .55),
+              shape: RoundedRectangleBorder(borderRadius: uiTheme.borderRadius(size / 2)),
+              child: InkWell(
+                key: const ValueKey('anime-floating-back'),
+                customBorder: RoundedRectangleBorder(borderRadius: uiTheme.borderRadius(size / 2)),
+                onTap: _nav.back,
+                child: SizedBox(
+                  width: size,
+                  height: size,
+                  child: Center(child: LineIconView(LineIcon.back, size: 22 * _scale, color: Colors.white)),
+                ),
+              ),
+            ),
           ),
         ),
       ),
@@ -244,14 +276,23 @@ class _HikkaHubState extends State<HikkaHub> {
           bottomInset: inset,
           refreshToken: _refresh,
           onRefresh: _pullRefresh,
-          onOpenSettings: widget.onOpenSettings,
+          onOpenSettings: _openSettings,
         ),
     };
   }
 
+  /// [_root] from the cache while its inputs are the same (see [_roots])
+  Widget _cachedRoot(MainTab tab) {
+    final key = _rootKey;
+    final hit = _roots[tab];
+    if (hit != null && hit.$1 == key) return hit.$2;
+    final page = _root(tab);
+    _roots[tab] = (key, page);
+    return page;
+  }
+
   Widget _withRouteRefresh(HikkaRoute r) {
-    final local = r.kind == HikkaRouteKind.localLibrary || r.kind == HikkaRouteKind.settings;
-    if (!AppPlatform.isMobile || local) return _page(r);
+    if (!AppPlatform.isMobile || _local(r)) return _page(r);
     return AppPullToRefresh(onRefresh: () async => _refreshRoute(), child: _page(r));
   }
 
@@ -271,6 +312,9 @@ class _HikkaHubState extends State<HikkaHub> {
       HikkaRouteKind.notifications => HikkaNotificationsPage(route: r, scale: scale, bottomInset: inset),
       HikkaRouteKind.localLibrary => widget.localLibraryBuilder(context),
       HikkaRouteKind.settings => AppLayerClaim(child: widget.settingsBuilder?.call(context) ?? const SizedBox.shrink()),
+      HikkaRouteKind.admin => HikkaAdminPage(route: r, scale: scale, bottomInset: inset),
+      HikkaRouteKind.downloads => DownloadsPage(route: r, scale: scale, bottomInset: inset),
+      HikkaRouteKind.downloadShelf => DownloadShelfPage(route: r, scale: scale, bottomInset: inset),
     };
   }
 
@@ -279,7 +323,7 @@ class _HikkaHubState extends State<HikkaHub> {
     final top = _nav.top;
     // Scrolling pages have an overlay header that hides on scrolling down; the rest (library, settings) have an ordinary row
     final immersive = HikkaNav.immersive(top);
-    final overlayBar = top != null && !immersive && top.kind != HikkaRouteKind.localLibrary && top.kind != HikkaRouteKind.settings;
+    final overlayBar = top != null && !immersive && !_local(top);
 
     return Listener(
       // The side "Back" mouse button works as in a browser
@@ -316,7 +360,7 @@ class _HikkaHubState extends State<HikkaHub> {
                         animateOnMount: _mounted.length > 1,
                         child: TickerMode(
                           enabled: top == null && _nav.main == tab,
-                          child: _root(tab),
+                          child: _cachedRoot(tab),
                         ),
                       ),
                     ),
@@ -336,28 +380,45 @@ class _HikkaHubState extends State<HikkaHub> {
                                     ? Stack(
                                         fit: StackFit.expand,
                                         children: [
-                                          _withRouteRefresh(top),
-                                          // Content that scrolls under the status bar does not blend with the clock
+                                          NotificationListener<ScrollMetricsNotification>(
+                                            onNotification: (n) {
+                                              if (n.depth == 0 && n.metrics.axis == Axis.vertical) _immersiveScroll.value = n.metrics.pixels;
+                                              return false;
+                                            },
+                                            child: NotificationListener<ScrollUpdateNotification>(
+                                              onNotification: (n) {
+                                                if (n.depth == 0 && n.metrics.axis == Axis.vertical) _immersiveScroll.value = n.metrics.pixels;
+                                                return false;
+                                              },
+                                              child: _withRouteRefresh(top),
+                                            ),
+                                          ),
+                                          // Content that scrolls under the status bar does not blend with the clock; at the very top the banner
+                                          // shows through as is
                                           Positioned(
                                             left: 0,
                                             right: 0,
                                             top: 0,
                                             height: MediaQuery.paddingOf(context).top + 6,
                                             child: IgnorePointer(
-                                              child: DecoratedBox(
-                                                decoration: BoxDecoration(
-                                                  gradient: LinearGradient(
-                                                    begin: Alignment.topCenter,
-                                                    end: Alignment.bottomCenter,
-                                                    colors: [uiTheme.bgPrimary.withValues(alpha: .92), uiTheme.bgPrimary.withValues(alpha: 0)],
+                                              child: ValueListenableBuilder<double>(
+                                                valueListenable: _immersiveScroll,
+                                                builder: (context, y, child) => Opacity(opacity: (y / (90 * _scale)).clamp(0.0, 1.0), child: child),
+                                                child: DecoratedBox(
+                                                  decoration: BoxDecoration(
+                                                    gradient: LinearGradient(
+                                                      begin: Alignment.topCenter,
+                                                      end: Alignment.bottomCenter,
+                                                      colors: [uiTheme.bgPrimary.withValues(alpha: .92), uiTheme.bgPrimary.withValues(alpha: 0)],
+                                                    ),
                                                   ),
                                                 ),
                                               ),
                                             ),
                                           ),
                                           Positioned(
-                                            left: HikkaLayout.sidePad(context, _scale) - 4,
-                                            top: MediaQuery.paddingOf(context).top + 6 * _scale,
+                                            left: floatingButtonInset(context, _scale),
+                                            top: floatingButtonTop(context, _scale),
                                             child: _floatingBack(),
                                           ),
                                         ],

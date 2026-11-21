@@ -10,6 +10,7 @@ import '../../services/sources/ua/mikai_source.dart';
 import '../../services/ui_theme_service.dart';
 import '../app_animation_kit.dart';
 import '../app_ui_kit.dart';
+import '../settings_kit.dart';
 import 'hikka_common.dart';
 import 'hikka_watch_dialogs.dart';
 
@@ -114,19 +115,22 @@ class _SourcesSettingsState extends State<SourcesSettings> {
   Widget _watchedBlock(double scale) {
     final pct = StorageService.getWatchedPercent();
     const options = [70, 80, 85, 90, 95, 100];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _title('Серія вважається переглянутою після', hint: 'Тоді ж прогрес передається на Hikka'),
-        AppSegmentedBar<int>(
+    return SettingsGroup(
+      scale: scale,
+      label: 'Прогрес',
+      rows: [
+        SettingsChoiceRow<int>(
           scale: scale,
-          selectedValue: options.contains(pct) ? pct : 85,
-          options: [for (final o in options) AppSegmentOption(value: o, label: '$o%')],
-          onSelected: (v) => setState(() => StorageService.saveWatchedPercent(v)),
+          icon: Symbols.task_alt_rounded,
+          title: 'Серія вважається переглянутою після',
+          subtitle: 'Тоді ж прогрес передається на Hikka',
+          options: [for (final o in options) (o, '$o%')],
+          value: options.contains(pct) ? pct : 85,
+          onChanged: (v) => setState(() => StorageService.saveWatchedPercent(v)),
         ),
-        SizedBox(height: 10 * scale),
-        HikkaToggleRow(
+        SettingsToggleRow(
           scale: scale,
+          icon: Symbols.sports_score_rounded,
           title: 'Зараховувати за ендінґом',
           subtitle: 'Якщо в озвучці є мітка ендінґу, серія вважається переглянутою з його початку',
           value: StorageService.getWatchedByEnding(),
@@ -171,41 +175,45 @@ class _SourcesSettingsState extends State<SourcesSettings> {
           onPressed: onTap,
           icon: Icon(icon),
         );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _title('Пріоритет команд озвучення', hint: 'Зверху — найвищий пріоритет. Для кнопки «Дивитись» вибирається найвища команда, у якої є потрібна серія'),
-        HikkaToggleRow(
+    final teams = _allTeams;
+    final chosen = {for (final t in teams) if (_priority.any((x) => x.toLowerCase() == t.$1.toLowerCase())) t.$1};
+    return SettingsGroup(
+      scale: scale,
+      label: 'Озвучення',
+      hint: 'Зверху — найвищий пріоритет. Для кнопки «Дивитись» вибирається найвища команда, у якої є потрібна серія.',
+      rows: [
+        SettingsToggleRow(
           scale: scale,
+          icon: Symbols.mic_rounded,
           title: 'Спершу повні озвучення',
           subtitle: 'Озвучення без початку, без кінця чи з пропусками стоять нижче за повні незалежно від пріоритету',
           value: StorageService.getPreferFullDub(),
           onChanged: (v) => setState(() => StorageService.savePreferFullDub(v)),
         ),
-        SizedBox(height: 10 * scale),
         for (var i = 0; i < _priority.length; i++)
           Padding(
-            padding: EdgeInsets.only(bottom: 4 * scale),
+            padding: EdgeInsets.fromLTRB(16 * scale, 6 * scale, 6 * scale, 6 * scale),
             child: Row(
               children: [
-                SizedBox(width: 24 * scale, child: Text('${i + 1}', style: hikkaStyle(12.5 * scale, color: uiTheme.textMuted))),
+                SizedBox(width: 22 * scale, child: Text('${i + 1}', style: hikkaStyle(12.5 * scale, color: uiTheme.textMuted))),
                 SizedBox(width: 34 * scale, child: HikkaPoster(url: _avatarOf(_priority[i]), scale: scale, aspect: 1, radius: 17, icon: Symbols.groups_rounded)),
                 SizedBox(width: 10 * scale),
-                Expanded(child: Text(_priority[i], style: hikkaStyle(13 * scale), overflow: TextOverflow.ellipsis)),
+                Expanded(child: Text(_priority[i], style: hikkaStyle(14 * scale), overflow: TextOverflow.ellipsis)),
                 btn(Symbols.arrow_upward_rounded, 'Вище', i == 0 ? null : () => _moveTeam(i, -1)),
                 btn(Symbols.arrow_downward_rounded, 'Нижче', i == _priority.length - 1 ? null : () => _moveTeam(i, 1)),
                 btn(Symbols.close_rounded, 'Прибрати', () => _setPriority([..._priority]..removeAt(i))),
               ],
             ),
           ),
-        SizedBox(height: 8 * scale),
-        Builder(builder: (context) {
-          final teams = _allTeams;
-          final chosen = {for (final t in teams) if (_priority.any((x) => x.toLowerCase() == t.$1.toLowerCase())) t.$1};
-          return AppSearchDropdown<String>(
+        // The key keeps the open list alive while rows above it are added (a new team)
+        Padding(
+          key: const ValueKey('team-search'),
+          padding: EdgeInsets.all(12 * scale),
+          child: AppSearchDropdown<String>(
             scale: scale,
             value: '',
             multiSelected: chosen,
+            keyboardReserve: 0, // the settings page adds the slack under the block itself
             placeholder: _teamsLoading && teams.isEmpty ? 'Завантаження команд…' : 'Команди озвучення',
             searchHint: 'Назва команди',
             options: [
@@ -220,27 +228,9 @@ class _SourcesSettingsState extends State<SourcesSettings> {
             onAddCustom: (name) {
               if (!_priority.any((x) => x.toLowerCase() == name.toLowerCase())) _setPriority([..._priority, name]);
             },
-          );
-        }),
+          ),
+        ),
       ],
-    );
-  }
-
-  Widget _title(String text, {String? hint}) {
-    final scale = _scale;
-    return Padding(
-      padding: EdgeInsets.only(bottom: 10 * scale),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(text, style: hikkaStyle(13.5 * scale, weight: FontWeight.bold)),
-          if (hint != null)
-            Padding(
-              padding: EdgeInsets.only(top: 2 * scale),
-              child: Text(hint, style: hikkaStyle(11.5 * scale, color: uiTheme.textDarkMuted, height: 1.35)),
-            ),
-        ],
-      ),
     );
   }
 
@@ -253,38 +243,48 @@ class _SourcesSettingsState extends State<SourcesSettings> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Site switches are needed only when there are several sources (currently only Mikai)
-            if (widget.registry.all.length > 1) ...[
-              if (widget.heading) _title('Сайти', hint: 'Де шукати українські озвучки й субтитри. Вимкнені сайти не опитуються.'),
-              for (final s in widget.registry.all) ...[
-                HikkaToggleRow(
+            if (widget.registry.all.length > 1)
+              SettingsGroup(
+                scale: scale,
+                label: 'Сайти',
+                hint: widget.heading ? 'Де шукати українські озвучки й субтитри. Вимкнені сайти не опитуються.' : null,
+                rows: [
+                  for (final s in widget.registry.all)
+                    SettingsToggleRow(
+                      scale: scale,
+                      icon: Symbols.public_rounded,
+                      title: s.name,
+                      subtitle: '${s.id == 'mikai' ? 'Основне джерело: знає команди озвучення й серії. ' : ''}${s.about}'.trim(),
+                      value: _prefs.isEnabled(s.id),
+                      onChanged: (v) => _prefs.setEnabled(s.id, v),
+                    ),
+                ],
+              ),
+            SettingsGroup(
+              scale: scale,
+              label: 'Перегляд',
+              rows: [
+                SettingsChoiceRow<int>(
                   scale: scale,
-                  title: s.name,
-                  subtitle: '${s.id == 'mikai' ? 'Основне джерело: знає команди озвучення й серії. ' : ''}${s.about}'.trim(),
-                  value: _prefs.isEnabled(s.id),
-                  onChanged: (v) => _prefs.setEnabled(s.id, v),
+                  icon: Symbols.high_quality_rounded,
+                  title: 'Максимальна якість відео',
+                  subtitle: 'Можна змінити й під час перегляду',
+                  options: [for (final h in SourcePrefs.heights) (h, SourcePrefs.heightLabel(h))],
+                  value: _prefs.maxHeight,
+                  onChanged: (v) => _prefs.maxHeight = v,
                 ),
-                SizedBox(height: 14 * scale),
+                SettingsChoiceRow<String>(
+                  scale: scale,
+                  icon: Symbols.smart_display_rounded,
+                  title: 'Плеєр за замовчуванням',
+                  subtitle: 'Якщо серія доступна в Moon, використовується він, інакше — інший наявний',
+                  options: [for (final h in SourcesDialog.hosters) (h, h.isEmpty ? 'Авто' : h)],
+                  value: SourcesDialog.hosters.contains(_prefs.hoster) ? _prefs.hoster : '',
+                  onChanged: (v) => _prefs.hoster = v,
+                ),
               ],
-              SizedBox(height: 8 * scale),
-            ],
-            _title('Максимальна якість відео', hint: 'Можна змінити й під час перегляду'),
-            AppSegmentedBar<int>(
-              scale: scale,
-              selectedValue: _prefs.maxHeight,
-              options: [for (final h in SourcePrefs.heights) AppSegmentOption(value: h, label: SourcePrefs.heightLabel(h))],
-              onSelected: (v) => _prefs.maxHeight = v,
             ),
-            SizedBox(height: 22 * scale),
-            _title('Плеєр за замовчуванням', hint: 'Якщо серія доступна в Moon, використовується він, інакше — інший наявний'),
-            AppSegmentedBar<String>(
-              scale: scale,
-              selectedValue: SourcesDialog.hosters.contains(_prefs.hoster) ? _prefs.hoster : '',
-              options: [for (final h in SourcesDialog.hosters) AppSegmentOption(value: h, label: h.isEmpty ? 'Авто' : h)],
-              onSelected: (v) => _prefs.hoster = v,
-            ),
-            SizedBox(height: 22 * scale),
             _watchedBlock(scale),
-            SizedBox(height: 22 * scale),
             _priorityBlock(scale),
             SizedBox(height: 4 * scale),
           ],

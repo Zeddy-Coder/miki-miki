@@ -1,13 +1,14 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
+
 import '../../constants/app_identity.dart';
 import '../../utils/platform_info.dart';
 import '../../services/hikka_auth.dart';
-import '../../services/settings_sync.dart';
 import '../../services/system_controls.dart';
 import '../../services/ui_theme_service.dart';
 import '../app_animation_kit.dart';
@@ -192,163 +193,42 @@ class _HikkaLoginDialogState extends State<HikkaLoginDialog> {
   }
 }
 
-/// The "Акаунт" window (the icon in the profile header): progress sync switch and sign-out
-class HikkaAccountDialog extends StatelessWidget {
+/// The one accent button "Увійти через Hikka" (opens the sign-in window)
+class HikkaLoginButton extends StatelessWidget {
   final double scale;
 
-  const HikkaAccountDialog({super.key, required this.scale});
-
-  static Future<void> show(BuildContext context, {required double scale}) =>
-      AppDialogs.show<void>(context, builder: (_) => HikkaAccountDialog(scale: scale));
+  const HikkaLoginButton({super.key, required this.scale});
 
   @override
   Widget build(BuildContext context) {
-    final auth = HikkaAuth.instance;
-    final sync = SettingsSync.instance;
-    return ListenableBuilder(
-      listenable: Listenable.merge([auth, sync]),
-      builder: (context, _) => WatchDialogFrame(
-        scale: scale,
-        title: 'Акаунт',
-        icon: Symbols.manage_accounts_rounded,
-        body: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            HikkaToggleRow(
-              scale: scale,
-              title: 'Синхронізувати налаштування й теми',
-              subtitle: 'Вигляд, тема, мови, субтитри й місце зупинки в серіях однакові на телефоні та ПК.',
-              value: sync.enabled,
-              onChanged: (v) => sync.enabled = v,
-            ),
-            SizedBox(height: 10 * scale),
-            HikkaToggleRow(
-              scale: scale,
-              title: 'Передавати прогрес у списки',
-              subtitle: 'Переглянута серія додається в «Дивлюсь» і збільшує лічильник серій на Hikka.',
-              value: auth.syncProgress,
-              onChanged: (v) => auth.syncProgress = v,
-            ),
-            SizedBox(height: 14 * scale),
-            AppSecondaryButton(
-              scale: scale,
-              expand: true,
-              icon: Symbols.logout_rounded,
-              label: 'Вийти з акаунта',
-              onTap: () {
-                Navigator.of(context).maybePop();
-                unawaited(auth.signOut());
-              },
-            ),
-            SizedBox(height: 14 * scale),
-            Center(child: Text('Дані: Hikka · зображення: AniList', style: hikkaStyle(11 * scale, color: uiTheme.textDarkMuted))),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Hikka account card: a guest with a sign-in button or a profile with sign-out and the sync switch.
-class HikkaAccountCard extends StatelessWidget {
-  final double scale;
-
-  /// Avatar and name at the top of the card; in "Профіль" after sign-in the profile header already shows them
-  final bool showIdentity;
-
-  const HikkaAccountCard({super.key, required this.scale, this.showIdentity = true});
-
-  Widget _avatar(String? url) {
-    final size = 56 * scale;
-    return SizedBox(
-      width: size,
-      height: size,
-      child: (url == null || url.isEmpty)
-          ? Container(
-              decoration: BoxDecoration(shape: BoxShape.circle, color: uiTheme.accentWash, border: Border.all(color: uiTheme.accentBorder)),
-              child: Icon(Symbols.person_rounded, color: uiTheme.accentColor, size: 30 * scale, weight: 300),
-            )
-          : HikkaPoster(url: url, scale: scale, aspect: 1, radius: 28, icon: Symbols.person_rounded, alignment: Alignment.center),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final auth = HikkaAuth.instance;
-    final sync = SettingsSync.instance;
-    return ListenableBuilder(
-      listenable: Listenable.merge([auth, sync]),
-      builder: (context, _) {
-        final me = auth.me;
-        final signedIn = auth.signedIn;
-        return AppCard(
-          scale: scale,
-          radius: 16,
-          padding: EdgeInsets.all(16 * scale),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (showIdentity || !signedIn) ...[
-              Row(
+    final accent = uiTheme.accentColor;
+    final shape = RoundedRectangleBorder(borderRadius: uiTheme.borderRadius(14 * scale));
+    return Semantics(
+      button: true,
+      label: 'Увійти через Hikka',
+      excludeSemantics: true,
+      child: Material(
+        color: accent,
+        shape: shape,
+        child: InkWell(
+          customBorder: shape,
+          splashColor: Colors.transparent,
+          highlightColor: Colors.black.withValues(alpha: 0.08),
+          onTap: () => unawaited(HikkaLoginDialog.show(context, scale: scale)),
+          child: SizedBox(
+            height: math.max(44 * scale, AppPlatform.isMobile ? AppPlatform.touchTarget : 0.0),
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 22 * scale),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  _avatar(signedIn ? me?.avatar : null),
-                  SizedBox(width: 14 * scale),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(signedIn ? (me?.username.isNotEmpty == true ? me!.username : 'Акаунт Hikka') : 'Гість',
-                            maxLines: 1, overflow: TextOverflow.ellipsis, style: hikkaStyle(17 * scale, weight: FontWeight.bold)),
-                        SizedBox(height: 2 * scale),
-                        Text(signedIn ? 'Акаунт Hikka підключено' : 'Ви ще не увійшли', style: hikkaStyle(12.5 * scale, color: uiTheme.textMuted)),
-                      ],
-                    ),
-                  ),
+                  Text('Увійти через Hikka', style: hikkaStyle(14.5 * scale, weight: FontWeight.bold, color: onAccent(accent))),
                 ],
               ),
-              SizedBox(height: 14 * scale),
-              ],
-              if (signedIn) ...[
-                HikkaToggleRow(
-                  scale: scale,
-                  title: 'Синхронізувати налаштування й теми',
-                  subtitle: 'Вигляд, тема, мови, субтитри й місце зупинки в серіях однакові на телефоні та ПК.',
-                  value: sync.enabled,
-                  onChanged: (v) => sync.enabled = v,
-                ),
-                SizedBox(height: 10 * scale),
-                HikkaToggleRow(
-                  scale: scale,
-                  title: 'Передавати прогрес у списки',
-                  subtitle: 'Переглянута серія додається в «Дивлюсь» і збільшує лічильник серій на Hikka.',
-                  value: auth.syncProgress,
-                  onChanged: (v) => auth.syncProgress = v,
-                ),
-                SizedBox(height: 14 * scale),
-                AppSecondaryButton(scale: scale, expand: true, icon: Symbols.logout_rounded, label: 'Вийти з акаунта', onTap: () => unawaited(auth.signOut())),
-              ] else ...[
-                Text(
-                  'Увійдіть через Hikka, щоб бачити свої списки, ставити статуси й оцінки та зберігати прогрес перегляду. Дані синхронізуються з сайтом.',
-                  style: hikkaStyle(12.5 * scale, color: uiTheme.textMuted, height: 1.45),
-                ),
-                if (auth.error != null) ...[
-                  SizedBox(height: 10 * scale),
-                  Text(auth.error!, style: hikkaStyle(12 * scale, color: _errorColor, height: 1.4)),
-                ],
-                SizedBox(height: 14 * scale),
-                AppAccentButton(
-                  scale: scale,
-                  solid: true,
-                  expand: true,
-                  icon: Symbols.login_rounded,
-                  label: 'Увійти через Hikka',
-                  onTap: () => unawaited(HikkaLoginDialog.show(context, scale: scale)),
-                ),
-              ],
-            ],
+            ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 }

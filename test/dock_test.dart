@@ -71,7 +71,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     await expectLater(find.byType(Scaffold), matchesGoldenFile('dock_hover.png'));
     // wheel over speed
-    final speed = find.text('1x');
+    final speed = find.text('1×');
     await mouse.moveTo(tester.getCenter(speed));
     await mouse.down(tester.getCenter(speed)); await mouse.up();
     await tester.sendEventToBinding(PointerScrollEvent(position: tester.getCenter(speed), scrollDelta: const Offset(0, -20), kind: PointerDeviceKind.mouse));

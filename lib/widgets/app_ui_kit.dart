@@ -8,6 +8,8 @@ import '../constants/app_constants.dart';
 import '../services/ui_theme_service.dart';
 import '../utils/platform_info.dart';
 import 'app_animation_kit.dart';
+import 'app_tones.dart';
+import 'line_icons.dart';
 
 class EdgeToEdgeSliderTrackShape extends RoundedRectSliderTrackShape {
   @override
@@ -183,6 +185,23 @@ class AppSegmentedBar<T> extends StatelessWidget {
     );
   }
 }
+
+/// The shared menu tile of drop-down lists: dark, rounded, outlined, with a soft shadow
+BoxDecoration appMenuTileDecoration(double scale) => BoxDecoration(
+      color: AppTones.menu,
+      borderRadius: uiTheme.borderRadius(16 * scale),
+      border: Border.all(color: AppTones.menuLine),
+      boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: uiTheme.isLight ? 0.14 : 0.55), blurRadius: 32 * scale, offset: Offset(0, 10 * scale))],
+    );
+
+/// A line of a drop-down list: the chosen one is bold
+TextStyle appMenuText(double scale, {required bool selected}) => TextStyle(
+      fontFamily: 'Arial',
+      fontFamilyFallback: const ['MikiSans'],
+      color: uiTheme.textPrimary,
+      fontSize: 14.5 * scale,
+      fontWeight: selected ? FontWeight.w700 : FontWeight.normal,
+    );
 
 class AppDropdownOption<T> {
   final T value;
@@ -364,20 +383,10 @@ class _AppDropdownState<T> extends State<AppDropdown<T>> {
           curve: AppAnim.easeOut,
           child: Padding(
             padding: EdgeInsets.only(top: 6 * scale),
+            // The shared menu tile: the chosen line bold with the accent check mark on the right
             child: Container(
-              padding: EdgeInsets.all(4 * scale),
-              decoration: BoxDecoration(
-                color: uiTheme.bgSurface,
-                borderRadius: uiTheme.borderRadius(12 * scale),
-                border: Border.all(color: uiTheme.borderSubtle, width: 1.0),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: uiTheme.isLight ? 0.08 : 0.50),
-                    blurRadius: 16 * scale,
-                    offset: Offset(0, 6 * scale),
-                  ),
-                ],
-              ),
+              padding: EdgeInsets.symmetric(vertical: 6 * scale),
+              decoration: appMenuTileDecoration(scale),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: widget.options.map((opt) {
@@ -388,36 +397,22 @@ class _AppDropdownState<T> extends State<AppDropdown<T>> {
                       _closeDropdown();
                     },
                     behavior: HitTestBehavior.opaque,
-                    child: AppAnimatedContainer(
-                      duration: AppAnim.fast,
-                      curve: AppAnim.easeOut,
-                      height: (opt.rich ? 54 : 38) * scale,
-                      padding: EdgeInsets.symmetric(horizontal: 12 * scale),
-                      margin: EdgeInsets.only(bottom: 2 * scale),
-                      decoration: BoxDecoration(
-                        color: isSelected ? uiTheme.accentWash : Colors.transparent,
-                        borderRadius: uiTheme.borderRadius(8 * scale),
-                      ),
-                      child: Row(
-                        children: [
-                          if (isSelected)
-                            Icon(Symbols.check_rounded, color: uiTheme.accentColor, size: 16 * scale)
-                          else
-                            SizedBox(width: 16 * scale),
-                          SizedBox(width: 8 * scale),
-                          Expanded(
-                            child: _OptionBody(
-                              option: opt,
-                              scale: scale,
-                              titleStyle: TextStyle(
-                                fontFamily: 'Arial',
-                                color: isSelected ? (uiTheme.isLight ? uiTheme.accentColor : Colors.white) : uiTheme.textSecondary,
-                                fontSize: 12.5 * scale,
-                                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                    child: SizedBox(
+                      height: (opt.rich ? 56 : 44) * scale,
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 16 * scale),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: _OptionBody(
+                                option: opt,
+                                scale: scale,
+                                titleStyle: appMenuText(scale, selected: isSelected),
                               ),
                             ),
-                          ),
-                        ],
+                            if (isSelected) ...[SizedBox(width: 10 * scale), LineIconView(LineIcon.check, size: 20 * scale, color: uiTheme.accentColor, stroke: 2)],
+                          ],
+                        ),
                       ),
                     ),
                   );
@@ -451,6 +446,10 @@ class AppSearchDropdown<T> extends StatefulWidget {
   /// Here, the set of values currently marked; [onChanged] toggles a value
   final Set<T>? multiSelected;
 
+  /// A reserve under the open list while the keyboard is up, so the page can raise the search field to the top.
+  /// 0: the page adds the slack itself (the field sits inside a block, where an empty reserve would be visible)
+  final double keyboardReserve;
+
   const AppSearchDropdown({
     super.key,
     required this.scale,
@@ -463,6 +462,7 @@ class AppSearchDropdown<T> extends StatefulWidget {
     this.placeholder,
     this.onAddCustom,
     this.multiSelected,
+    this.keyboardReserve = 140,
   });
 
   @override
@@ -673,22 +673,11 @@ class _AppSearchDropdownState<T> extends State<AppSearchDropdown<T>> with Widget
           curve: AppAnim.easeOut,
           child: Padding(
             // A bottom reserve only with the keyboard open: the page can raise the search field to the top
-            padding: EdgeInsets.only(top: 6 * scale, bottom: _keyboardOpen ? 140 * scale : 0),
+            padding: EdgeInsets.only(top: 6 * scale, bottom: _keyboardOpen ? widget.keyboardReserve * scale : 0),
             child: Container(
               constraints: BoxConstraints(maxHeight: 230 * scale),
-              padding: EdgeInsets.all(4 * scale),
-              decoration: BoxDecoration(
-                color: uiTheme.bgSurface,
-                borderRadius: uiTheme.borderRadius(12 * scale),
-                border: Border.all(color: uiTheme.borderSubtle, width: 1.0),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: uiTheme.isLight ? 0.08 : 0.50),
-                    blurRadius: 16 * scale,
-                    offset: Offset(0, 6 * scale),
-                  ),
-                ],
-              ),
+              padding: EdgeInsets.symmetric(vertical: 6 * scale),
+              decoration: appMenuTileDecoration(scale),
               child: filtered.isEmpty && widget.onAddCustom != null && _searchQuery.isNotEmpty
                   ? GestureDetector(
                       onTap: () {
@@ -774,27 +763,11 @@ class _AppSearchDropdownState<T> extends State<AppSearchDropdown<T>> with Widget
                                 if (!multi) _closeDropdown();
                               },
                               behavior: HitTestBehavior.opaque,
-                              child: AppAnimatedContainer(
-                                duration: AppAnim.fast,
-                                curve: AppAnim.easeOut,
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: 12 * scale,
-                                  vertical: 8.5 * scale,
-                                ),
-                                margin: EdgeInsets.only(bottom: 2 * scale),
-                                decoration: BoxDecoration(
-                                  color: isSelected ? uiTheme.accentWash : Colors.transparent,
-                                  borderRadius: uiTheme.borderRadius(8 * scale),
-                                ),
+                              child: Container(
+                                constraints: BoxConstraints(minHeight: 44 * scale),
+                                padding: EdgeInsets.symmetric(horizontal: 16 * scale, vertical: 6 * scale),
                                 child: Row(
                                   children: [
-                                    if (!multi) ...[
-                                      if (isSelected)
-                                        Icon(Symbols.check_rounded, color: uiTheme.accentColor, size: 16 * scale)
-                                      else
-                                        SizedBox(width: 16 * scale),
-                                      SizedBox(width: 8 * scale),
-                                    ],
                                     if (opt.leading != null) ...[
                                       opt.leading!,
                                       SizedBox(width: 10 * scale),
@@ -802,18 +775,15 @@ class _AppSearchDropdownState<T> extends State<AppSearchDropdown<T>> with Widget
                                     Expanded(
                                       child: Text(
                                         opt.label,
-                                        style: TextStyle(
-                                          fontFamily: 'Arial',
-                                          color: isSelected
-                                              ? (uiTheme.isLight ? uiTheme.accentColor : Colors.white)
-                                              : uiTheme.textSecondary,
-                                          fontSize: 12.5 * scale,
-                                          fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                                        ),
+                                        style: appMenuText(scale, selected: isSelected),
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                       ),
                                     ),
+                                    if (!multi && isSelected) ...[
+                                      SizedBox(width: 10 * scale),
+                                      LineIconView(LineIcon.check, size: 20 * scale, color: uiTheme.accentColor, stroke: 2),
+                                    ],
                                     if (multi) ...[
                                       SizedBox(width: 10 * scale),
                                       Container(
@@ -1514,17 +1484,18 @@ class AppPanelSurface extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final r = uiTheme.borderRadius(radius * scale);
+    // The surface of the app's sheets: the page colour with a thin line
     return Container(
       width: width,
       margin: margin,
       decoration: BoxDecoration(
-        color: uiTheme.colors.drawerBg,
+        color: uiTheme.bgSurface,
         borderRadius: r,
-        border: Border.all(color: uiTheme.colors.drawerBorder, width: 1.0),
+        border: Border.all(color: AppTones.menuLine, width: 1.0),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: uiTheme.isLight ? 0.12 : 0.50),
-            blurRadius: 16 * scale,
+            color: Colors.black.withValues(alpha: uiTheme.isLight ? 0.14 : 0.55),
+            blurRadius: 24 * scale,
             offset: Offset(shadowOffset.dx * scale, shadowOffset.dy * scale),
           ),
         ],
@@ -1534,7 +1505,8 @@ class AppPanelSurface extends StatelessWidget {
   }
 }
 
-/// Panel header: the title (or "Назад") and the close button.
+/// Panel header in the style of the app's sheets: the title in bold (an inner page has a back arrow before it) and a
+/// line close button. On a phone the buttons are 48 dp.
 class AppPanelHeader extends StatelessWidget {
   final double scale;
   final String title;
@@ -1552,37 +1524,31 @@ class AppPanelHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bool touch = AppPlatform.isMobile;
-    return Container(
-      // On a phone the header is taller and the buttons no smaller than 48 dp
-      height: touch ? 56 : 48 * scale,
-      padding: EdgeInsets.only(left: 18 * scale, right: touch ? 6 : 18 * scale),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          if (onBack != null)
-            InkWell(
-              onTap: onBack,
-              borderRadius: uiTheme.borderRadius(6 * scale),
-              splashColor: Colors.transparent,
-              highlightColor: uiTheme.touchHighlight,
-              hoverColor: uiTheme.hoverOverlay,
-              child: Row(
-                children: [
-                  Icon(Symbols.chevron_left_rounded, color: uiTheme.textMuted, size: 20 * scale),
-                  SizedBox(width: 4 * scale),
-                  Text(
-                    'Назад',
-                    style: TextStyle(
-                      fontFamily: 'Arial',
-                      color: uiTheme.textMuted,
-                      fontSize: 13.5 * scale,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
+    final double btn = touch ? 48 : 36 * scale;
+    Widget button(LineIcon icon, String label, VoidCallback onTap) => Semantics(
+          button: true,
+          label: label,
+          child: Material(
+            type: MaterialType.transparency,
+            child: InkResponse(
+              onTap: onTap,
+              radius: btn * 0.55,
+              highlightColor: uiTheme.hoverOverlay,
+              splashColor: uiTheme.hoverOverlay,
+              child: SizedBox.square(
+                dimension: btn,
+                child: Center(child: LineIconView(icon, size: touch ? 21 : 18 * scale, color: uiTheme.textSecondary)),
               ),
-            )
-          else
+            ),
+          ),
+        );
+    return Padding(
+      padding: EdgeInsets.fromLTRB(onBack != null ? (touch ? 6 : 8 * scale) : (touch ? 20 : 16 * scale), touch ? 4 : 8 * scale, touch ? 6 : 8 * scale, 4 * scale),
+      child: SizedBox(
+        height: btn,
+        child: Row(
+          children: [
+            if (onBack != null) button(LineIcon.back, 'Назад', onBack!),
             Expanded(
               child: Text(
                 title,
@@ -1590,26 +1556,16 @@ class AppPanelHeader extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontFamily: 'Arial',
+                  fontFamilyFallback: const ['MikiSans'],
                   color: uiTheme.textPrimary,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14.5 * scale,
+                  fontWeight: FontWeight.w700,
+                  fontSize: touch ? 18 : 16 * scale,
                 ),
               ),
             ),
-          IconButton(
-            padding: EdgeInsets.zero,
-            constraints: touch ? const BoxConstraints.tightFor(width: 48, height: 48) : const BoxConstraints(),
-            highlightColor: uiTheme.touchHighlight,
-            icon: Icon(
-              Symbols.close_rounded,
-              color: uiTheme.textDarkMuted,
-              size: touch ? 24 : 19 * scale,
-              weight: 300,
-              opticalSize: 24,
-            ),
-            onPressed: onClose,
-          ),
-        ],
+            button(LineIcon.close, 'Закрити', onClose),
+          ],
+        ),
       ),
     );
   }
@@ -1821,41 +1777,31 @@ class AppMenuRow extends StatelessWidget {
           child: ConstrainedBox(
             constraints: BoxConstraints(minHeight: mobile ? 52 : 50 * scale),
             child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 6 * scale, vertical: 5 * scale),
+              padding: EdgeInsets.symmetric(horizontal: 8 * scale, vertical: 7 * scale),
               child: Row(
                 children: [
-                  Container(
-                    width: 36 * scale,
-                    height: 36 * scale,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: uiTheme.bgElevated,
-                      borderRadius: uiTheme.borderRadius(18 * scale),
-                      border: Border.all(color: uiTheme.borderSubtle),
-                    ),
-                    child: Icon(icon, color: fg, size: 19 * scale, weight: 300, opticalSize: 24),
-                  ),
+                  // The settings look: a plain icon, the title, the current value as a grey line under it
+                  SizedBox(width: 28 * scale, child: Icon(icon, color: active ? uiTheme.accentColor : uiTheme.textSecondary, size: 22 * scale, weight: 300, opticalSize: 24)),
                   SizedBox(width: 14 * scale),
                   Expanded(
-                    child: Text(
-                      title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontFamily: 'Arial', color: fg, fontWeight: active ? FontWeight.w600 : FontWeight.w500, fontSize: 14.5 * scale),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontFamily: 'Arial', color: fg, fontWeight: active ? FontWeight.w600 : FontWeight.w500, fontSize: 15 * scale),
+                        ),
+                        if (value != null && value!.isNotEmpty) ...[
+                          SizedBox(height: 2 * scale),
+                          Text(value!, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontFamily: 'Arial', color: uiTheme.textMuted, fontSize: 12.5 * scale)),
+                        ],
+                      ],
                     ),
                   ),
-                  if (value != null) ...[
-                    SizedBox(width: 8 * scale),
-                    ConstrainedBox(
-                      constraints: BoxConstraints(maxWidth: 150 * scale),
-                      child: Container(
-                        padding: EdgeInsets.symmetric(horizontal: 10 * scale, vertical: 4 * scale),
-                        decoration: BoxDecoration(color: uiTheme.bgElevated, borderRadius: uiTheme.borderRadius(99), border: Border.all(color: uiTheme.borderSubtle)),
-                        child: Text(value!, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontFamily: 'Arial', color: uiTheme.textMuted, fontSize: 12 * scale)),
-                      ),
-                    ),
-                  ],
-                  if (chevron) ...[
+                  if (chevron && (value == null || value!.isEmpty)) ...[
                     SizedBox(width: 4 * scale),
                     Icon(Symbols.chevron_right_rounded, color: uiTheme.textDarkMuted, size: 20 * scale, weight: 300, opticalSize: 24),
                   ],
@@ -2149,12 +2095,20 @@ class AppSectionHeader extends StatelessWidget {
   final String? subtitle;
   final Widget? trailing;
 
+  /// Title size before scaling (the title page uses a larger one)
+  final double titleSize;
+
+  /// The new design's heading (the main tabs and the title page): the grey line larger and lighter, a bit lower
+  final bool calm;
+
   const AppSectionHeader({
     super.key,
     required this.scale,
     required this.title,
     this.subtitle,
     this.trailing,
+    this.titleSize = 13.5,
+    this.calm = false,
   });
 
   @override
@@ -2171,15 +2125,15 @@ class AppSectionHeader extends StatelessWidget {
                 style: TextStyle(
                   fontFamily: 'Arial',
                   color: uiTheme.textPrimary,
-                  fontSize: 13.5 * scale,
+                  fontSize: titleSize * scale,
                   fontWeight: FontWeight.bold,
                 ),
               ),
               if (subtitle != null) ...[
-                SizedBox(height: 2 * scale),
+                SizedBox(height: (calm ? 3 : 2) * scale),
                 Text(
                   subtitle!,
-                  style: TextStyle(fontFamily: 'Arial', color: uiTheme.textDarkMuted, fontSize: 11.5 * scale),
+                  style: TextStyle(fontFamily: 'Arial', color: calm ? uiTheme.textMuted : uiTheme.textDarkMuted, fontSize: (calm ? 12.5 : 11.5) * scale),
                 ),
               ],
             ],
@@ -2190,6 +2144,9 @@ class AppSectionHeader extends StatelessWidget {
     );
   }
 }
+
+/// Text color on an accent fill: dark on a light accent (the default yellow), white on a dark one
+Color onAccent(Color accent) => accent.computeLuminance() > 0.4 ? Color.lerp(Colors.black, accent, 0.1)! : Colors.white;
 
 /// Primary action button (like "Готово" in settings).
 class AppAccentButton extends StatelessWidget {
@@ -2204,6 +2161,12 @@ class AppAccentButton extends StatelessWidget {
   /// The page's main action: a solid bright accent fill, white text, a slightly larger button
   final bool solid;
 
+  /// The title page's main button: 44 tall, a filled icon, text readable on the accent (dark on a light one)
+  final bool compact;
+
+  /// Its own drawing in place of [icon]; it gets the text color
+  final Widget Function(Color color)? leading;
+
   const AppAccentButton({
     super.key,
     required this.scale,
@@ -2212,13 +2175,15 @@ class AppAccentButton extends StatelessWidget {
     this.icon,
     this.expand = false,
     this.solid = false,
+    this.compact = false,
+    this.leading,
   });
 
   @override
   Widget build(BuildContext context) {
     final accent = uiTheme.accentColor;
-    final fg = solid ? Colors.white : (uiTheme.isLight ? accent : Colors.white);
-    final r = uiTheme.borderRadius(12 * scale);
+    final fg = solid ? (compact ? onAccent(accent) : Colors.white) : (uiTheme.isLight ? accent : Colors.white);
+    final r = uiTheme.borderRadius((compact ? 14 : 12) * scale);
     return Material(
       color: solid ? accent : accent.withValues(alpha: uiTheme.isLight ? 0.15 : 0.18),
       shape: RoundedRectangleBorder(
@@ -2233,16 +2198,19 @@ class AppAccentButton extends StatelessWidget {
         onTap: onTap,
         child: ConstrainedBox(
           // At least 48 dp tall on a phone
-          constraints: BoxConstraints(minHeight: AppPlatform.isMobile ? AppPlatform.touchTarget : 0),
+          constraints: BoxConstraints(minHeight: compact ? 44 * scale : (AppPlatform.isMobile ? AppPlatform.touchTarget : 0)),
           child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: 20 * scale, vertical: (solid ? 14 : 11) * scale),
+            padding: EdgeInsets.symmetric(horizontal: 20 * scale, vertical: (solid && !compact ? 14 : 11) * scale),
             child: Row(
               mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                if (icon != null) ...[
-                  Icon(icon, color: fg, size: (solid ? 22 : 18) * scale, weight: 300, opticalSize: 24),
-                  SizedBox(width: 8 * scale),
+                if (leading != null) ...[
+                  leading!(fg),
+                  SizedBox(width: (compact ? 10 : 8) * scale),
+                ] else if (icon != null) ...[
+                  Icon(icon, color: fg, size: (compact ? 18 : (solid ? 22 : 18)) * scale, weight: 300, opticalSize: 24, fill: compact ? 1 : 0),
+                  SizedBox(width: (compact ? 10 : 8) * scale),
                 ],
                 Flexible(
                   child: Text(
@@ -2253,7 +2221,7 @@ class AppAccentButton extends StatelessWidget {
                       fontFamily: 'Arial',
                       color: fg,
                       fontWeight: FontWeight.bold,
-                      fontSize: (solid ? 15 : 13) * scale,
+                      fontSize: (compact ? 14.5 : (solid ? 15 : 13)) * scale,
                     ),
                   ),
                 ),

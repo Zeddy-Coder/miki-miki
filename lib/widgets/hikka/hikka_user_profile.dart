@@ -13,18 +13,21 @@ import '../../services/hikka_prefs.dart';
 import '../../services/ui_theme_service.dart';
 import '../../utils/platform_info.dart';
 import '../app_animation_kit.dart';
+import '../app_tones.dart';
 import '../app_ui_kit.dart';
+import '../design_kit.dart';
+import '../line_icons.dart';
 import 'hikka_cards.dart';
 import 'hikka_common.dart';
 import 'hikka_community_cards.dart';
-import 'hikka_my_list_bar.dart' show hikkaStatusColor;
+import 'hikka_my_list_bar.dart' show hikkaStatusColor, HikkaListMark;
 import 'hikka_page_kit.dart';
 import 'hikka_shelf.dart';
 import '../../utils/app_clock.dart';
 
-/// A Hikka user profile as on `hikka.io/u/<name>`: cover, avatar, description and links, followers,
-/// "Список" (status counters and watch time), a year of "Активність", favorite anime and characters, articles,
-/// collections and "Історія". Returns the page blocks, to be put in [HikkaPageFrame].
+/// A Hikka user profile: the account block (avatar, name, role, followers, description and links), "Список" (a bar of
+/// the statuses, a row per status, watch time), [extra], a year of "Активність", favorite anime and characters,
+/// articles, collections and "Історія". Returns the page blocks, to be put in [HikkaPageFrame].
 ///
 /// [own] is one's own profile: the status counters and "Усі" in favorites lead to the "Списки" tab.
 class HikkaUserProfile extends StatefulWidget {
@@ -36,7 +39,10 @@ class HikkaUserProfile extends StatefulWidget {
   /// Another value means load everything anew (page refresh)
   final Object? reloadKey;
 
-  const HikkaUserProfile({super.key, required this.username, required this.scale, this.seed, this.own = false, this.reloadKey});
+  /// Blocks right after "Список" (one's own profile: "Застосунок" and "Акаунт")
+  final List<Widget> extra;
+
+  const HikkaUserProfile({super.key, required this.username, required this.scale, this.seed, this.own = false, this.reloadKey, this.extra = const []});
 
   @override
   State<HikkaUserProfile> createState() => _HikkaUserProfileState();
@@ -114,30 +120,23 @@ class _HikkaUserProfileState extends State<HikkaUserProfile> {
     final name = user.username.isNotEmpty ? user.username : widget.username;
     final token = '${widget.reloadKey}';
     final adult = HikkaPrefs.instance.allowAdult;
+    final inset = pad + 2 * scale;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         HikkaProfileHeader(user: user, follow: core?.follow, scale: scale, pad: pad),
-        SizedBox(height: 22 * scale),
         if (core != null) ...[
-          HikkaSection(
-            scale: scale,
-            pad: pad,
-            title: 'Список',
-            child: HikkaWatchSummary(stats: core.watch, scale: scale, onStatus: widget.own ? (s) => HikkaNav.instance.openLists(status: s) : null),
-          ),
-          HikkaSection(
-            scale: scale,
-            pad: pad,
-            title: 'Активність',
-            child: _ActivityCard(username: name, stats: core.stats, scale: scale, token: token),
-          ),
+          AppGroupCaption(scale: scale, text: 'Список', inset: inset),
+          HikkaListSummary(stats: core.watch, scale: scale, inset: inset, onStatus: widget.own ? (s) => HikkaNav.instance.openLists(status: s) : null),
+          ...widget.extra,
+          SizedBox(height: 22 * scale),
+          _ActivityCard(username: name, stats: core.stats, scale: scale, pad: pad, token: token),
           if (core.stats.favouriteAnime > 0)
             HikkaShelfAsync<HikkaAnime>(
               scale: scale,
               pad: pad,
               title: 'Улюблені аніме',
-              subtitle: HikkaText.count(core.stats.favouriteAnime),
+              subtitle: '${HikkaText.count(core.stats.favouriteAnime)} ${HikkaText.plural(core.stats.favouriteAnime, 'тайтл', 'тайтли', 'тайтлів')}',
               token: '$name-$token',
               onMore: widget.own ? () => HikkaNav.instance.openLists(favourites: true) : null,
               load: () async => [for (final a in (await _api.favourites(name, size: 20)).items) if (adult || !a.isAdult) a],
@@ -148,7 +147,7 @@ class _HikkaUserProfileState extends State<HikkaUserProfile> {
               scale: scale,
               pad: pad,
               title: 'Улюблені персонажі',
-              subtitle: HikkaText.count(core.stats.favouriteCharacters),
+              subtitle: '${HikkaText.count(core.stats.favouriteCharacters)} ${HikkaText.plural(core.stats.favouriteCharacters, 'персонаж', 'персонажі', 'персонажів')}',
               token: '$name-$token',
               load: () async => (await _api.favouriteCharacters(name, size: 20)).items,
               itemBuilder: (context, c) => HikkaCharacterCard(character: c, scale: scale),
@@ -158,33 +157,40 @@ class _HikkaUserProfileState extends State<HikkaUserProfile> {
             scale: scale,
             pad: pad,
             title: 'Статті',
+            words: const ('стаття', 'статті', 'статей'),
             load: () => _api.articles(author: name, size: 3),
-            itemBuilder: (a) => HikkaArticleCard(article: a, scale: scale),
+            itemBuilder: (a) => HikkaArticleRow(article: a, scale: scale, pad: pad),
           ),
           _AuthoredList<HikkaCollection>(
             key: ValueKey('collections-$name-$token'),
             scale: scale,
             pad: pad,
             title: 'Колекції',
+            words: const ('колекція', 'колекції', 'колекцій'),
             load: () => _api.collections(author: name, sort: 'new', size: 3, contentType: null, allowAdult: adult),
-            itemBuilder: (c) => HikkaCollectionCard(collection: c, scale: scale),
+            itemBuilder: (c) => HikkaCollectionRow(collection: c, scale: scale, pad: pad),
           ),
           HikkaSection(
             scale: scale,
             pad: pad,
             title: 'Історія',
+            titleSize: 15,
             child: HikkaHistoryList(key: ValueKey('history-$name-$token'), username: name, scale: scale),
           ),
-        ] else if (_error != null)
+        ] else if (_error != null) ...[
+          SizedBox(height: 22 * scale),
           Padding(
             padding: EdgeInsets.symmetric(horizontal: pad),
             child: HikkaErrorView(scale: scale, error: _error!, compact: true, onRetry: () => setState(() {
                   _error = null;
                   _load();
                 })),
-          )
-        else
+          ),
+          ...widget.extra,
+        ] else ...[
           Padding(padding: EdgeInsets.symmetric(vertical: 24 * scale), child: HikkaLoading(scale: scale)),
+          ...widget.extra,
+        ],
       ],
     );
   }
@@ -192,7 +198,8 @@ class _HikkaUserProfileState extends State<HikkaUserProfile> {
 
 // ── Header ────────────────────────────────────────────────────────────────────
 
-/// Cover, avatar, name with a role, description, links and followers
+/// The account block: a round avatar (or the first letter on a gradient), the name with a grey role plate,
+/// "На Hikka з …" and the followers; the description and links under it, when the person has them
 class HikkaProfileHeader extends StatelessWidget {
   final HikkaUser user;
   final HikkaFollowStats? follow;
@@ -203,88 +210,78 @@ class HikkaProfileHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final mobile = AppPlatform.isMobile;
-    final coverH = mobile ? 128.0 : 180 * scale;
-    final avatar = mobile ? 84.0 : 104 * scale;
-    final ring = 4 * scale;
-    final cover = user.cover;
+    final avatar = 62 * scale;
     final role = user.roleLabel;
     final f = follow;
     final since = user.created > 0 ? DateTime.fromMillisecondsSinceEpoch(user.created * 1000) : null;
-
-    Widget count(int n, String label) => Text.rich(
-          TextSpan(children: [
-            TextSpan(text: HikkaText.count(n), style: hikkaStyle(13.5 * scale, weight: FontWeight.bold)),
-            TextSpan(text: ' $label', style: hikkaStyle(13 * scale, color: uiTheme.textMuted)),
-          ]),
-        );
-
+    final bright = uiTheme.isLight ? uiTheme.textPrimary : const Color(0xFFDDDDDD);
+    final grey = hikkaStyle(12.5 * scale, color: uiTheme.textMuted);
+    final initial = user.username.isEmpty ? '?' : user.username.characters.first.toUpperCase();
     return Padding(
-      padding: EdgeInsets.symmetric(horizontal: pad),
+      padding: EdgeInsets.fromLTRB(pad, 8 * scale, pad, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Stack(
-            clipBehavior: Clip.none,
+          Row(
             children: [
-              SizedBox(
-                height: coverH,
-                width: double.infinity,
-                child: LayoutBuilder(
-                  builder: (context, c) => cover == null
-                      ? DecoratedBox(
-                          decoration: BoxDecoration(
-                            borderRadius: uiTheme.borderRadius(16 * scale),
-                            gradient: LinearGradient(colors: [uiTheme.accentWash, uiTheme.bgElevated]),
-                            border: Border.all(color: uiTheme.borderSubtle),
-                          ),
-                        )
-                      : HikkaPoster(url: cover, scale: scale, aspect: c.maxWidth / coverH, radius: 16, alignment: Alignment.center),
-                ),
-              ),
-              Positioned(
-                left: 16 * scale,
-                bottom: -avatar / 2,
-                child: Container(
-                  width: avatar + ring * 2,
-                  height: avatar + ring * 2,
-                  padding: EdgeInsets.all(ring),
-                  decoration: BoxDecoration(borderRadius: uiTheme.borderRadius(avatar / 2 + ring), color: uiTheme.bgPrimary),
+              SizedBox.square(
+                dimension: avatar,
+                child: ClipOval(
                   child: user.avatar.isEmpty
                       ? DecoratedBox(
-                          decoration: BoxDecoration(borderRadius: uiTheme.borderRadius(avatar / 2), color: uiTheme.accentWash),
-                          child: Icon(Symbols.person_rounded, color: uiTheme.accentColor, size: avatar * 0.5, weight: 300),
+                          decoration: const BoxDecoration(gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFFC9607A), Color(0xFF6A4AD0)])),
+                          child: Center(child: Text(initial, style: hikkaStyle(24 * scale, weight: FontWeight.bold, color: Colors.white))),
                         )
-                      : HikkaPoster(url: user.avatar, scale: scale, aspect: 1, radius: avatar / 2 / scale, icon: Symbols.person_rounded, alignment: Alignment.center),
+                      : HikkaPoster(url: user.avatar, scale: scale, aspect: 1, radius: 0, border: false, icon: Symbols.person_rounded, alignment: Alignment.center),
+                ),
+              ),
+              SizedBox(width: 14 * scale),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      spacing: 8 * scale,
+                      runSpacing: 4 * scale,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(user.username, style: hikkaStyle(20 * scale, weight: FontWeight.bold)),
+                        if (role != null)
+                          Container(
+                            height: 22 * scale,
+                            padding: EdgeInsets.symmetric(horizontal: 8 * scale),
+                            decoration: BoxDecoration(color: AppTones.plate, borderRadius: uiTheme.borderRadius(7 * scale)),
+                            child: Center(widthFactor: 1, child: Text(role, style: hikkaStyle(11.5 * scale, color: AppTones.plateText))),
+                          ),
+                      ],
+                    ),
+                    if (since != null) ...[
+                      SizedBox(height: 4 * scale),
+                      Text('На Hikka з ${HikkaText.monthsGenitive[since.month - 1]} ${since.year}', style: grey),
+                    ],
+                    if (f != null) ...[
+                      SizedBox(height: 2 * scale),
+                      Text.rich(
+                        TextSpan(
+                          style: grey,
+                          children: [
+                            TextSpan(text: HikkaText.count(f.followers), style: TextStyle(color: bright, fontWeight: FontWeight.bold)),
+                            TextSpan(text: ' ${HikkaText.plural(f.followers, 'стежить', 'стежать', 'стежать')} · '),
+                            TextSpan(text: HikkaText.count(f.following), style: TextStyle(color: bright, fontWeight: FontWeight.bold)),
+                            const TextSpan(text: ' відстежує'),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
             ],
           ),
-          SizedBox(height: avatar / 2 + 12 * scale),
-          Wrap(
-            spacing: 8 * scale,
-            runSpacing: 4 * scale,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              Text(user.username, style: hikkaStyle(22 * scale, weight: FontWeight.bold)),
-              if (role != null) HikkaPill(text: role, scale: scale, background: uiTheme.accentWash, foreground: uiTheme.accentColor),
-            ],
-          ),
-          if (user.description != null) ...[
-            SizedBox(height: 6 * scale),
+          if (user.description != null && user.description!.trim().isNotEmpty) ...[
+            SizedBox(height: 12 * scale),
             Text(user.description!, style: hikkaStyle(13.5 * scale, color: uiTheme.textSecondary, height: 1.4)),
           ],
-          SizedBox(height: 10 * scale),
-          Wrap(
-            spacing: 16 * scale,
-            runSpacing: 6 * scale,
-            children: [
-              if (f != null) count(f.followers, HikkaText.plural(f.followers, 'стежить', 'стежать', 'стежать')),
-              if (f != null) count(f.following, 'відстежує'),
-              if (since != null)
-                Text('На Hikka з ${HikkaText.monthsGenitive[since.month - 1]} ${since.year}', style: hikkaStyle(13 * scale, color: uiTheme.textMuted)),
-            ],
-          ),
           if (user.links.isNotEmpty) ...[
             SizedBox(height: 12 * scale),
             Wrap(
@@ -292,10 +289,11 @@ class HikkaProfileHeader extends StatelessWidget {
               runSpacing: 8 * scale,
               children: [
                 for (final l in user.links)
-                  HikkaChip(
-                    label: l.label,
+                  AppPlate(
                     scale: scale,
-                    icon: l.icon == 'telegram' ? Symbols.send_rounded : Symbols.link_rounded,
+                    label: l.label,
+                    height: 34,
+                    leading: (c) => LineIconView(l.icon == 'telegram' ? LineIcon.send : LineIcon.link, size: 16 * scale, color: c),
                     onTap: () => HikkaNav.instance.openLink(l.url),
                   ),
               ],
@@ -309,374 +307,115 @@ class HikkaProfileHeader extends StatelessWidget {
 
 // ── List ───────────────────────────────────────────────────────────────────
 
-/// "Список": a donut chart of statuses with the total in the center, a legend on the right (color, status, count,
-/// share) and "Час перегляду" at the bottom. [onStatus] is a tap on a legend status or the center (`null` means no filter).
-class HikkaWatchSummary extends StatelessWidget {
+/// "Список": a bar of the statuses' shares, then a row per status with its glyph and number and "Час перегляду".
+/// [onStatus] is a tap on a status row (one's own profile opens "Списки" there).
+class HikkaListSummary extends StatelessWidget {
   final HikkaWatchStats stats;
   final double scale;
-  final void Function(HikkaWatchStatus? status)? onStatus;
+  final double inset;
+  final void Function(HikkaWatchStatus status)? onStatus;
 
-  const HikkaWatchSummary({super.key, required this.stats, required this.scale, this.onStatus});
-
-  /// Order as on hikka.io
-  static const List<HikkaWatchStatus> order = [
-    HikkaWatchStatus.completed,
-    HikkaWatchStatus.watching,
-    HikkaWatchStatus.planned,
-    HikkaWatchStatus.dropped,
-    HikkaWatchStatus.onHold,
-  ];
+  const HikkaListSummary({super.key, required this.stats, required this.scale, required this.inset, this.onStatus});
 
   @override
   Widget build(BuildContext context) {
     final total = stats.total;
-    final donut = (AppPlatform.isMobile ? 124.0 : 150 * scale);
-    return AppCard(
-      scale: scale,
-      radius: 14,
-      padding: EdgeInsets.all(14 * scale),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              HikkaStatusDonut(
-                size: donut,
-                scale: scale,
-                values: [for (final s in order) stats.of(s)],
-                colors: [for (final s in order) hikkaStatusColor(s)],
-                labels: [for (final s in order) s.label],
-                total: total,
-                // A tap on an arc means that status, on the center means all
-                onTap: onStatus == null ? null : (i) => onStatus!(i == null ? null : order[i]),
-              ),
-              SizedBox(width: 16 * scale),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    for (final s in order)
-                      _legendRow(s.label, stats.of(s), hikkaStatusColor(s), onStatus == null ? null : () => onStatus!(s)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: 12 * scale),
-          Row(
-            children: [
-              Icon(Symbols.schedule_rounded, size: 18 * scale, color: uiTheme.textMuted, weight: 300),
-              SizedBox(width: 8 * scale),
-              Expanded(child: Text('Час перегляду', style: hikkaStyle(13 * scale, color: uiTheme.textMuted))),
-              Text(HikkaProfileText.watchTime(stats.duration), style: hikkaStyle(13.5 * scale, weight: FontWeight.bold)),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _legendRow(String label, int value, Color color, VoidCallback? onTap) {
-    return _tappable(
-      label: '$label: $value',
-      onTap: onTap,
-      radius: 8 * scale,
-      child: Padding(
-        padding: EdgeInsets.symmetric(vertical: 5 * scale, horizontal: 4 * scale),
-        child: Row(
-          children: [
-            Container(width: 9 * scale, height: 9 * scale, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
-            SizedBox(width: 8 * scale),
-            Expanded(
-              child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: hikkaStyle(12.5 * scale, color: uiTheme.textSecondary)),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: EdgeInsets.fromLTRB(inset, 6 * scale, inset, 4 * scale),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(4 * scale),
+            child: SizedBox(
+              key: const ValueKey('list-bar'),
+              height: 8 * scale,
+              child: total <= 0
+                  ? ColoredBox(color: AppTones.track)
+                  : Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (final s in HikkaWatchStatus.values)
+                          if (stats.of(s) > 0) Expanded(flex: stats.of(s), child: ColoredBox(color: hikkaStatusColor(s))),
+                      ],
+                    ),
             ),
-            SizedBox(width: 6 * scale),
-            Text(HikkaText.count(value), style: hikkaStyle(13 * scale, weight: FontWeight.bold)),
-          ],
+          ),
         ),
-      ),
-    );
-  }
-
-  Widget _tappable({required String label, required VoidCallback? onTap, required double radius, required Widget child}) {
-    return Semantics(
-      button: onTap != null,
-      label: label,
-      excludeSemantics: true,
-      child: onTap == null
-          ? child
-          : InkWell(
-              onTap: onTap,
-              borderRadius: BorderRadius.circular(radius),
-              splashColor: Colors.transparent,
-              highlightColor: uiTheme.touchHighlight,
-              hoverColor: uiTheme.hoverOverlay,
-              child: child,
-            ),
-    );
-  }
-}
-
-/// Donut chart layout (angles in radians, from 12 o'clock clockwise). Each arc has rounded ends and
-/// takes at least a "drop": a circle with the diameter of the line thickness; neighboring arcs have the same gap [gap].
-/// The rest of the circle is divided proportionally to the values (small ones that fall short of a drop get a drop).
-class HikkaDonutLayout {
-  /// Indices of non-zero values and their arcs: [start] is the start of the visible arc accounting for the end cap, [length] is the length
-  final List<int> indices;
-  final List<double> starts;
-  final List<double> lengths;
-
-  /// The angle taken by a rounded end (half the thickness)
-  final double cap;
-
-  /// The angle of the gap between arcs
-  final double gapAngle;
-
-  const HikkaDonutLayout._(this.indices, this.starts, this.lengths, this.cap, this.gapAngle);
-
-  static const double top = -math.pi / 2;
-
-  /// [radius] is the radius of the ring's center line, [thickness] the thickness, [gap] the gap between arc ends (in pixels)
-  factory HikkaDonutLayout.compute(List<int> values, {required double radius, required double thickness, required double gap}) {
-    final idx = [for (int i = 0; i < values.length; i++) if (values[i] > 0) i];
-    final n = idx.length;
-    final cap = (thickness / 2) / radius;
-    if (n == 0) return HikkaDonutLayout._(const [], const [], const [], cap, 0);
-    if (n == 1) return HikkaDonutLayout._(idx, const [top], const [math.pi * 2], cap, 0);
-    var gapA = gap / radius;
-    var minL = cap * 2;
-    var avail = math.pi * 2 - n * gapA;
-    if (avail < n * minL) {
-      // Very many small ones: we shrink proportionally, the gaps stay equal
-      final k = (math.pi * 2) / (n * (gapA + minL));
-      gapA *= k;
-      minL *= k;
-      avail = math.pi * 2 - n * gapA;
-    }
-    // Distribution with a minimum: those that fall short of a drop get a drop, the others share the rest
-    final lengths = List<double>.filled(n, 0);
-    final fixed = List<bool>.filled(n, false);
-    while (true) {
-      final rest = avail - fixed.where((f) => f).length * minL;
-      final sum = [for (int j = 0; j < n; j++) if (!fixed[j]) values[idx[j]]].fold<int>(0, (a, b) => a + b);
-      var changed = false;
-      for (int j = 0; j < n; j++) {
-        if (fixed[j]) continue;
-        final l = sum > 0 ? rest * values[idx[j]] / sum : minL;
-        if (l < minL) {
-          fixed[j] = true;
-          changed = true;
-        }
-      }
-      if (!changed) {
-        for (int j = 0; j < n; j++) {
-          lengths[j] = fixed[j] ? minL : (sum > 0 ? rest * values[idx[j]] / sum : minL);
-        }
-        break;
-      }
-    }
-    final starts = <double>[];
-    var at = top + gapA / 2;
-    for (int j = 0; j < n; j++) {
-      starts.add(at);
-      at += lengths[j] + gapA;
-    }
-    return HikkaDonutLayout._(idx, starts, lengths, cap, gapA);
-  }
-
-  /// The index of the value at angle [angle] (a gap belongs half to each neighbor); `null` means empty
-  int? hit(double angle) {
-    if (indices.isEmpty) return null;
-    if (indices.length == 1) return indices.first;
-    var a = (angle - top) % (math.pi * 2);
-    for (int j = 0; j < indices.length; j++) {
-      final from = (starts[j] - gapAngle / 2 - top) % (math.pi * 2);
-      final to = from + lengths[j] + gapAngle;
-      if (a >= from && a < to) return indices[j];
-      if (a + math.pi * 2 >= from && a + math.pi * 2 < to) return indices[j];
-    }
-    return indices.last;
-  }
-}
-
-/// A status donut chart: arcs with rounded ends and equal gaps, the total count in the center.
-/// A tap on an arc gives [onTap] its index, on the center `null`.
-class HikkaStatusDonut extends StatelessWidget {
-  final double size;
-  final double scale;
-  final List<int> values;
-  final List<Color> colors;
-  final List<String> labels;
-  final int total;
-  final void Function(int? index)? onTap;
-
-  const HikkaStatusDonut({
-    super.key,
-    required this.size,
-    required this.scale,
-    required this.values,
-    required this.colors,
-    required this.labels,
-    required this.total,
-    this.onTap,
-  });
-
-  double get thickness => size * 0.1;
-
-  HikkaDonutLayout get layout => HikkaDonutLayout.compute(values, radius: (size - thickness) / 2, thickness: thickness, gap: thickness * 0.8);
-
-  /// What is under point [p] (relative to the top-left corner): `-1` is the center, an arc index, `null` is outside
-  int? hitAt(Offset p) {
-    final c = Offset(size / 2, size / 2);
-    final d = (p - c).distance;
-    final r = (size - thickness) / 2;
-    if (d <= r - thickness * 1.5) return -1;
-    if (d > size / 2 + thickness) return null;
-    final angle = math.atan2(p.dy - c.dy, p.dx - c.dx);
-    return layout.hit(angle);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l = layout;
-    final body = SizedBox(
-      width: size,
-      height: size,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          CustomPaint(size: Size.square(size), painter: _DonutPainter(layout: l, colors: colors, track: uiTheme.bgElevated, thickness: thickness)),
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(HikkaText.count(total), maxLines: 1, style: hikkaStyle(size * 0.2, weight: FontWeight.bold, height: 1.1)),
-              Text('Всього', style: hikkaStyle(11.5 * scale, color: uiTheme.textMuted)),
-            ],
+        for (final s in HikkaWatchStatus.values)
+          AppLineRow(
+            key: ValueKey('list-row-${s.name}'),
+            scale: scale,
+            inset: inset,
+            leading: HikkaListMark(status: s, size: 20 * scale, color: AppTones.rowIcon),
+            title: s.label,
+            value: HikkaText.count(stats.of(s)),
+            onTap: onStatus == null ? null : () => onStatus!(s),
           ),
-        ],
-      ),
-    );
-    final tap = onTap;
-    return Semantics(
-      label: [
-        'Всього: $total',
-        for (int i = 0; i < values.length; i++) '${labels[i]}: ${values[i]}',
-      ].join(', '),
-      button: tap != null,
-      excludeSemantics: true,
-      child: tap == null
-          ? body
-          : MouseRegion(
-              cursor: SystemMouseCursors.click,
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTapUp: (e) {
-                  final h = hitAt(e.localPosition);
-                  if (h == null) return;
-                  tap(h == -1 ? null : h);
-                },
-                child: body,
-              ),
-            ),
+        AppLineRow(scale: scale, inset: inset, icon: LineIcon.clock, title: 'Час перегляду', value: HikkaProfileText.watchTime(stats.duration)),
+      ],
     );
   }
-}
-
-/// Draws a [HikkaDonutLayout]: the track, arcs with rounded ends, "drops" for the smallest
-class _DonutPainter extends CustomPainter {
-  final HikkaDonutLayout layout;
-  final List<Color> colors;
-  final Color track;
-  final double thickness;
-
-  _DonutPainter({required this.layout, required this.colors, required this.track, required this.thickness});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final r = (size.width - thickness) / 2;
-    final c = Offset(size.width / 2, size.height / 2);
-    final rect = Rect.fromCircle(center: c, radius: r);
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = thickness
-      ..isAntiAlias = true;
-    canvas.drawCircle(c, r, paint..color = track);
-    final l = layout;
-    if (l.indices.isEmpty) return;
-    if (l.indices.length == 1) {
-      canvas.drawCircle(c, r, paint..color = colors[l.indices.first]);
-      return;
-    }
-    paint.strokeCap = StrokeCap.round;
-    for (int j = 0; j < l.indices.length; j++) {
-      final color = colors[l.indices[j]];
-      final sweep = l.lengths[j] - l.cap * 2;
-      if (sweep <= 0.0005) {
-        // A drop: a circle with the diameter of the line thickness
-        final a = l.starts[j] + l.lengths[j] / 2;
-        canvas.drawCircle(c + Offset(math.cos(a), math.sin(a)) * r, thickness / 2, Paint()..color = color..isAntiAlias = true);
-      } else {
-        canvas.drawArc(rect, l.starts[j] + l.cap, sweep, false, paint..color = color);
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(_DonutPainter old) =>
-      old.layout.lengths.join(',') != layout.lengths.join(',') ||
-      old.layout.indices.join(',') != layout.indices.join(',') ||
-      old.track != track ||
-      old.thickness != thickness ||
-      old.colors.join(',') != colors.join(',');
 }
 
 // ── Activity ───────────────────────────────────────────────────────────────
 
+/// "Активність": the heading with the year's total in grey, the day map without a frame, three numbers under it
 class _ActivityCard extends StatelessWidget {
   final String username;
   final HikkaUserStats stats;
   final double scale;
+  final double pad;
   final String token;
 
-  const _ActivityCard({required this.username, required this.stats, required this.scale, required this.token});
+  const _ActivityCard({required this.username, required this.stats, required this.scale, required this.pad, required this.token});
 
   @override
   Widget build(BuildContext context) {
-    Widget counter(String label, int n) => Expanded(
+    Widget counter(int n, String one, String few, String many) => Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(HikkaText.count(n), style: hikkaStyle(16 * scale, weight: FontWeight.bold)),
+              Text(HikkaText.count(n), style: hikkaStyle(17 * scale, weight: FontWeight.bold)),
               SizedBox(height: 2 * scale),
-              Text(label, style: hikkaStyle(11.5 * scale, color: uiTheme.textMuted)),
+              Text(HikkaText.plural(n, one, few, many), style: hikkaStyle(12 * scale, color: uiTheme.textMuted)),
             ],
           ),
         );
-    return AppCard(
-      scale: scale,
-      radius: 14,
-      padding: EdgeInsets.all(12 * scale),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          HikkaAsync<List<HikkaActivityDay>>(
-            key: ValueKey('activity-$username-$token'),
-            scale: scale,
-            compactError: true,
-            load: () => HikkaApi.instance.userActivity(username),
-            loading: (context) => HikkaLoading(scale: scale, height: 7 * 14 * scale),
-            builder: (context, days) => days.isEmpty ? const SizedBox.shrink() : HikkaActivityHeatmap(days: days, scale: scale),
+    Widget heading(String? total) => AppSectionHeader(scale: scale, title: 'Активність', subtitle: total, titleSize: 15, calm: true);
+    return Padding(
+      padding: EdgeInsets.fromLTRB(pad, 0, pad, 22 * scale),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: hikkaReadableWidth(scale)),
+        child: HikkaAsync<List<HikkaActivityDay>>(
+          key: ValueKey('activity-$username-$token'),
+          scale: scale,
+          compactError: true,
+          load: () => HikkaApi.instance.userActivity(username),
+          loading: (context) => Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [heading(null), SizedBox(height: 10 * scale), HikkaLoading(scale: scale, height: 7 * 14 * scale)],
           ),
-          SizedBox(height: 14 * scale),
-          Row(
-            children: [
-              counter('Коментарі', stats.comments),
-              counter('Відгуки', stats.reviews),
-              counter('Правки', stats.edits),
-            ],
-          ),
-        ],
+          builder: (context, days) {
+            final total = days.fold<int>(0, (s, d) => s + d.actions);
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                heading(days.isEmpty ? null : '${HikkaText.count(total)} ${HikkaText.plural(total, 'дія', 'дії', 'дій')} за рік'),
+                SizedBox(height: 10 * scale),
+                if (days.isNotEmpty) HikkaActivityHeatmap(days: days, scale: scale),
+                SizedBox(height: 14 * scale),
+                Row(
+                  children: [
+                    counter(stats.comments, 'коментар', 'коментарі', 'коментарів'),
+                    counter(stats.reviews, 'відгук', 'відгуки', 'відгуків'),
+                    counter(stats.edits, 'правка', 'правки', 'правок'),
+                  ],
+                ),
+              ],
+            );
+          },
+        ),
       ),
     );
   }
@@ -703,15 +442,14 @@ class _HikkaActivityHeatmapState extends State<HikkaActivityHeatmap> {
   double get _scale => widget.scale;
 
   static Color colorOf(int level) => level == 0
-      ? uiTheme.bgElevated
-      : uiTheme.accentColor.withValues(alpha: const [0.0, 0.3, 0.5, 0.75, 1.0][level]);
+      ? AppTones.plate
+      : uiTheme.accentColor.withValues(alpha: const [0.0, 0.25, 0.45, 0.7, 1.0][level]);
 
   @override
   Widget build(BuildContext context) {
     final scale = _scale;
     final days = widget.days;
     final max = days.fold<int>(0, (m, d) => math.max(m, d.actions));
-    final total = days.fold<int>(0, (s, d) => s + d.actions);
     final gap = 3 * scale;
     final last = days.last.day;
     // The Monday of the week with the last day is the start of the last column
@@ -770,9 +508,7 @@ class _HikkaActivityHeatmapState extends State<HikkaActivityHeatmap> {
           children: [
             Expanded(
               child: Text(
-                picked != null
-                    ? '${HikkaText.dayMonth(picked.day, now: AppClock.now())}: ${HikkaText.count(picked.actions)} ${HikkaText.plural(picked.actions, 'дія', 'дії', 'дій')}'
-                    : '${HikkaText.count(total)} ${HikkaText.plural(total, 'дія', 'дії', 'дій')} за рік',
+                picked != null ? '${HikkaText.dayMonth(picked.day, now: AppClock.now())}: ${HikkaText.count(picked.actions)} ${HikkaText.plural(picked.actions, 'дія', 'дії', 'дій')}' : '',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: hikkaStyle(12 * scale, color: uiTheme.textMuted),
@@ -858,10 +594,13 @@ class _AuthoredList<T> extends StatelessWidget {
   final double scale;
   final double pad;
   final String title;
+
+  /// "стаття / статті / статей" for the grey count under the heading
+  final (String, String, String) words;
   final Future<HikkaPage<T>> Function() load;
   final Widget Function(T item) itemBuilder;
 
-  const _AuthoredList({super.key, required this.scale, required this.pad, required this.title, required this.load, required this.itemBuilder});
+  const _AuthoredList({super.key, required this.scale, required this.pad, required this.title, required this.words, required this.load, required this.itemBuilder});
 
   @override
   Widget build(BuildContext context) {
@@ -874,22 +613,22 @@ class _AuthoredList<T> extends StatelessWidget {
       stateFrame: (context, child) => const SizedBox.shrink(),
       builder: (context, page) {
         if (page.items.isEmpty) return const SizedBox.shrink();
-        return HikkaSection(
-          scale: scale,
-          pad: pad,
-          title: title,
-          subtitle: HikkaText.count(page.total),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: hikkaReadableWidth(scale)),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (int i = 0; i < page.items.length; i++) ...[
-                  if (i > 0) SizedBox(height: 10 * scale),
-                  itemBuilder(page.items[i]),
-                ],
-              ],
-            ),
+        final n = page.total;
+        return Padding(
+          padding: EdgeInsets.only(bottom: 16 * scale),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: pad),
+                child: AppSectionHeader(scale: scale, title: title, subtitle: '${HikkaText.count(n)} ${HikkaText.plural(n, words.$1, words.$2, words.$3)}', titleSize: 15, calm: true),
+              ),
+              SizedBox(height: 2 * scale),
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: hikkaReadableWidth(scale) + pad * 2),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [for (final item in page.items) itemBuilder(item)]),
+              ),
+            ],
           ),
         );
       },
@@ -975,8 +714,8 @@ class _HikkaHistoryListState extends State<HikkaHistoryList> {
       if (label != day) {
         day = label;
         rows.add(Padding(
-          padding: EdgeInsets.only(top: rows.isEmpty ? 0 : 14 * scale, bottom: 6 * scale),
-          child: Text(label, style: hikkaStyle(12.5 * scale, weight: FontWeight.bold, color: uiTheme.textSecondary)),
+          padding: EdgeInsets.only(top: rows.isEmpty ? 0 : 14 * scale, bottom: 4 * scale),
+          child: Text(label, style: hikkaStyle(13 * scale, weight: FontWeight.w700, color: AppTones.caption)),
         ));
       }
       rows.add(_HistoryRow(entry: e, scale: scale, title: e.anime!.title(lang)));
@@ -1028,20 +767,20 @@ class _HistoryRow extends StatelessWidget {
           padding: EdgeInsets.symmetric(vertical: 5 * scale, horizontal: 4 * scale),
           child: Row(
             children: [
-              SizedBox(width: 40 * scale, child: HikkaPoster(url: a.image, malId: a.malId, scale: scale, radius: 6)),
+              SizedBox(width: 40 * scale, child: HikkaPoster(url: a.image, malId: a.malId, scale: scale, radius: 7, aspect: 40 / 56)),
               SizedBox(width: 12 * scale),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: hikkaStyle(13.5 * scale, weight: FontWeight.w600)),
+                    Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: hikkaStyle(14.5 * scale)),
                     SizedBox(height: 3 * scale),
-                    Text(what, maxLines: 2, overflow: TextOverflow.ellipsis, style: hikkaStyle(12 * scale, color: uiTheme.textMuted, height: 1.3)),
+                    Text(what, maxLines: 2, overflow: TextOverflow.ellipsis, style: hikkaStyle(12.5 * scale, color: AppTones.rowSub, height: 1.3)),
                   ],
                 ),
               ),
               SizedBox(width: 10 * scale),
-              Text(time, style: hikkaStyle(11.5 * scale, color: uiTheme.textDarkMuted)),
+              Text(time, style: hikkaStyle(12 * scale, color: uiTheme.textMuted)),
             ],
           ),
         ),

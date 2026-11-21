@@ -2,6 +2,15 @@ part of 'hikka_models.dart';
 
 // ── Community: authors, collections, articles ─────────────────────────────
 
+/// Tags come as strings or as `{"name": …, "content_count": …}`
+List<String> _tags(Object? raw) => [
+      for (final t in (raw is List ? raw : const []))
+        if (t is String && t.trim().isNotEmpty)
+          t.trim()
+        else if (t is Map && t['name'] is String && (t['name'] as String).trim().isNotEmpty)
+          (t['name'] as String).trim(),
+    ];
+
 /// Author of a collection or article
 class HikkaAuthor {
   final String username;
@@ -87,7 +96,7 @@ class HikkaCollection {
       entries: _int(j['entries']) ?? items.length,
       voteScore: _intOr0(j['vote_score']),
       commentsCount: _intOr0(j['comments_count']),
-      tags: [for (final t in (j['tags'] as List? ?? const [])) if (t is String && t.trim().isNotEmpty) t.trim()],
+      tags: _tags(j['tags']),
       labelsOrder: [for (final t in (j['labels_order'] as List? ?? const [])) if (t is String && t.trim().isNotEmpty) t.trim()],
       spoiler: _bool(j['spoiler']),
       nsfw: _bool(j['nsfw']),
@@ -200,6 +209,9 @@ class HikkaArticle {
   final List<SlateNode> preview;
   final List<SlateNode> document;
 
+  /// The title the article is about (the site shows it as a card under the heading); `null` when there is none
+  final HikkaAnime? content;
+
   const HikkaArticle({
     required this.slug,
     required this.title,
@@ -213,6 +225,7 @@ class HikkaArticle {
     this.tags = const [],
     this.preview = const [],
     this.document = const [],
+    this.content,
   });
 
   static const Map<String, String> categories = {
@@ -232,9 +245,12 @@ class HikkaArticle {
         views: _intOr0(j['views']),
         voteScore: _intOr0(j['vote_score']),
         commentsCount: _intOr0(j['comments_count']),
-        tags: [for (final t in (j['tags'] as List? ?? const [])) if (t is String && t.trim().isNotEmpty) t.trim()],
+        tags: _tags(j['tags']),
         preview: SlateNode.parseList(j['preview']),
         document: SlateNode.parseList(j['document']),
+        content: j['content'] is Map<String, dynamic> && (j['content'] as Map)['data_type'] == 'anime' && ((j['content'] as Map)['slug'] ?? '') != ''
+            ? HikkaAnime.fromJson(j['content'] as Map<String, dynamic>)
+            : null,
       );
 
   String get categoryLabel => categories[category] ?? category;

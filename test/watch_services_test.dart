@@ -37,20 +37,19 @@ void main() {
       expect(c.syncSafe, isTrue);
     });
 
-    test('відставання озвучки — м’яка примітка, синхронізація безпечна', () {
+    test('відставання озвучки — без примітки (кількість видно в рядку), синхронізація безпечна', () {
       final c = checkEpisodes(eps([1, 2, 3, 4]), ongoing);
       expect(c.level, EpisodeCheckLevel.lag);
-      expect(c.hasNote, isTrue);
-      expect(c.note, contains('4 з 5'));
+      expect(c.hasNote, isFalse);
       expect(c.summary, '4 з 5');
       expect(c.syncSafe, isTrue);
       expect(c.isWarning, isFalse);
     });
 
-    test('завершений тайтл, не всі серії → incomplete', () {
+    test('завершений тайтл, не всі серії → incomplete, без примітки', () {
       final c = checkEpisodes(eps(List.generate(10, (i) => i + 1)), finished);
       expect(c.level, EpisodeCheckLevel.incomplete);
-      expect(c.note, contains('10/12'));
+      expect(c.hasNote, isFalse, reason: '«10 з 12» видно в рядку озвучки');
       expect(c.syncSafe, isTrue);
     });
 
@@ -69,10 +68,51 @@ void main() {
       expect(c.syncSafe, isFalse);
     });
 
-    test('пропуски в нумерації', () {
+    test('пропуски в нумерації — просто менше серій: номери ті самі, що на Hikka', () {
       final c = checkEpisodes(eps([1, 2, 4, 5, 7]), const HikkaEpisodeInfo(released: 7, total: 12));
-      expect(c.level, EpisodeCheckLevel.mismatch);
-      expect(c.note, contains('3, 6'));
+      expect((c.level, c.hasNote, c.syncSafe, c.numbersHold), (EpisodeCheckLevel.lag, false, true, true), reason: 'a missing episode moves no other number');
+    });
+
+    test('номери серій лишаються номерами Hikka (для AniSkip і пісень) попри пропуски, але не при зсуві', () {
+      // Gintama: the first two aired as one, the dubs go 1, 3, 4… (and a 0 before them)
+      const gintama = HikkaEpisodeInfo(released: 201, total: 201, finished: true);
+      final gap = checkEpisodes(eps([1, for (var i = 3; i <= 39; i++) i]), gintama);
+      expect((gap.level, gap.syncSafe, gap.numbersHold, gap.hasNote), (EpisodeCheckLevel.incomplete, true, true, false));
+      expect(checkEpisodes(eps([0, 1, for (var i = 3; i <= 53; i++) i]), gintama).numbersHold, isTrue);
+      expect(checkEpisodes(eps([1, 2, 3]), finished).numbersHold, isTrue);
+      // Counting from zero, continuous numbering, past the total, repeats, several seasons, no numbers: they do not
+      expect(checkEpisodes(eps(List.generate(12, (i) => i)), finished).numbersHold, isFalse);
+      expect(checkEpisodes(eps(List.generate(12, (i) => i + 13)), finished).numbersHold, isFalse);
+      expect(checkEpisodes(eps(List.generate(14, (i) => i + 1)), finished).numbersHold, isFalse);
+      expect(checkEpisodes(eps([1, 2, 2, 3]), finished).numbersHold, isFalse);
+      expect(checkEpisodes([ep(1, season: 1), ep(1, season: 2)], finished).numbersHold, isFalse);
+      expect(checkEpisodes([ep(null), ep(null)], finished).numbersHold, isFalse);
+    });
+
+    test('«Серія 14 з 19»: скільки серій — за номерами, а не за довжиною списку озвучки', () {
+      expect(episodesOfList(eps(List.generate(10, (i) => i + 10)), total: 19), 19, reason: '«Далі Буде»: 10–19, у списку 10');
+      expect(episodesOfList(eps(List.generate(10, (i) => i + 10))), 19);
+      expect(episodesOfList(eps([1, 3, 4]), total: 201), 201, reason: 'Hikka\'s total when it is more');
+      expect(episodesOfList(eps([1, 2, 3])), 3);
+      expect(episodesOfList([ep(null), ep(null)]), 2, reason: 'without numbers: the list');
+      expect(episodesOfList(eps(List.generate(24, (i) => i + 1)), total: 12), 24);
+    });
+
+    test('дубляж, що почав із середини сезону, лишає номери сезону — коли інший дубляж сайту починається з 1', () {
+      // Re:Zero 4: «Далі Буде» — 10–19 of 19, «Shogun» — 17–19; the others 1–19
+      const rezero = HikkaEpisodeInfo(released: 19, total: 19, finished: true);
+      final late = checkEpisodes(eps(List.generate(10, (i) => i + 10)), rezero, othersFrom: 1);
+      expect((late.level, late.numbersHold, late.hasNote, late.summary), (EpisodeCheckLevel.incomplete, true, false, '10 з 19'), reason: 'fewer episodes, no note');
+      expect(checkEpisodes(eps([17, 18, 19]), rezero, othersFrom: 1).numbersHold, isTrue);
+      expect(checkEpisodes(eps(List.generate(10, (i) => i + 10)), rezero).numbersHold, isFalse, reason: 'alone: maybe counted on');
+      expect(checkEpisodes(eps(List.generate(10, (i) => i + 10)), rezero, othersFrom: 10).numbersHold, isFalse);
+      // Counted on from a previous season: past Hikka's count, whatever the others
+      expect(checkEpisodes(eps(List.generate(12, (i) => i + 13)), finished, othersFrom: 1).numbersHold, isFalse);
+      // Airing: within what aired (a couple of days of Hikka's lag allowed), not past it; without a count — unknown
+      const airing = HikkaEpisodeInfo(released: 8);
+      expect(checkEpisodes(eps([5, 6, 7, 8, 9]), airing, othersFrom: 1).numbersHold, isTrue);
+      expect(checkEpisodes(eps([13, 14, 15]), airing, othersFrom: 1).numbersHold, isFalse);
+      expect(checkEpisodes(eps([5, 6]), const HikkaEpisodeInfo(), othersFrom: 1).numbersHold, isFalse);
     });
 
     test('серії без номерів → порівняти неможливо', () {
@@ -87,10 +127,10 @@ void main() {
       expect(c.note, contains('кілька сезонів'));
     });
 
-    test('Hikka ще не знає про нові серії → lead, але без блокування синхронізації', () {
+    test('Hikka ще не знає про нові серії → lead, без примітки й без блокування синхронізації', () {
       final c = checkEpisodes(eps([1, 2, 3, 4, 5, 6]), ongoing);
       expect(c.level, EpisodeCheckLevel.lead);
-      expect(c.hasNote, isTrue);
+      expect(c.hasNote, isFalse);
       expect(c.syncSafe, isTrue);
     });
 
@@ -118,7 +158,7 @@ void main() {
       expect(c.count, 24);
       expect(c.summary, '24 з 12');
       expect(c.note, contains('об’єднано 2 частини'));
-      expect(c.note, contains('передаватимуться на Hikka'));
+      expect(c.note, isNot(contains('передаватимуться на Hikka')), reason: 'by the number — obvious');
       expect(c.syncSafe, isFalse);
       expect(c.isWarning, isTrue);
     });

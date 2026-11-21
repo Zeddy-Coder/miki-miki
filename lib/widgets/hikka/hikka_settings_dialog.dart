@@ -8,9 +8,8 @@ import '../../services/hikka_images.dart';
 import '../../services/hikka_prefs.dart';
 import '../../services/ui_theme_service.dart';
 import '../../services/watch_service.dart';
-import '../app_ui_kit.dart';
+import '../settings_kit.dart';
 import '../../services/hikka_nav.dart';
-import 'hikka_common.dart';
 import 'sources_dialog.dart';
 
 /// Content of the main settings' "Каталог" tab: title language, second title, 18+, watch sources, own Hikka client,
@@ -69,24 +68,6 @@ class _HikkaCatalogSettingsState extends State<HikkaCatalogSettings> {
     });
   }
 
-  Widget _title(String text, {String? hint}) {
-    final scale = _scale;
-    return Padding(
-      padding: EdgeInsets.only(bottom: 10 * scale),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(text, style: hikkaStyle(13.5 * scale, weight: FontWeight.bold)),
-          if (hint != null)
-            Padding(
-              padding: EdgeInsets.only(top: 2 * scale),
-              child: Text(hint, style: hikkaStyle(11.5 * scale, color: uiTheme.textDarkMuted, height: 1.35)),
-            ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final scale = _scale;
@@ -95,70 +76,78 @@ class _HikkaCatalogSettingsState extends State<HikkaCatalogSettings> {
       builder: (context, _) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _title('Мова назв', hint: 'Якщо потрібної назви немає, показується наступна доступна'),
-          AppSegmentedBar<HikkaTitleLang>(
+          SettingsGroup(
             scale: scale,
-            selectedValue: _prefs.titleLang,
-            options: const [
-              AppSegmentOption(value: HikkaTitleLang.ua, label: 'Українська'),
-              AppSegmentOption(value: HikkaTitleLang.en, label: 'English'),
-              AppSegmentOption(value: HikkaTitleLang.ja, label: 'Ромаджі'),
-            ],
-            onSelected: (v) => _prefs.titleLang = v,
-          ),
-          SizedBox(height: 22 * scale),
-          HikkaToggleRow(
-            scale: scale,
-            title: 'Друга назва',
-            subtitle: 'Додаткова назва під заголовком тайтла',
-            value: _prefs.showSecondary,
-            onChanged: (v) => _prefs.showSecondary = v,
-          ),
-          if (_prefs.showSecondary) ...[
-            SizedBox(height: 12 * scale),
-            AppSegmentedBar<HikkaTitleLang>(
-              scale: scale,
-              selectedValue: _prefs.secondaryLang,
-              options: const [
-                AppSegmentOption(value: HikkaTitleLang.ua, label: 'Українська'),
-                AppSegmentOption(value: HikkaTitleLang.en, label: 'English'),
-                AppSegmentOption(value: HikkaTitleLang.ja, label: 'Ромаджі'),
-              ],
-              onSelected: (v) => _prefs.secondaryLang = v,
-            ),
-          ],
-          SizedBox(height: 22 * scale),
-          HikkaToggleRow(
-            scale: scale,
-            title: 'Контент 18+',
-            subtitle: 'Показувати у списках, пошуку й календарі. Лише для повнолітніх',
-            value: _prefs.allowAdult,
-            onChanged: (v) => _prefs.allowAdult = v,
-          ),
-          SizedBox(height: 22 * scale),
-          SourcesSettings(scale: scale, registry: WatchService.instance.registry, heading: false),
-          SizedBox(height: 22 * scale),
-          _title('Дані', hint: 'Оновлення даних каталогу та очищення кешу зображень'),
-          Wrap(
-            spacing: 10 * scale,
-            runSpacing: 10 * scale,
-            children: [
-              AppSecondaryButton(
+            label: 'Назви',
+            rows: [
+              SettingsChoiceRow<HikkaTitleLang>(
                 scale: scale,
-                expand: false,
+                icon: Symbols.translate_rounded,
+                title: 'Мова назв',
+                subtitle: 'Якщо потрібної назви немає, показується наступна доступна',
+                options: const [(HikkaTitleLang.ua, 'Українська'), (HikkaTitleLang.en, 'English'), (HikkaTitleLang.ja, 'Ромаджі')],
+                value: _prefs.titleLang,
+                onChanged: (v) => _prefs.titleLang = v,
+              ),
+              SettingsToggleRow(
+                scale: scale,
+                icon: Symbols.title_rounded,
+                title: 'Друга назва',
+                subtitle: 'Додаткова назва під заголовком тайтла',
+                value: _prefs.showSecondary,
+                onChanged: (v) => _prefs.showSecondary = v,
+              ),
+              if (_prefs.showSecondary)
+                SettingsChoiceRow<HikkaTitleLang>(
+                  scale: scale,
+                  icon: Symbols.language_rounded,
+                  title: 'Мова другої назви',
+                  options: const [(HikkaTitleLang.ua, 'Українська'), (HikkaTitleLang.en, 'English'), (HikkaTitleLang.ja, 'Ромаджі')],
+                  value: _prefs.secondaryLang,
+                  onChanged: (v) => _prefs.secondaryLang = v,
+                ),
+            ],
+          ),
+          SettingsGroup(
+            scale: scale,
+            label: 'Вміст',
+            rows: [
+              SettingsToggleRow(
+                scale: scale,
+                icon: Symbols.explicit_rounded,
+                title: 'Контент 18+',
+                subtitle: 'Показувати у списках, пошуку й календарі. Лише для повнолітніх',
+                value: _prefs.allowAdult,
+                onChanged: (v) => _prefs.allowAdult = v,
+              ),
+            ],
+          ),
+          SourcesSettings(scale: scale, registry: WatchService.instance.registry, heading: false),
+          SettingsGroup(
+            scale: scale,
+            label: 'Дані',
+            hint: 'Оновлення даних каталогу та очищення кешу зображень',
+            rows: [
+              SettingsRow(
+                scale: scale,
                 icon: Symbols.refresh_rounded,
-                label: 'Оновити дані',
+                title: 'Оновити дані',
+                subtitle: 'Скидає кеш відповідей і перезавантажує відкриті сторінки',
                 onTap: () => HikkaNav.instance.refreshAll?.call(),
               ),
-              AppSecondaryButton(
+              if (_cacheBytes != null)
+                SettingsStorageBar(
+                  scale: scale,
+                  parts: [('Обкладинки', _cacheBytes!, uiTheme.isLight ? const Color(0xFF55555F) : const Color(0xFFE6E6EA))],
+                  total: HikkaImageStore.instance.maxBytes,
+                  format: HikkaCatalogSettings.formatBytes,
+                  totalLabel: 'Ліміт ${HikkaCatalogSettings.formatBytes(HikkaImageStore.instance.maxBytes)}',
+                ),
+              SettingsRow(
                 scale: scale,
-                expand: false,
                 icon: Symbols.delete_outline_rounded,
-                label: _cleared
-                    ? 'Кеш очищено'
-                    : _cacheBytes == null
-                        ? 'Очистити кеш зображень'
-                        : 'Очистити кеш зображень · ${HikkaCatalogSettings.formatBytes(_cacheBytes!)}',
+                title: _cleared ? 'Кеш очищено' : 'Очистити кеш зображень',
+                subtitle: _cacheBytes == null ? null : 'Зараз зайнято ${HikkaCatalogSettings.formatBytes(_cacheBytes!)}',
                 onTap: _clearImages,
               ),
             ],

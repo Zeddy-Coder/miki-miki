@@ -12,11 +12,14 @@ import 'services/app_log.dart';
 import 'services/backend_client.dart';
 import 'services/app_updater.dart';
 import 'services/deep_links.dart';
+import 'services/downloads/download_manager.dart';
+import 'services/skips/skip_service.dart';
 import 'services/episode_alerts.dart';
 import 'services/hikka_api.dart';
 import 'services/hikka_disk_cache.dart';
 import 'services/hikka_lists.dart';
 import 'services/media_controls.dart';
+import 'services/network_status.dart';
 import 'services/push_notifications.dart';
 import 'services/settings_sync.dart';
 import 'services/storage_service.dart';
@@ -44,6 +47,18 @@ void main() async {
   await ThumbnailService.init(); // Video preview cache
   uiTheme.init(); // Global theme initialization
   HikkaApi.instance.disk = HikkaDiskCache(); // Hikka responses on disk: start from the stored copy, refresh in the background
+  NetworkStatus.instance.start(); // Online or not, mobile data or not (Android tells by itself; a PC looks after a failed request)
+  unawaited(DownloadManager.instance.init()); // Downloaded episodes; unfinished ones go on when the network allows
+  // A finished download gets its skips while online (AniSkip; listening, compared with the dub's other downloads)
+  DownloadManager.instance.onDone = (item) {
+    final dm = DownloadManager.instance;
+    unawaited(SkipService.instance.onDownloaded(item, dub: dm.done.where((o) => o.animeKey == item.animeKey && o.groupId == item.groupId), videoOf: dm.localVideo));
+  };
+  // "Watched" marks made without internet go to Hikka once it is back (and soon after the start)
+  NetworkStatus.instance.addListener(() {
+    if (NetworkStatus.instance.online) unawaited(HikkaMyList.instance.flushPending());
+  });
+  unawaited(Future<void>.delayed(const Duration(seconds: 8), () => HikkaMyList.instance.flushPending()));
   unawaited(HikkaMyList.instance.loadIndex(delay: const Duration(seconds: 4))); // Statuses from Hikka lists for poster badges (if signed in)
   unawaited(Future<void>.delayed(const Duration(seconds: 6), () => EpisodeAlerts.instance.check().then((_) {}, onError: (Object _) {}))); // New episodes in the chosen dub (Mikai feed)
   unawaited(Future<void>.delayed(const Duration(seconds: 3), () => AppUpdater.instance.check(auto: true))); // Silent check for new versions on GitHub (at most once per 30 min; also on returning to the app)

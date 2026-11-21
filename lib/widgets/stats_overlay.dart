@@ -95,6 +95,7 @@ class _StatsOverlayState extends State<StatsOverlay> {
 Пропущено декодером (Decoder Drops): ${widget.stats.decoderDroppedFrames}
 Зсув A/V синхронізації: ${(widget.stats.avSyncDiff * 1000).toStringAsFixed(2)} ms
 Аудіодоріжка: ${aTrack.title ?? aTrack.language ?? "Stereo/5.1"}
+Вихід звуку: ${widget.stats.audioOutput}
 ''';
   }
 
@@ -350,6 +351,7 @@ ${widget.mpvLogs.join('\n')}
                   AppStatTile(scale: scale, icon: Symbols.fast_forward_rounded, label: 'Швидкість', value: AppFormatters.formatSpeed(widget.currentSpeed)),
                   AppStatTile(scale: scale, icon: Symbols.volume_up_rounded, label: 'Гучність', value: '${widget.currentVolume.toInt()}%'),
                   AppStatTile(scale: scale, icon: Symbols.music_note_rounded, label: 'Аудіодоріжка', value: aTrack.title ?? aTrack.language ?? '—'),
+                  AppStatTile(scale: scale, icon: Symbols.speaker_rounded, label: 'Вихід звуку', value: stats.audioOutput),
                 ]),
                 section('Кадри та синхронізація', 'Втрати кадрів і розсинхрон аудіо/відео', [
                   AppStatTile(scale: scale, icon: Symbols.running_with_errors_rounded, label: 'Пропущено всього', value: '${stats.totalDroppedFrames}', isWarning: hasDrops),

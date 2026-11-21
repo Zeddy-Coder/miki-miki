@@ -294,7 +294,14 @@ class _ShortcutRow extends StatelessWidget {
                         '/',
                         style: TextStyle(fontFamily: 'Arial', color: uiTheme.textDarkMuted, fontSize: 11 * scale),
                       ),
-                    AppKeyCombo(scale: scale, keys: chords[i].caps, accent: chords[i].scope != KeyScope.both),
+                    // A combination longer than the column shrinks a little instead of overflowing
+                    ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: constraints.maxWidth * 0.52),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: AppKeyCombo(scale: scale, keys: chords[i].caps, accent: chords[i].scope != KeyScope.both),
+                      ),
+                    ),
                   ],
                 ],
               ),

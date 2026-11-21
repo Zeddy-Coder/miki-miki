@@ -5,11 +5,14 @@ import 'dart:convert';
 import 'package:miki_miki/models/source_models.dart';
 import 'package:miki_miki/services/remote_driver.dart';
 import 'package:miki_miki/services/remote_playback.dart';
+import 'package:miki_miki/services/skips/skip_service.dart';
+import 'package:miki_miki/services/songs/song_service.dart';
 import 'package:miki_miki/services/source_prefs.dart';
 import 'package:miki_miki/services/source_registry.dart';
 import 'package:miki_miki/services/sources/anime_source.dart';
 import 'package:miki_miki/services/sources/source_http.dart';
 import 'package:miki_miki/services/stream_resolver.dart';
+import 'package:miki_miki/services/episode_check.dart';
 import 'package:miki_miki/services/watch_models.dart';
 import 'package:miki_miki/services/watch_store.dart';
 
@@ -109,13 +112,16 @@ class Rig {
     Duration errorGrace = const Duration(milliseconds: 30),
     Map<String, int>? positions,
     this.subLangs = const ['uk', 'ja', 'en'],
+    SkipService? skips,
+    SongService? songs,
+    List<int>? others,
   }) : positions = positions ?? {},
        saved = [] {
     source = FakeSource(
       'src',
       hosters ??
           {
-            for (final n in episodes)
+            for (final n in {...episodes, ...?others})
               'e$n': [
                 Hoster(
                   name: 'Moon',
@@ -136,10 +142,12 @@ class Rig {
     );
     store = memoryStore();
     group = WatchGroup(id: 'g1', sourceId: 'src', label: 'Команда А', episodes: [for (final n in episodes) ep(n)]);
+    // Another dub of the same site (its episode numbers), when given
+    final other = others == null ? null : WatchGroup(id: 'g2', sourceId: 'src', label: 'Команда Б', episodes: [for (final n in others) ep(n)]);
     title = WatchTitle(
       animeKey: 'hikka:test',
       offers: [
-        WatchOffer(source: source, anime: const SAnime(url: 'a', title: 'A'), groups: [group]),
+        WatchOffer(source: source, anime: const SAnime(url: 'a', title: 'A'), groups: [group, if (other != null) other]),
       ],
     );
     driver = RemoteDriver(
@@ -156,6 +164,8 @@ class Rig {
       openTimeout: openTimeout,
       errorGrace: errorGrace,
       subPriorities: () => subLangs,
+      skips: skips,
+      songs: songs,
     );
     autoNextOn = autoNext;
     driver.onEntry = entries.add;
@@ -180,7 +190,8 @@ class Rig {
   int sessions = 0;
   bool autoNextOn = true;
 
-  RemoteLaunch launch({String? epKey, WatchGroup? g}) => RemoteLaunch(title: title, group: g ?? group, animeTitle: 'Аніме', epKey: epKey);
+  RemoteLaunch launch({String? epKey, WatchGroup? g, HikkaEpisodeInfo? hikka}) =>
+      RemoteLaunch(title: title, group: g ?? group, animeTitle: 'Аніме', epKey: epKey, hikka: hikka);
 
   /// Simulates the player learning the duration (the video started)
   void started({Duration dur = const Duration(minutes: 24)}) {

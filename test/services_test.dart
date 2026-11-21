@@ -5,11 +5,11 @@ import 'dart:typed_data';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:material_symbols_icons/symbols.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:miki_miki/models/media_models.dart';
 import 'package:miki_miki/services/seek_preview_service.dart';
 import 'package:miki_miki/widgets/app_dock_widgets.dart';
+import 'package:miki_miki/widgets/line_icons.dart';
 
 import 'support/fakes.dart';
 import 'support/perf_harness.dart';
@@ -123,7 +123,7 @@ void main() {
       addTearDown(show.dispose);
       await tester.pumpWidget(playerOverlayHarness(player: p, showControls: show, chapters: sampleChapters(), volume: vol));
       await tester.pump(const Duration(milliseconds: 600));
-      expect(find.byIcon(Symbols.volume_up_rounded), findsOneWidget);
+      expect(lineIcon(LineIcon.volume), findsOneWidget);
 
       final c = RebuildCounter()..start();
       try {
@@ -133,7 +133,7 @@ void main() {
       } finally {
         c.stop();
       }
-      expect(find.byIcon(Symbols.volume_off_rounded), findsOneWidget, reason: 'вимкнений звук показано іконкою');
+      expect(lineIcon(LineIcon.volumeOff), findsOneWidget, reason: 'вимкнений звук показано іконкою');
       expect(c.byType['BottomDock'] ?? 0, 0, reason: 'док не перебудовується: ${c.top()}');
       expect(c.byType['ControlsOverlay'] ?? 0, 0, reason: 'оверлей не перебудовується: ${c.top()}');
       expect(c.byType['AppVolumeControl'] ?? 0, greaterThan(0));
@@ -141,8 +141,8 @@ void main() {
       vol.value = const VolumeState(20, false);
       await tester.pump(const Duration(milliseconds: 16));
       await tester.pump(const Duration(milliseconds: 600));
-      expect(find.byIcon(Symbols.volume_down_rounded), findsOneWidget);
-      expect(find.byIcon(Symbols.volume_off_rounded), findsNothing);
+      expect(lineIcon(LineIcon.volumeLow), findsOneWidget);
+      expect(lineIcon(LineIcon.volumeOff), findsNothing);
       expect(tester.takeException(), isNull);
     });
 
@@ -171,30 +171,27 @@ void main() {
       await mouse.addPointer(location: const Offset(5, 5));
       addTearDown(mouse.removePointer);
 
-      // Hover reveals the slider
-      final collapsed = tester.getRect(find.byType(AppVolumeControl));
-      await mouse.moveTo(Offset(collapsed.left + 19, collapsed.center.dy));
-      await settleHover(tester);
-      final open = tester.getRect(find.byType(AppVolumeControl));
-      expect(open.width, greaterThan(collapsed.width + 60), reason: 'повзунок розкрився при наведенні');
+      // The slider is always in view (the concept: a thin white bar next to the icon)
+      final box = tester.getRect(find.byType(AppVolumeControl));
+      expect(tester.getSize(find.byKey(const ValueKey('volume-slider'))).width, greaterThan(70));
 
       // A click on the icon mutes the sound
-      await mouse.down(Offset(open.left + 19, open.center.dy));
+      await mouse.down(tester.getCenter(find.byKey(const ValueKey('volume-mute'))));
       await mouse.up();
       await tester.pump(const Duration(milliseconds: 100));
       expect(mutes, 1);
       expect(changes, isEmpty, reason: 'клік по іконці не змінює гучність');
 
-      // The track starts after 1 (border) + 36 (button) + 6 (padding) pixels, length 70
-      final trackLeft = open.left + 1 + 36 + 6;
-      final y = open.center.dy;
-      await mouse.down(Offset(trackLeft + 35, y)); // middle of the track
+      // The track starts after the 40 px icon and 6 px of padding, length 76
+      final trackLeft = box.left + 40 + 6;
+      final y = box.center.dy;
+      await mouse.down(Offset(trackLeft + 38, y)); // middle of the track
       await mouse.up();
       await tester.pump(const Duration(milliseconds: 100));
       expect(changes, isNotEmpty);
       expect(changes.last, closeTo(50, 1));
 
-      await mouse.down(Offset(trackLeft + 70, y)); // end of the track
+      await mouse.down(Offset(trackLeft + 76, y)); // end of the track
       await mouse.up();
       await tester.pump(const Duration(milliseconds: 100));
       expect(changes.last, closeTo(100, 1));
@@ -314,3 +311,6 @@ void main() {
     });
   });
 }
+
+/// A line icon of the player chrome (drawn with [LineIconView], not a font glyph)
+Finder lineIcon(LineIcon icon) => find.byWidgetPredicate((w) => w is LineIconView && w.icon == icon);

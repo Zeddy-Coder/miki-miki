@@ -16,12 +16,15 @@ import 'package:miki_miki/utils/platform_info.dart';
 import 'package:miki_miki/widgets/app_dock_widgets.dart';
 import 'package:miki_miki/widgets/app_settings_dialog.dart';
 import 'package:miki_miki/widgets/app_ui_kit.dart';
+import 'package:miki_miki/widgets/settings_kit.dart';
 import 'package:miki_miki/widgets/home_hub.dart';
+import 'package:miki_miki/widgets/line_icons.dart';
 import 'package:miki_miki/widgets/local_library.dart';
 import 'package:miki_miki/widgets/mobile_controls.dart';
 import 'package:miki_miki/widgets/mobile_gesture_layer.dart';
 import 'package:miki_miki/widgets/mobile_sheet.dart';
 import 'package:miki_miki/widgets/osd_toast.dart';
+import 'package:miki_miki/widgets/player_kit.dart';
 import 'package:miki_miki/widgets/side_panel.dart';
 import 'package:miki_miki/widgets/settings_drawer.dart';
 import 'package:miki_miki/widgets/skip_button.dart';
@@ -293,8 +296,12 @@ class PhoneSceneState extends State<PhoneScene> {
 
 /// All "glass" buttons on screen: their size is the touch zone
 List<Size> overlayButtonSizes(WidgetTester tester) => [
-      for (final e in find.byType(AppOverlayButton).evaluate()) tester.getSize(find.byWidget(e.widget)),
+      for (final type in const [PlayerIconButton, PlayerCircleButton, PlayerPill])
+        for (final e in find.byType(type).evaluate()) tester.getSize(find.byWidget(e.widget)),
     ];
+
+/// A line icon of the player chrome (the new style draws icons with [LineIconView], not font glyphs)
+Finder lineIcon(LineIcon icon) => find.byWidgetPredicate((w) => w is LineIconView && w.icon == icon);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -710,9 +717,9 @@ void main() {
       StorageService.saveMobileSeekButtons(false);
       addTearDown(() => StorageService.saveMobileSeekButtons(true));
       await mount(tester, kPortrait);
-      expect(find.byIcon(Symbols.replay_10_rounded), findsNothing);
-      expect(find.byIcon(Symbols.forward_10_rounded), findsNothing);
-      expect(find.byIcon(Symbols.play_arrow_rounded), findsOneWidget);
+      expect(find.byKey(const ValueKey('seek-back')), findsNothing);
+      expect(find.byKey(const ValueKey('seek-forward')), findsNothing);
+      expect(lineIcon(LineIcon.play), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
     });
@@ -720,13 +727,13 @@ void main() {
     testWidgets('кнопка паузи — по центру екрана, найбільша; перемотка й перемикання серій навколо неї', (tester) async {
       for (final size in [kPortrait, kLandscape]) {
         await mount(tester, size);
-        final play = tester.getRect(find.byIcon(Symbols.play_arrow_rounded));
+        final play = tester.getRect(lineIcon(LineIcon.play));
         expect((play.center.dx - size.width / 2).abs(), lessThan(2), reason: 'по горизонталі $size');
         expect((play.center.dy - size.height / 2).abs(), lessThan(2), reason: 'по вертикалі $size');
-        final back = tester.getRect(find.byIcon(Symbols.replay_10_rounded));
-        final fwd = tester.getRect(find.byIcon(Symbols.forward_10_rounded));
-        final prev = tester.getRect(find.byIcon(Symbols.skip_previous_rounded));
-        final next = tester.getRect(find.byIcon(Symbols.skip_next_rounded));
+        final back = tester.getRect(find.byKey(const ValueKey('seek-back')));
+        final fwd = tester.getRect(find.byKey(const ValueKey('seek-forward')));
+        final prev = tester.getRect(lineIcon(LineIcon.skipPrevious));
+        final next = tester.getRect(lineIcon(LineIcon.skipNext));
         expect(prev.center.dx, lessThan(back.center.dx));
         expect(back.center.dx, lessThan(play.center.dx));
         expect(play.center.dx, lessThan(fwd.center.dx));
@@ -737,7 +744,7 @@ void main() {
         final seek = tester.getRect(find.byType(AppSeekBar));
         expect(seek.center.dy, greaterThan(size.height * 0.62), reason: 'повзунок унизу ($size)');
         // the top bar is at the top
-        expect(tester.getRect(find.byIcon(Symbols.arrow_back_rounded)).center.dy, lessThan(80));
+        expect(tester.getRect(lineIcon(LineIcon.back)).center.dy, lessThan(80));
         await tester.pumpWidget(const SizedBox());
       }
     });
@@ -745,31 +752,32 @@ void main() {
     testWidgets('дії: пауза, перемотка на крок, попередня / наступна, повернення, налаштування', (tester) async {
       final c = FakeController();
       final s = await mount(tester, kPortrait, c: c);
-      await tester.tap(find.byIcon(Symbols.play_arrow_rounded));
+      await tester.tap(lineIcon(LineIcon.play));
       await tick(tester, 100);
       expect(c.fakePlayer.playPauseCalls, 1);
 
-      await tester.tap(find.byIcon(Symbols.forward_10_rounded));
+      await tester.tap(find.byKey(const ValueKey('seek-forward')));
       await tick(tester, 100);
       expect(c.fakePlayer.seeks.last, const Duration(minutes: 20, seconds: 10));
-      await tester.tap(find.byIcon(Symbols.replay_10_rounded));
+      await tester.tap(find.byKey(const ValueKey('seek-back')));
       await tick(tester, 100);
       expect(c.fakePlayer.seeks.last, const Duration(minutes: 20) - const Duration(seconds: 10));
 
-      await tester.tap(find.byIcon(Symbols.arrow_back_rounded));
-      await tester.tap(find.byIcon(Symbols.picture_in_picture_alt_rounded));
-      await tester.tap(find.byIcon(Symbols.screen_rotation_rounded));
+      await tester.tap(lineIcon(LineIcon.back));
+      await tester.tap(lineIcon(LineIcon.pictureInPicture));
+      await tester.tap(lineIcon(LineIcon.rotate));
       expect(s.events, ['back', 'pip', 'rotate']);
       expect(tester.takeException(), isNull);
     });
 
     testWidgets('довге утримання повороту повертає автоповорот, Anime4K — перемикається', (tester) async {
       final s = await mount(tester, kPortrait, locked: true);
-      expect(find.byIcon(Symbols.screen_lock_rotation_rounded), findsOneWidget);
-      expect(find.byIcon(Symbols.screen_rotation_rounded), findsNothing);
-      await tester.longPress(find.byIcon(Symbols.screen_lock_rotation_rounded));
+      // locked: the same rotation icon, in the accent
+      final locked = find.byWidgetPredicate((w) => w is PlayerIconButton && w.icon == LineIcon.rotate && w.active);
+      expect(locked, findsOneWidget);
+      await tester.longPress(locked);
       await tick(tester, 100);
-      await tester.longPress(find.byIcon(Symbols.auto_awesome_rounded));
+      await tester.longPress(lineIcon(LineIcon.sparkle));
       await tick(tester, 100);
       expect(s.events, ['rotate-auto', 'a4k-toggle']);
     });
@@ -777,9 +785,9 @@ void main() {
     testWidgets('PiP-кнопки немає там, де пристрій її не підтримує; серії неактивні без черги', (tester) async {
       final c = FakeController();
       await mount(tester, kPortrait, pip: false, queue: 1, c: c);
-      expect(find.byIcon(Symbols.picture_in_picture_alt_rounded), findsNothing);
-      await tester.tap(find.byIcon(Symbols.skip_next_rounded));
-      await tester.tap(find.byIcon(Symbols.skip_previous_rounded));
+      expect(lineIcon(LineIcon.pictureInPicture), findsNothing);
+      await tester.tap(lineIcon(LineIcon.skipNext));
+      await tester.tap(lineIcon(LineIcon.skipPrevious));
       await tick(tester, 100);
       expect(c.fakePlayer.seeks, isEmpty);
       // the title without the episode label
@@ -791,7 +799,7 @@ void main() {
       final c = FakeController();
       await mount(tester, kPortrait, seekStep: 15, c: c);
       expect(find.text('15'), findsNWidgets(2));
-      await tester.tap(find.byIcon(Symbols.fast_forward_rounded));
+      await tester.tap(find.byKey(const ValueKey('seek-forward')));
       await tick(tester, 100);
       expect(c.fakePlayer.seeks.last, const Duration(minutes: 20, seconds: 15));
     });
@@ -799,7 +807,7 @@ void main() {
     testWidgets('сховані панелі не ловлять дотики; тап по відео показує їх назад', (tester) async {
       final c = FakeController();
       final s = await mount(tester, kPortrait, controls: false, c: c);
-      await tester.tap(find.byIcon(Symbols.play_arrow_rounded), warnIfMissed: false);
+      await tester.tap(lineIcon(LineIcon.play), warnIfMissed: false);
       await tick(tester, 100);
       // the tap went to the video, not to the pause button
       expect(c.fakePlayer.playPauseCalls, 0);
@@ -809,15 +817,15 @@ void main() {
 
     testWidgets('тап по порожньому відео ховає панелі, тап по кнопці — ні', (tester) async {
       final s = await mount(tester, kLandscape);
-      await tester.tapAt(const Offset(300, 200)); // empty space between buttons
+      await tester.tapAt(const Offset(150, 200)); // empty space left of the transport
       await tick(tester, 100);
       expect(s.events.last, 'video-tap');
       expect(s.controls, isFalse);
-      await tester.tapAt(const Offset(300, 200));
+      await tester.tapAt(const Offset(150, 200));
       await tick(tester, 100);
       expect(s.controls, isTrue);
       s.events.clear();
-      await tester.tap(find.byIcon(Symbols.play_arrow_rounded));
+      await tester.tap(lineIcon(LineIcon.play));
       await tick(tester, 100);
       expect(s.events, isEmpty);
       expect(s.controls, isTrue);
@@ -825,8 +833,8 @@ void main() {
 
     testWidgets('швидкість, Anime4K, субтитри, звук і епізоди відкривають свої меню', (tester) async {
       final s = await mount(tester, kPortrait, speed: 1.25);
-      expect(find.text('1.25x'), findsOneWidget);
-      await tester.tap(find.text('1.25x'));
+      expect(find.text('1.25×'), findsOneWidget);
+      await tester.tap(find.text('1.25×'));
       await tick(tester);
       expect(s.drawer, 'speed');
       expect(find.text('Швидкість відтворення'), findsWidgets);
@@ -834,7 +842,7 @@ void main() {
       await tick(tester);
       expect(s.drawer, isNull);
 
-      await tester.tap(find.byIcon(Symbols.video_library_rounded));
+      await tester.tap(find.byKey(const ValueKey('player-episodes')));
       await tick(tester);
       expect(s.side, SidePanelType.episodes);
       expect(tester.takeException(), isNull);
@@ -915,12 +923,12 @@ void main() {
 
     testWidgets('рядки меню ≥ 48 dp заввишки, кнопки «Назад» / «Закрити» ≥ 48 dp', (tester) async {
       final s = await open(tester, kPortrait, drawer: 'settings', pad: const EdgeInsets.only(top: 30, bottom: 18));
-      final closeIcon = find.descendant(of: find.byType(SettingsDrawer), matching: find.byIcon(Symbols.close_rounded));
-      final box = tester.getSize(find.ancestor(of: closeIcon, matching: find.byType(SizedBox)).first);
+      final closeIcon = find.descendant(of: find.byType(SettingsDrawer), matching: lineIcon(LineIcon.close));
+      final box = tester.getSize(find.ancestor(of: closeIcon, matching: find.byType(SizedBox)).at(1));
       expect(box.width, greaterThanOrEqualTo(48));
       expect(box.height, greaterThanOrEqualTo(48));
       // item rows: found by labels
-      for (final label in ['Швидкість', 'Субтитри', 'Аудіо']) {
+      for (final label in ['Швидкість', 'Субтитри', 'Звук']) {
         final t = find.descendant(of: find.byType(SettingsDrawer), matching: find.text(label));
         if (t.evaluate().isEmpty) continue;
         final row = find.ancestor(of: t.first, matching: find.byType(InkWell));
@@ -932,11 +940,11 @@ void main() {
 
     testWidgets('тап по затемненню закриває; «Назад» повертає до головного меню', (tester) async {
       final s = await open(tester, kPortrait, drawer: 'settings');
-      await tester.tap(find.text('Швидкість відтворення').first);
+      await tester.tap(find.byKey(const ValueKey('menu-speed')));
       await tick(tester, 500);
       expect(s.drawer, 'speed');
       expect(s.drawerPrev, 'settings');
-      await tester.tap(find.byIcon(Symbols.arrow_back_rounded).last);
+      await tester.tap(find.descendant(of: find.byType(SettingsDrawer), matching: lineIcon(LineIcon.back)));
       await tick(tester, 500);
       expect(s.drawer, 'settings');
       await tester.tapAt(const Offset(224, 60));
@@ -947,7 +955,7 @@ void main() {
 
     testWidgets('вибір швидкості, субтитрів і звуку доходить до обробників', (tester) async {
       final s = await open(tester, kLandscape, drawer: 'speed');
-      await tester.tap(find.text('1.5x').first);
+      await tester.tap(find.text('1.5×').first);
       await tick(tester, 200);
       expect(s.events, contains('speed:1.5'));
       s.events.clear();
@@ -1053,7 +1061,8 @@ void main() {
       await tester.pumpWidget(withInsets(const EdgeInsets.fromLTRB(0, 40, 0, 18), PhoneScene(key: key, c: c, controls: false)));
       key.currentState!.osd.value = const OsdMessage(icon: Symbols.volume_up_rounded, title: 'Гучність', detail: '65%', progress: 0.65);
       await tick(tester, 500);
-      final r = tester.getRect(find.text('Гучність'));
+      // a short value reads as part of the title
+      final r = tester.getRect(find.text('Гучність · 65%'));
       expect(r.top, greaterThan(40));
       await shot(tester, 'm_osd_portrait');
     });
@@ -1152,12 +1161,12 @@ void main() {
       await tester.tap(find.text('Локальна медіатека'));
       await loadHikka(tester, rounds: 6);
       expect(tester.takeException(), isNull);
-      expect(find.text('Локальні файли'), findsOneWidget);
-      expect(find.textContaining('Історія · '), findsOneWidget);
+      expect(find.text('Відкрити'), findsOneWidget);
+      expect(find.byKey(const ValueKey('library-tab-1')), findsOneWidget);
       await shot(tester, 'm_home_portrait_library');
       expect(HomeHub.backHandler!(), isTrue);
       await loadHikka(tester, rounds: 6);
-      expect(find.text('Локальні файли'), findsNothing);
+      expect(find.text('Відкрити'), findsNothing);
       expect(find.text('Гість'), findsOneWidget);
     });
   });
@@ -1204,10 +1213,10 @@ void main() {
       expect(tester.takeException(), isNull);
       await shot(tester, 'm_library_portrait_history');
 
-      await tester.tap(find.textContaining('Історія · ').first);
+      await tester.tap(find.byKey(const ValueKey('library-tab-1')));
       await tick(tester, 700);
       await shot(tester, 'm_library_portrait_history_tab');
-      await tester.tap(find.textContaining('Плейлисти · ').first);
+      await tester.tap(find.byKey(const ValueKey('library-tab-2')));
       await tick(tester, 700);
       await shot(tester, 'm_library_portrait_playlists_tab');
       expect(tester.takeException(), isNull);
@@ -1239,48 +1248,66 @@ void main() {
       ('Про програму', 'about'),
     ];
 
-    /// A tab may be off screen: the tab row (portrait) and the side menu (landscape) scroll
+    /// A section is opened from the list on the main settings screen (it scrolls)
     Future<void> goTab(WidgetTester tester, String label) async {
-      if (label == 'Вигляд') return;
-      if (find.text(label).evaluate().isEmpty) {
-        final scrollable = find.descendant(of: find.byType(ListView).first, matching: find.byType(Scrollable)).first;
-        final horizontal = tester.widget<Scrollable>(scrollable).axis == Axis.horizontal;
-        for (var i = 0; i < 14 && find.text(label).evaluate().isEmpty; i++) {
-          await tester.drag(scrollable, horizontal ? const Offset(-150, 0) : const Offset(0, -120));
-          await tester.pump(const Duration(milliseconds: 100));
-        }
+      final scrollable = find.descendant(of: find.byKey(const ValueKey('settings-menu')), matching: find.byType(Scrollable)).first;
+      // The row (not a group caption with the same word, e.g. «Каталог»)
+      final row = find.widgetWithText(InkWell, label);
+      for (var i = 0; i < 14 && row.evaluate().isEmpty; i++) {
+        await tester.drag(scrollable, const Offset(0, -120));
+        await tester.pump(const Duration(milliseconds: 100));
       }
-      await tester.ensureVisible(find.text(label).first);
+      await tester.ensureVisible(row.first);
       await tester.pump(const Duration(milliseconds: 200));
-      await tester.tap(find.text(label).first);
+      await tester.tap(row.first);
       await tick(tester, 600);
     }
 
-    testWidgets('портрет: свайп убік перегортає вкладки (Вигляд → Субтитри → назад)', (tester) async {
+    testWidgets('список секцій → секція → стрілка «назад» повертає до списку', (tester) async {
       await openDialog(tester, kPortrait, const EdgeInsets.fromLTRB(0, 30, 0, 18));
-      expect(find.text('Тема, кольори та заокруглення'), findsOneWidget);
-      await tester.flingFrom(const Offset(220, 500), const Offset(-300, 0), 1500);
+      expect(find.text('Налаштування'), findsOneWidget);
+      await shot(tester, 'm_settings_menu');
+      expect(find.text('Тема, акцентний колір, заокруглення'), findsOneWidget, reason: 'у списку під назвою секції є опис');
+      await tester.tap(find.byKey(const ValueKey('settings-menu-1')));
       await tick(tester, 700);
-      expect(find.text('Мови, шрифт і стиль'), findsOneWidget, reason: 'свайп ліворуч — наступна вкладка');
-      await tester.flingFrom(const Offset(120, 500), const Offset(300, 0), 1500);
+      expect(find.text('Мови, шрифт і вигляд тексту'), findsOneWidget);
+      expect(find.byKey(const ValueKey('settings-menu')), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('settings-back')));
       await tick(tester, 700);
-      expect(find.text('Тема, кольори та заокруглення'), findsOneWidget, reason: 'свайп праворуч — назад');
-
-      // The tab row follows the active one: after several swipes "Про програму" ends up in view
-      for (var i = 0; i < 8; i++) {
-        await tester.flingFrom(const Offset(220, 500), const Offset(-300, 0), 1500);
-        await tick(tester, 700);
-      }
-      // A tab in the row under the header (below the title) is entirely within the screen
-      final inStrip = [for (final e in find.text('Про програму').evaluate()) tester.getRect(find.byWidget(e.widget))]
-          .any((r) => r.top > 80 && r.left >= 0 && r.right <= kPortrait.width);
-      expect(inStrip, isTrue, reason: 'активна вкладка не втрачається за краєм рядка');
+      expect(find.byKey(const ValueKey('settings-menu')), findsOneWidget);
+      expect(find.text('Налаштування'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('портрет: вкладки рядком, без бічного меню й «Гарячих клавіш»', (tester) async {
+    testWidgets('«Каталог»: список команд з клавіатурою не лишає порожнього місця в блоці', (tester) async {
       await openDialog(tester, kPortrait, const EdgeInsets.fromLTRB(0, 30, 0, 18));
-      expect(find.text('Налаштування'), findsNothing);
+      await goTab(tester, 'Каталог');
+      StorageService.rememberTeams(['Inari', 'Amanogawa', 'FanVoxUA', 'Clan Kaizoku']);
+      addTearDown(StorageService.clearKnownTeams);
+      final field = find.byType(AppSearchDropdown<String>);
+      final scrollable = find.byType(Scrollable).first;
+      for (var i = 0; i < 20 && field.evaluate().isEmpty; i++) {
+        await tester.drag(scrollable, const Offset(0, -300));
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      await tester.ensureVisible(field);
+      await tick(tester, 300);
+      await tester.tap(field);
+      await tick(tester, 600);
+      tester.view.physicalSize = Size(tester.view.physicalSize.width, tester.view.physicalSize.height - 300 * tester.view.devicePixelRatio);
+      tester.view.viewInsets = FakeViewPadding(bottom: 300 * tester.view.devicePixelRatio);
+      addTearDown(() => tester.view.resetViewInsets());
+      await tick(tester, 1500);
+      await shot(tester, 'm_settings_catalog_keyboard');
+      final list = find.descendant(of: find.byType(AppSearchDropdown<String>), matching: find.byType(ListView));
+      final block = find.ancestor(of: find.byType(AppSearchDropdown<String>), matching: find.byType(SettingsGroup)).first;
+      final gap = tester.getBottomLeft(block).dy - tester.getBottomLeft(list).dy;
+      expect(gap, lessThan(90), reason: 'під списком у блоці немає порожнього запасу');
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('на телефоні в списку немає «Гарячих клавіш»', (tester) async {
+      await openDialog(tester, kPortrait, const EdgeInsets.fromLTRB(0, 30, 0, 18));
       expect(find.text('Гарячі клавіші'), findsNothing);
     });
 
@@ -1314,8 +1341,8 @@ void main() {
       expect(box.height, greaterThanOrEqualTo(48));
       final done = tester.getSize(find.ancestor(of: find.text('Готово'), matching: find.byType(ElevatedButton)).first);
       expect(done.height, greaterThanOrEqualTo(48));
-      final tab = tester.getSize(find.ancestor(of: find.text('Субтитри').first, matching: find.byType(InkWell)).first);
-      expect(tab.height, greaterThanOrEqualTo(48));
+      final row = tester.getSize(find.byKey(const ValueKey('settings-menu-1')));
+      expect(row.height, greaterThanOrEqualTo(48));
     });
 
     testWidgets('«Розробник»: перемикач локальної медіатеки й ключ TheMovieDB одразу зберігаються', (tester) async {
@@ -1346,10 +1373,7 @@ void main() {
       expect(StorageService.getLocalLibrary(), isFalse);
       expect(seen, [true, false]);
 
-      final keyField = find.descendant(
-        of: find.ancestor(of: find.byIcon(Symbols.key_rounded), matching: find.byType(AppSearchField)).first,
-        matching: find.byType(TextField),
-      );
+      final keyField = find.descendant(of: find.widgetWithText(SettingsRow, 'Ключ TheMovieDB'), matching: find.byType(TextField));
       await tester.ensureVisible(keyField);
       await tester.pump(const Duration(milliseconds: 200));
       await tester.enterText(keyField, '  abc123  ');

@@ -1,0 +1,189 @@
+{
+ "slug": "black-clover-b2f94c",
+ "mal_id": 34572,
+ "episodes_total": 170,
+ "ost": [
+  {
+   "index": 1,
+   "title": "Haruka Mirai (ハルカミライ)",
+   "author": "Kankaku",
+   "spotify": "https://open.spotify.com/track/6ytsH3HsHxz3TYVOiaBSA7",
+   "ost_type": "opening"
+  },
+  {
+   "index": 2,
+   "title": "PAiNT it BLACK",
+   "author": "BiSH",
+   "spotify": "https://open.spotify.com/track/4S3aU06ISAWFb0hIdZ4WL8",
+   "ost_type": "opening"
+  },
+  {
+   "index": 3,
+   "title": "Black Rover",
+   "author": "Vickeblanka",
+   "spotify": "https://open.spotify.com/track/0OGw7V8wAI6OsZIQ12JkTP",
+   "ost_type": "opening"
+  },
+  {
+   "index": 4,
+   "title": "Guess Who Is Back",
+   "author": "Kumi",
+   "spotify": "https://open.spotify.com/track/4lBliLm5ufCBNPlCzpvrQB",
+   "ost_type": "opening"
+  },
+  {
+   "index": 5,
+   "title": "Gamushara (ガムシャラ)",
+   "author": "Miyuna",
+   "spotify": "https://open.spotify.com/track/3D9yweVjHsSyfINp2Kbyx8",
+   "ost_type": "opening"
+  },
+  {
+   "index": 6,
+   "title": "Rakugaki Page (落書きペイジ)",
+   "author": "Kankaku",
+   "spotify": "https://open.spotify.com/track/7lP713bUiokrSjRcztjzgp",
+   "ost_type": "opening"
+  },
+  {
+   "index": 7,
+   "title": "JUSTadICE",
+   "author": "Seiko",
+   "spotify": "https://open.spotify.com/track/6IVM1YYZq6K6NG6qqC26o4",
+   "ost_type": "opening"
+  },
+  {
+   "index": 8,
+   "title": "sky＆blue",
+   "author": "GIRLFRIEND",
+   "spotify": "https://open.spotify.com/track/1AZKHiqBKfdBxVcWUnJJUj",
+   "ost_type": "opening"
+  },
+  {
+   "index": 9,
+   "title": "RiGHT NOW",
+   "author": "EMPiRE",
+   "spotify": "https://open.spotify.com/track/1mK1HDtie9WU6DAw3VAC4r",
+   "ost_type": "opening"
+  },
+  {
+   "index": 10,
+   "title": "Black Catcher",
+   "author": "Vickeblanka",
+   "spotify": "https://open.spotify.com/track/5RXmLhscstsdvWPN0XtUa0",
+   "ost_type": "opening"
+  },
+  {
+   "index": 11,
+   "title": "Stories",
+   "author": "Snow",
+   "spotify": null,
+   "ost_type": "opening"
+  },
+  {
+   "index": 12,
+   "title": "Eien ni Hikare (永遠に光れ)",
+   "author": "TOMORROW",
+   "spotify": "https://open.spotify.com/track/3zLCX1TGMpsA67cW2pq6ut",
+   "ost_type": "opening"
+  },
+  {
+   "index": 13,
+   "title": "Grandeur",
+   "author": "Snow",
+   "spotify": null,
+   "ost_type": "opening"
+  },
+  {
+   "index": 1,
+   "title": "Aoi Honoo (蒼い炎)",
+   "author": "Itowokashi",
+   "spotify": "https://open.spotify.com/track/0XTGeSFcD73mgRgl8VSL6S",
+   "ost_type": "ending"
+  },
+  {
+   "index": 2,
+   "title": "Amazing Dreams",
+   "author": "Swanky",
+   "spotify": "https://open.spotify.com/track/3XkODQB4J2EQIOVKIhXp56",
+   "ost_type": "ending"
+  },
+  {
+   "index": 3,
+   "title": "Black to the Dreamlight",
+   "author": "EMPiRE",
+   "spotify": "https://open.spotify.com/track/3lsNKlSXqfctHBNFGOLVTE",
+   "ost_type": "ending"
+  },
+  {
+   "index": 4,
+   "title": "four",
+   "author": "Faky",
+   "spotify": "https://open.spotify.com/track/5rf92DCtbJvUj39BifS6lT",
+   "ost_type": "ending"
+  },
+  {
+   "index": 5,
+   "title": "Tenjou Tenge (天上天下)",
+   "author": "Miyuna",
+   "spotify": "https://open.spotify.com/track/3Nv1oNLEfPpNJqyl6xc65Z",
+   "ost_type": "ending"
+  },
+  {
+   "index": 6,
+   "title": "My Song My Days",
+   "author": "Solidemo",
+   "spotify": "https://open.spotify.com/track/5N4ATZloYFOBdKLQ9v69CK",
+   "ost_type": "ending"
+  },
+  {
+   "index": 7,
+   "title": "Hana ga Saku Michi (花が咲く道)",
+   "author": "THE",
+   "spotify": "https://open.spotify.com/track/1BxBJCHhyGYcPLZBAaC7YE",
+   "ost_type": "ending"
+  },
+  {
+   "index": 8,
+   "title": "against the gods",
+   "author": "m-flo",
+   "spotify": null,
+   "ost_type": "ending"
+  },
+  {
+   "index": 9,
+   "title": "Jinsei wa Senjou Da (人生は戦場だ)",
+   "author": "Anzai",
+   "spotify": "https://open.spotify.com/track/3unpJWhOgxh0ayjWOTnydA",
+   "ost_type": "ending"
+  },
+  {
+   "index": 10,
+   "title": "New Page",
+   "author": "INTERSECTION",
+   "spotify": "https://open.spotify.com/track/2gApWgkuisXedOcS9Tligs",
+   "ost_type": "ending"
+  },
+  {
+   "index": 11,
+   "title": "Answer (アンサー)",
+   "author": "Kaf",
+   "spotify": "https://open.spotify.com/track/0ud4VAfTH1AOb904kWOTzJ",
+   "ost_type": "ending"
+  },
+  {
+   "index": 12,
+   "title": "A Walk",
+   "author": "Gakuto",
+   "spotify": "https://open.spotify.com/track/0PievpCNM93Ukg5q5XWu8X",
+   "ost_type": "ending"
+  },
+  {
+   "index": 13,
+   "title": "BEAUTIFUL",
+   "author": "TREASURE",
+   "spotify": "https://open.spotify.com/track/406szmvIaQo0EATtjcf19k",
+   "ost_type": "ending"
+  }
+ ]
+}

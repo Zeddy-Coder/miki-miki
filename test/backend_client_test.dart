@@ -7,6 +7,7 @@ import 'support/hikka_account_fakes.dart';
 
 void main() {
   backendFallbackTests();
+  backendGuideTests();
   late FakeBackend fake;
   late Map<String, dynamic> store;
   late BackendClient client;
@@ -99,6 +100,32 @@ void main() {
     expect(prefs.effectiveMoonKey, 'server-key');
     prefs.moonKey = 'my-key';
     expect(prefs.effectiveMoonKey, 'my-key');
+  });
+}
+
+void backendGuideTests() {
+  test('гід по серіях MoonAnime: GET guide?mal= із сесією; функції ще нема (404) — більше не питаємо', () async {
+    final calls = <(String, String?)>[];
+    var deployed = true;
+    final c = BackendClient(
+      load: () => {},
+      save: (_) {},
+      transport: (method, url, headers, body) async {
+        calls.add((url, headers['x-session']));
+        if (url.endsWith('/session')) return (200, '{"session":"${'a' * 48}","expires":${DateTime.now().millisecondsSinceEpoch + 30 * 24 * 3600 * 1000}}');
+        if (!deployed) return (404, '<html>Page not found</html>');
+        return (200, '{"mal":61316,"eps":{"2":{"t":"Подолати піщаний час","d":1420}}}');
+      },
+    );
+    final g = (await c.guide(61316))!;
+    expect((g['eps'] as Map)['2'], {'t': 'Подолати піщаний час', 'd': 1420});
+    expect(calls.last, ('https://europe-west1-miki-miki-729d9.cloudfunctions.net/guide?mal=61316', 'a' * 48));
+    deployed = false;
+    expect(await c.guide(61316), isNull);
+    final n = calls.length;
+    expect(await c.guide(52991), isNull);
+    expect(calls, hasLength(n), reason: 'функції нема — до перезапуску не питаємо');
+    expect(BackendClient.hostingOrigin, 'https://miki-miki-729d9.web.app');
   });
 }
 

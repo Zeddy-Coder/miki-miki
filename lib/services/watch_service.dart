@@ -6,7 +6,10 @@ import 'package:flutter/foundation.dart';
 
 import '../models/hikka_models.dart';
 import '../models/source_models.dart';
+import 'downloads/download_manager.dart';
 import 'episode_check.dart';
+import 'hikka_prefs.dart';
+import 'network_status.dart';
 import 'source_registry.dart';
 import 'sources/anime_source.dart';
 import 'sources/source_http.dart';
@@ -64,7 +67,7 @@ class WatchLoad extends ChangeNotifier {
   @visibleForTesting
   void addOfferForTest(WatchOffer o) => _offers.add(o);
 
-  EpisodeCheck checkOf(WatchGroup g) => checkGroup(g, hikka);
+  EpisodeCheck checkOf(WatchGroup g) => checkGroup(g, hikka, all: [for (final o in _offers) ...o.groups]);
 
   /// The variant for the "Дивитись" button; `null` until anything is found.
   ///
@@ -148,7 +151,8 @@ class WatchLoad extends ChangeNotifier {
 
   void _begin(String id) => _pending.add(id);
 
-  void _done(String id, {WatchOffer? offer, String? error, bool? licensed, MikaiLicense? license}) {
+  /// [stale]: the offer is the downloads' copy, not the site's answer: it does not say how many episodes there are now
+  void _done(String id, {WatchOffer? offer, String? error, bool? licensed, MikaiLicense? license, bool stale = false}) {
     if (_disposed) return;
     _pending.remove(id);
     if (offer != null) {
@@ -157,7 +161,7 @@ class WatchLoad extends ChangeNotifier {
         ..add(offer)
         ..sort((a, b) => order.indexOf(a.source).compareTo(order.indexOf(b.source)));
     }
-    if (offer != null) {
+    if (offer != null && !stale) {
       StorageService.rememberTeams([for (final g in offer.groups) ...(g.teams.isNotEmpty ? g.teams.map((t) => t.name) : [g.teamLabel])]);
       _recordAvailability();
     }
@@ -218,6 +222,13 @@ class WatchService {
       if (!isMikai && !searchOthers) continue;
       load._begin(s.id);
       () async {
+        // No internet (the system says so): the dubs downloaded from this site stand in for it at once
+        final net = NetworkStatus.instance;
+        if (!net.online && net.certain) {
+          final local = downloadedOffer(s, load.animeKey, a.title(HikkaPrefs.instance.titleLang));
+          load._done(s.id, offer: local, error: local == null ? 'Немає інтернету' : null, stale: true);
+          return;
+        }
         try {
           if (s is MikaiSource) {
             await _runMikai(load, s, a);
@@ -226,13 +237,23 @@ class WatchService {
             load._done(s.id, offer: offer);
           }
         } on SourceException catch (e) {
-          load._done(s.id, error: e.message);
+          // The site cannot be reached: what was downloaded from it still plays
+          final local = downloadedOffer(s, load.animeKey, a.title(HikkaPrefs.instance.titleLang));
+          load._done(s.id, offer: local, error: local == null ? e.message : '${e.message} Показано завантажені серії.', stale: true);
         } catch (e) {
           load._done(s.id, error: 'Не вдалося отримати дані: $e');
         }
       }();
     }
     return load;
+  }
+
+  /// The dubs of [animeKey] downloaded from [s] (as they were when downloaded), as the site's answer while it cannot be
+  /// reached; null when nothing of it is on the device
+  static WatchOffer? downloadedOffer(AnimeSource s, String animeKey, String title) {
+    final groups = [for (final g in DownloadManager.instance.groupsOf(animeKey)) if (g.sourceId == s.id) g.watchGroup];
+    if (groups.isEmpty) return null;
+    return WatchOffer(source: s, anime: SAnime(url: '', title: title), groups: groups);
   }
 
   Future<void> _runMikai(WatchLoad load, MikaiSource m, HikkaAnime a) async {

@@ -53,6 +53,23 @@ class HlsProxy {
     return _localUrl(id, Uri.parse(url));
   }
 
+  /// The original address and headers behind a local address [wrap] gave (downloads fetch directly); `null` for any
+  /// other address or a forgotten session
+  (String, Map<String, String>)? original(String url) {
+    final u = Uri.tryParse(url);
+    final port = _server?.port;
+    if (u == null || port == null || u.host != '127.0.0.1' || u.port != port) return null;
+    final parts = u.pathSegments;
+    if (parts.length < 3) return null;
+    final headers = _headers[parts[0]];
+    if (headers == null) return null;
+    try {
+      return (utf8.decode(base64Url.decode(base64Url.normalize(parts[2]))), Map.of(headers));
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<HttpServer> _ensureStarted() => _starting ??= () async {
         final s = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
         _server = s;

@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 import '../../models/hikka_models.dart';
 import '../../services/hikka_api.dart';
 import '../../services/hikka_nav.dart';
 import '../../services/hikka_prefs.dart';
 import '../app_animation_kit.dart';
+import '../../services/ui_theme_service.dart';
+import '../../utils/app_clock.dart';
+import '../app_tones.dart';
 import '../app_ui_kit.dart';
 import 'hikka_airing_strip.dart';
 import 'hikka_cards.dart';
@@ -13,8 +17,8 @@ import 'hikka_community_cards.dart';
 import 'hikka_page_kit.dart';
 import 'hikka_shelf.dart';
 
-/// The "Усе" section in "Огляд": calendar, catalog, collections, articles and characters on one page.
-/// Each block is a selection with an "Усі" button that opens the matching section in full.
+/// The "Усе" section in "Огляд": today's episodes, collections as fans of posters, articles as rows, then the catalog
+/// and characters. Each block has a calm "Усі ›" that opens the matching section in full.
 class HikkaOverviewPage extends StatefulWidget {
   final double scale;
   final double bottomInset;
@@ -38,59 +42,74 @@ class _HikkaOverviewPageState extends State<HikkaOverviewPage> {
     super.dispose();
   }
 
-  /// A vertical selection of cards (collections, articles) with a heading and an "Усі" button
-  Widget _list<T>({
-    required String title,
-    required String subtitle,
-    required Object token,
-    required Future<List<T>> Function() load,
-    required Widget Function(T item) card,
-    required HikkaTab more,
-    required double pad,
-  }) {
+  /// A heading of a block with a calm "Усі ›" on the right
+  Widget _head(String title, {String? subtitle, String more = 'Усі', VoidCallback? onMore, required double pad}) {
     final scale = widget.scale;
-    return HikkaAsync<List<T>>(
-      key: ValueKey('overview-$title-$token'),
+    return Padding(
+      padding: EdgeInsets.fromLTRB(pad, 0, pad - 8 * scale, 0),
+      child: AppSectionHeader(
+        scale: scale,
+        title: title,
+        subtitle: subtitle,
+        titleSize: 15,
+        calm: true,
+        trailing: onMore == null ? null : HikkaLinkButton(label: more, scale: scale, onTap: onMore, calm: true),
+      ),
+    );
+  }
+
+  /// "Сьогодні в ефірі": three episodes (the current hour first) with the time, a small poster and the episode number
+  Widget _today(double pad, Object token) {
+    final scale = widget.scale;
+    final adult = HikkaPrefs.instance.allowAdult;
+    return HikkaAsync<List<HikkaScheduleEntry>>(
+      key: ValueKey('overview-today-$token'),
       scale: scale,
       compactError: true,
-      load: load,
-      stateFrame: (context, child) => Padding(
-        padding: EdgeInsets.only(bottom: 22 * scale),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: pad),
-              child: AppSectionHeader(scale: scale, title: title, subtitle: subtitle),
-            ),
-            SizedBox(height: 8 * scale),
-            child,
-          ],
-        ),
-      ),
+      load: () async => (await HikkaApi.instance.schedule(size: HikkaAiringStrip.limit, allowAdult: adult)).items,
+      loading: (context) => SizedBox(height: 200 * scale),
+      builder: (context, list) {
+        final now = AppClock.now();
+        final entries = [...list]..sort((a, b) => a.airingAt.compareTo(b.airingAt));
+        final from = HikkaTodayRow.pick(entries, now);
+        if (from < 0) return const SizedBox.shrink();
+        final shown = entries.skip(from).take(3).toList();
+        final t = shown.first.time;
+        final today = t.year == now.year && t.month == now.month && t.day == now.day;
+        return Padding(
+          padding: EdgeInsets.only(bottom: 14 * scale),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _head(today ? 'Сьогодні в ефірі' : 'Незабаром в ефірі', more: 'Розклад', onMore: () => HikkaNav.instance.setTab(HikkaTab.schedule), pad: pad),
+              SizedBox(height: 4 * scale),
+              for (final e in shown) _AiringRow(entry: e, scale: scale, pad: pad),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// "Статті": three rows with a cover on the right
+  Widget _articles(double pad, Object token) {
+    final scale = widget.scale;
+    return HikkaAsync<List<HikkaArticle>>(
+      key: ValueKey('overview-articles-$token'),
+      scale: scale,
+      compactError: true,
+      load: () async => (await HikkaApi.instance.articles(size: 6)).items,
       loading: (context) => HikkaShelfSkeleton(scale: scale, pad: pad),
       builder: (context, list) {
         if (list.isEmpty) return const SizedBox.shrink();
         return Padding(
-          padding: EdgeInsets.only(bottom: 22 * scale),
+          padding: EdgeInsets.only(bottom: 14 * scale),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: pad),
-                child: AppSectionHeader(
-                  scale: scale,
-                  title: title,
-                  subtitle: subtitle,
-                  trailing: HikkaLinkButton(label: 'Усі', scale: scale, onTap: () => HikkaNav.instance.setTab(more)),
-                ),
-              ),
-              SizedBox(height: 10 * scale),
-              for (final item in list.take(HikkaOverviewPage.previewCount))
-                Padding(
-                  padding: EdgeInsets.fromLTRB(pad, 0, pad, 10 * scale),
-                  child: card(item),
-                ),
+              _head('Статті', subtitle: 'Новини, огляди й авторські тексти', onMore: () => HikkaNav.instance.setTab(HikkaTab.articles), pad: pad),
+              SizedBox(height: 4 * scale),
+              for (final a in list.take(HikkaOverviewPage.previewCount)) HikkaArticleRow(article: a, scale: scale, pad: pad),
             ],
           ),
         );
@@ -112,7 +131,21 @@ class _HikkaOverviewPageState extends State<HikkaOverviewPage> {
       controller: _scroll,
       bottomInset: widget.bottomInset,
       children: [
-        HikkaAiringStrip(scale: scale, pad: pad, token: token),
+        SizedBox(height: 8 * scale),
+        _today(pad, token),
+        HikkaShelfAsync<HikkaCollection>(
+          scale: scale,
+          pad: pad,
+          title: 'Колекції',
+          subtitle: 'Добірки від спільноти',
+          token: token,
+          cardWidth: HikkaCollectionFanCard.width(scale),
+          cardHeight: HikkaCollectionFanCard.height(scale),
+          load: () async => (await api.collections(size: 8, allowAdult: adult)).items,
+          itemBuilder: (context, c) => HikkaCollectionFanCard(collection: c, scale: scale),
+          onMore: () => HikkaNav.instance.setTab(HikkaTab.collections),
+        ),
+        _articles(pad, token),
         HikkaShelfAsync<HikkaAnime>(
           scale: scale,
           pad: pad,
@@ -122,24 +155,6 @@ class _HikkaOverviewPageState extends State<HikkaOverviewPage> {
           load: () async => (await api.searchAnime(popular, size: 16, allowAdult: adult)).items,
           itemBuilder: (context, a) => HikkaAnimeCard(anime: a, scale: scale),
           onMore: () => HikkaNav.instance.setTab(HikkaTab.anime),
-        ),
-        _list<HikkaCollection>(
-          title: 'Колекції',
-          subtitle: 'Добірки від спільноти',
-          token: token,
-          load: () async => (await api.collections(size: 6, allowAdult: adult)).items,
-          card: (c) => HikkaCollectionCard(collection: c, scale: scale),
-          more: HikkaTab.collections,
-          pad: pad,
-        ),
-        _list<HikkaArticle>(
-          title: 'Статті',
-          subtitle: 'Новини, огляди й авторські тексти',
-          token: token,
-          load: () async => (await api.articles(size: 6)).items,
-          card: (a) => HikkaArticleCard(article: a, scale: scale),
-          more: HikkaTab.articles,
-          pad: pad,
         ),
         HikkaShelfAsync<HikkaCharacter>(
           scale: scale,
@@ -152,6 +167,59 @@ class _HikkaOverviewPageState extends State<HikkaOverviewPage> {
           onMore: () => HikkaNav.instance.setTab(HikkaTab.characters),
         ),
       ],
+    );
+  }
+}
+
+/// One episode of "Сьогодні в ефірі": the time in grey, a small poster, the title and "Серія N"
+class _AiringRow extends StatelessWidget {
+  final HikkaScheduleEntry entry;
+  final double scale;
+  final double pad;
+
+  const _AiringRow({required this.entry, required this.scale, required this.pad});
+
+  @override
+  Widget build(BuildContext context) {
+    final a = entry.anime;
+    final title = a.title(HikkaPrefs.instance.titleLang);
+    final episode = entry.episode > 0 ? 'Серія ${entry.episode}' : 'Нова серія';
+    final time = HikkaText.hhmm(entry.time);
+    return Semantics(
+      button: true,
+      label: '$time. $title. $episode',
+      excludeSemantics: true,
+      child: InkWell(
+        onTap: () => HikkaNav.instance.openAnime(a.slug, seed: a),
+        splashColor: Colors.transparent,
+        highlightColor: uiTheme.touchHighlight,
+        hoverColor: uiTheme.hoverOverlay,
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: pad, vertical: 7 * scale),
+          child: Row(
+            children: [
+              SizedBox(width: 40 * scale, child: Text(time, style: hikkaStyle(13 * scale, color: uiTheme.textMuted))),
+              SizedBox(width: 12 * scale),
+              SizedBox(
+                width: 38 * scale,
+                height: 54 * scale,
+                child: HikkaPoster(url: a.image, malId: a.malId, scale: scale, aspect: 38 / 54, radius: 8, border: false, icon: Symbols.movie_rounded),
+              ),
+              SizedBox(width: 12 * scale),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: hikkaStyle(14 * scale)),
+                    SizedBox(height: 2 * scale),
+                    Text(episode, style: hikkaStyle(12.5 * scale, color: AppTones.rowSub)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

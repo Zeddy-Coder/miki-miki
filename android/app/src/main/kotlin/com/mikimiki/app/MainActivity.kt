@@ -2,6 +2,7 @@ package com.mikimiki.app
 
 import android.Manifest
 import android.app.ActivityManager
+import android.app.ApplicationExitInfo
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -13,17 +14,25 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.res.Configuration
+import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.graphics.drawable.Icon
 import android.os.PowerManager
+import android.os.StatFs
 import android.provider.Settings
 import android.util.Rational
 import android.view.WindowManager
+import androidx.core.content.FileProvider
 import com.google.firebase.FirebaseApp
 import com.google.firebase.installations.FirebaseInstallations
 import com.google.firebase.messaging.FirebaseMessaging
@@ -51,6 +60,14 @@ class MainActivity : FlutterActivity() {
     private var focusRequest: AudioFocusRequest? = null
     private var hasFocus = false
 
+    private var deviceCallback: AudioDeviceCallback? = null
+    private var noisyReceiver: BroadcastReceiver? = null
+
+    private var netCallback: ConnectivityManager.NetworkCallback? = null
+
+    /** The last network state told to Dart: capabilities change often (signal), Dart hears only real changes */
+    private var lastNet: Map<String, Any>? = null
+
     /** Посилання `miki://open/…`, з яким запустили застосунок (віддається Dart один раз) */
     private var pendingLink: String? = null
 
@@ -58,7 +75,10 @@ class MainActivity : FlutterActivity() {
         super.onCreate(savedInstanceState)
         pendingLink = mikiLink(intent)
         registerPipReceiver()
+        registerAudioRoute()
+        registerNetwork()
         createPushChannel()
+        DownloadService.onAction = { action -> channel?.invokeMethod("downloadsAction", action) }
     }
 
     override fun onDestroy() {
@@ -69,7 +89,12 @@ class MainActivity : FlutterActivity() {
             }
         }
         pipReceiver = null
+        unregisterAudioRoute()
+        unregisterNetwork()
         abandonAudioFocus()
+        DownloadService.onAction = null
+        // Downloads live in this activity's engine: when it closes for good they stop, and so does their notification
+        if (isFinishing) DownloadService.stop(this)
         super.onDestroy()
     }
 
@@ -82,6 +107,12 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun mikiLink(i: Intent?): String? {
+        // Our own notification "new version" / an announcement without a title (MikiMessagingService)
+        when (i?.extras?.getString("push_open")) {
+            "update" -> return "miki://open/update"
+            "notifications" -> return "miki://open/notifications"
+            "downloads" -> return "miki://open/downloads"
+        }
         // A tap on a push notification "new episode": FCM puts the data fields into the launch intent
         val own = i?.extras?.getString("push_slug") // our own notification (MikiMessagingService)
         if (!own.isNullOrEmpty()) return "miki://open/anime/" + Uri.encode(own)
@@ -249,10 +280,27 @@ class MainActivity : FlutterActivity() {
                     result.success(link)
                 }
                 "deviceInfo" -> result.success(deviceInfo())
+                "exits" -> result.success(exits((call.argument<Number>("since") ?: 0).toLong()))
                 "pushInbox" -> result.success(MikiMessagingService.drain(this))
                 "pushToken" -> pushToken(result)
                 "pushDiagnose" -> pushDiagnose(result)
                 "pushPermission" -> requestPushPermission(result)
+                "installApk" -> result.success(installApk(call.argument<String>("path"), call.argument<Boolean>("ask") ?: true))
+                "networkState" -> result.success(networkState())
+                "storageInfo" -> result.success(storageInfo(call.argument<String>("path")))
+                "downloadService" -> {
+                    if (call.argument<Boolean>("active") == true) {
+                        DownloadService.show(
+                            this,
+                            call.argument<String>("title") ?: "",
+                            call.argument<String>("text") ?: "",
+                            call.argument<Int>("progress") ?: -1,
+                        )
+                    } else {
+                        DownloadService.stop(this)
+                    }
+                    result.success(null)
+                }
                 else -> result.notImplemented()
             }
         }
@@ -363,6 +411,47 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    // ── Updates ──────────────────────────────────────────────────────────
+
+    /**
+     * Hands a downloaded APK to the system installer: "started"; "permission" when the settings opened so the person allows
+     * Miki Miki to install apps ([ask]); "denied" when that permission is still missing; anything else is why it failed.
+     * The file lies in `cache/updates`, which the app's file provider serves (`res/xml/update_paths.xml`)
+     */
+    private fun installApk(path: String?, ask: Boolean): String {
+        if (path.isNullOrEmpty()) return "no_path"
+        val file = java.io.File(path)
+        if (!file.isFile) return "no_file"
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
+            if (!ask) return "denied"
+            try {
+                startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")))
+                return "permission"
+            } catch (_: Exception) {
+                // No such settings screen on this firmware: the installer asks itself
+            }
+        }
+        return try {
+            // The provider serves only cache/updates: a file elsewhere is copied there first
+            val dir = java.io.File(cacheDir, "updates")
+            val apk = if (file.canonicalPath.startsWith(dir.canonicalPath + java.io.File.separator)) {
+                file
+            } else {
+                dir.mkdirs()
+                file.copyTo(java.io.File(dir, file.name), overwrite = true)
+            }
+            val uri = FileProvider.getUriForFile(this, "$packageName.updates", apk)
+            @Suppress("DEPRECATION")
+            val intent = Intent(Intent.ACTION_INSTALL_PACKAGE)
+                .setDataAndType(uri, "application/vnd.android.package-archive")
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(intent)
+            "started"
+        } catch (e: Exception) {
+            "failed: $e"
+        }
+    }
+
     // ── Brightness and volume ────────────────────────────────────────────
 
     private fun currentBrightness(): Double {
@@ -436,6 +525,187 @@ class MainActivity : FlutterActivity() {
 
     private fun audio(): AudioManager = getSystemService(AUDIO_SERVICE) as AudioManager
 
+    // ── Network: online or not, metered or not (offline mode, "Wi-Fi only" downloads) ──
+
+    private fun connectivity(): ConnectivityManager? = getSystemService(ConnectivityManager::class.java)
+
+    /** `online`: some network with internet; `metered`: mobile data or a hotspot (Android decides); `type`: for the log */
+    private fun networkState(): Map<String, Any> {
+        val cm = connectivity() ?: return mapOf("online" to true, "metered" to false, "type" to "")
+        return try {
+            val net = cm.activeNetwork
+            val caps = net?.let { cm.getNetworkCapabilities(it) }
+            val online = caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+            val type = when {
+                caps == null -> ""
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "wifi"
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "cellular"
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "ethernet"
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN) -> "vpn"
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_BLUETOOTH) -> "bluetooth"
+                else -> "other"
+            }
+            mapOf("online" to online, "metered" to (online && cm.isActiveNetworkMetered), "type" to type)
+        } catch (_: Exception) {
+            mapOf("online" to true, "metered" to false, "type" to "")
+        }
+    }
+
+    private fun reportNetwork() {
+        val state = networkState()
+        if (state == lastNet) return
+        lastNet = state
+        channel?.invokeMethod("network", state)
+    }
+
+    private fun registerNetwork() {
+        val cm = connectivity() ?: return
+        val main = Handler(Looper.getMainLooper())
+        val cb = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                main.post { reportNetwork() }
+            }
+
+            override fun onLost(network: Network) {
+                main.post { reportNetwork() }
+            }
+
+            override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
+                main.post { reportNetwork() }
+            }
+        }
+        try {
+            cm.registerDefaultNetworkCallback(cb)
+            netCallback = cb
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun unregisterNetwork() {
+        netCallback?.let {
+            try {
+                connectivity()?.unregisterNetworkCallback(it)
+            } catch (_: Exception) {
+            }
+        }
+        netCallback = null
+    }
+
+    /** Free and total bytes where [path] lies (the downloads folder) */
+    private fun storageInfo(path: String?): Map<String, Long>? = try {
+        val s = StatFs(path ?: filesDir.path)
+        mapOf("free" to s.availableBytes, "total" to s.totalBytes)
+    } catch (_: Exception) {
+        null
+    }
+
+    // ── Audio route: Bluetooth, wired, USB, HDMI come and go ────────────────
+
+    /**
+     * Tells Dart (`audioRoute`) when an output device a video plays through comes or goes: the player then reopens its
+     * audio output, whose delay is measured on opening (Bluetooth adds 150–300 ms). Headphones taken off (`audioNoisy`,
+     * Android's "becoming noisy") pause playback, as in other players.
+     */
+    private fun registerAudioRoute() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val callback = object : AudioDeviceCallback() {
+                // Right after registering Android lists every connected device as "added": that is not a change
+                private var initial = true
+
+                override fun onAudioDevicesAdded(added: Array<out AudioDeviceInfo>) {
+                    if (initial) {
+                        initial = false
+                        return
+                    }
+                    reportRoute("added", added)
+                }
+
+                override fun onAudioDevicesRemoved(removed: Array<out AudioDeviceInfo>) = reportRoute("removed", removed)
+            }
+            try {
+                audio().registerAudioDeviceCallback(callback, Handler(Looper.getMainLooper()))
+                deviceCallback = callback
+            } catch (_: Exception) {
+            }
+        }
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                if (intent?.action == AudioManager.ACTION_AUDIO_BECOMING_NOISY) channel?.invokeMethod("audioNoisy", null)
+            }
+        }
+        val filter = IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY)
+        try {
+            // A protected system broadcast: only Android sends it
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
+            } else {
+                registerReceiver(receiver, filter)
+            }
+            noisyReceiver = receiver
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun unregisterAudioRoute() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            deviceCallback?.let {
+                try {
+                    audio().unregisterAudioDeviceCallback(it)
+                } catch (_: Exception) {
+                }
+            }
+        }
+        deviceCallback = null
+        noisyReceiver?.let {
+            try {
+                unregisterReceiver(it)
+            } catch (_: Exception) {
+            }
+        }
+        noisyReceiver = null
+    }
+
+    /** Output devices a video can play through (not the call earpiece, the telephony line, recording or casting buses) */
+    private fun isMediaOutput(d: AudioDeviceInfo): Boolean = d.isSink && when (d.type) {
+        AudioDeviceInfo.TYPE_BUILTIN_EARPIECE, AudioDeviceInfo.TYPE_TELEPHONY, AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
+        AudioDeviceInfo.TYPE_REMOTE_SUBMIX, AudioDeviceInfo.TYPE_FM, AudioDeviceInfo.TYPE_IP, AudioDeviceInfo.TYPE_BUS -> false
+        else -> true
+    }
+
+    private fun reportRoute(change: String, devices: Array<out AudioDeviceInfo>) {
+        val media = devices.filter { isMediaOutput(it) }
+        if (media.isEmpty()) return
+        val names = media.map { audioTypeName(it.type) }.distinct()
+        channel?.invokeMethod("audioRoute", mapOf("change" to change, "devices" to names, "route" to mediaRoute()))
+    }
+
+    /** Where a video's sound goes now: the device Android routes media to (13+) or the likeliest one */
+    private fun mediaRoute(): String {
+        val am = audio()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            try {
+                val attrs = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).build()
+                val routed = am.getAudioDevicesForAttributes(attrs)
+                if (routed.isNotEmpty()) return routed.joinToString(", ") { audioTypeName(it.type) }
+            } catch (_: Exception) {
+            }
+        }
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val outs = am.getDevices(AudioManager.GET_DEVICES_OUTPUTS).filter { isMediaOutput(it) }.map { it.type }
+                val order = listOf(
+                    AudioDeviceInfo.TYPE_BLUETOOTH_A2DP, 26, 27, 30, AudioDeviceInfo.TYPE_HEARING_AID,
+                    AudioDeviceInfo.TYPE_WIRED_HEADPHONES, AudioDeviceInfo.TYPE_WIRED_HEADSET,
+                    AudioDeviceInfo.TYPE_USB_HEADSET, AudioDeviceInfo.TYPE_USB_DEVICE, AudioDeviceInfo.TYPE_HDMI,
+                )
+                val best = order.firstOrNull { it in outs }
+                return if (best != null) audioTypeName(best) else audioTypeName(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER)
+            }
+        } catch (_: Exception) {
+        }
+        return ""
+    }
+
     private fun currentVolume(): Double {
         val am = audio()
         val max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
@@ -490,6 +760,52 @@ class MainActivity : FlutterActivity() {
         return info
     }
 
+    /**
+     * How this app's recent processes ended (Android 11+), the ones after [since] (ms): the reason, the signal or
+     * status, the system's note, the memory, and for a native crash or a freeze the raw trace (the tombstone or the
+     * ANR text, at most 512 KB) — the log tells why the app went down last time. Read-only.
+     */
+    private fun exits(since: Long): List<Map<String, Any?>> {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return emptyList()
+        val list = try {
+            (getSystemService(ACTIVITY_SERVICE) as ActivityManager).getHistoricalProcessExitReasons(packageName, 0, 8)
+        } catch (_: Exception) {
+            return emptyList()
+        }
+        return list.filter { it.timestamp > since }.map { e ->
+            val m = HashMap<String, Any?>()
+            m["time"] = e.timestamp
+            m["reason"] = e.reason
+            m["status"] = e.status
+            m["description"] = e.description
+            m["importance"] = e.importance
+            m["pssKb"] = e.pss
+            m["rssKb"] = e.rss
+            m["process"] = e.processName
+            if (e.reason == ApplicationExitInfo.REASON_CRASH_NATIVE || e.reason == ApplicationExitInfo.REASON_ANR) {
+                m["trace"] = traceOf(e)
+            }
+            m
+        }
+    }
+
+    @androidx.annotation.RequiresApi(Build.VERSION_CODES.R)
+    private fun traceOf(e: ApplicationExitInfo): ByteArray? = try {
+        e.traceInputStream?.use { input ->
+            val out = java.io.ByteArrayOutputStream()
+            val buf = ByteArray(16 * 1024)
+            val cap = 512 * 1024
+            while (out.size() < cap) {
+                val n = input.read(buf, 0, minOf(buf.size, cap - out.size()))
+                if (n <= 0) break
+                out.write(buf, 0, n)
+            }
+            out.toByteArray()
+        }
+    } catch (_: Exception) {
+        null
+    }
+
     private fun audioTypeName(type: Int): String = when (type) {
         AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> "слуховий динамік"
         AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> "динамік"
@@ -498,8 +814,10 @@ class MainActivity : FlutterActivity() {
         AudioDeviceInfo.TYPE_BLUETOOTH_A2DP -> "Bluetooth (A2DP)"
         AudioDeviceInfo.TYPE_HDMI -> "HDMI"
         AudioDeviceInfo.TYPE_USB_DEVICE, AudioDeviceInfo.TYPE_USB_HEADSET -> "USB"
+        23 -> "слуховий апарат"
         26 -> "Bluetooth LE (навушники)"
         27 -> "Bluetooth LE (динамік)"
+        30 -> "Bluetooth LE (трансляція)"
         else -> "тип $type"
     }
 

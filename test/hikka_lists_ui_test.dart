@@ -1,8 +1,8 @@
 import 'dart:convert';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:miki_miki/models/hikka_user_models.dart';
 import 'package:miki_miki/services/backend_client.dart';
 import 'package:miki_miki/services/hikka_api.dart';
@@ -15,9 +15,11 @@ import 'package:miki_miki/utils/platform_info.dart';
 import 'package:miki_miki/widgets/hikka/hikka_cards.dart';
 import 'package:miki_miki/widgets/hikka/hikka_common.dart';
 import 'package:miki_miki/widgets/hikka/hikka_hub.dart';
+import 'package:miki_miki/widgets/hikka/hikka_list_sheet.dart';
 import 'package:miki_miki/widgets/hikka/hikka_page_kit.dart';
 import 'package:miki_miki/widgets/hikka/hikka_user_profile.dart';
 import 'package:miki_miki/widgets/home_hub.dart';
+import 'package:miki_miki/widgets/design_kit.dart';
 
 import 'support/fakes.dart';
 import 'support/hikka_account_fakes.dart';
@@ -301,10 +303,14 @@ void main() {
     expect(tester.takeException(), isNull);
   }
 
-  String pill(String slug, int episodes) {
+  /// The grey line under a card in "Дивлюсь": "5 з 25"
+  String progressLine(String slug, int episodes) {
     final total = account.animeJson(slug)['episodes_total'];
-    return '$episodes/${total is int && total > 0 ? total : '?'}';
+    return total is int && total > 0 ? '$episodes з $total' : '$episodes';
   }
+
+  /// A pill tab by its label (the counter is a separate grey text inside it)
+  Finder tab(String label) => find.ancestor(of: find.text(label), matching: find.byType(AppPillTab)).first;
 
   group('списки: фільтр і оновлення', () {
     testWidgets('телефон: кнопки «Оновити» немає, є фільтр; сортування за замовчуванням — нещодавно оновлені; потяг вниз оновлює', (tester) async {
@@ -329,11 +335,13 @@ void main() {
       final before = account.listBodies.length;
       await tester.tap(find.byTooltip('Фільтри й сортування'));
       await load(tester, rounds: 6);
-      expect(find.text('Сортування'), findsOneWidget);
-      expect(find.text('Нещодавно оновлені'), findsWidgets);
-      await tester.tap(find.text('Показати результати'));
+      expect(find.text('Сортування й фільтри'), findsOneWidget);
+      expect(find.text('Оновлені'), findsWidgets);
+      final show = find.textContaining(RegExp(r'^Показати'));
+      expect(show, findsOneWidget);
+      await tester.tap(show);
       await load(tester, rounds: 8);
-      expect(find.text('Сортування'), findsNothing);
+      expect(find.text('Сортування й фільтри'), findsNothing);
       expect(account.listBodies.length, greaterThan(before));
       expect(tester.takeException(), isNull);
     });
@@ -346,15 +354,17 @@ void main() {
     });
   });
 
-  group('позначки статусу', () {
-    testWidgets('каталог: статус пігулкою зверху ліворуч, оцінка поруч', (tester) async {
+  group('картки каталогу', () {
+    testWidgets('каталог: чисті постери без плашок статусу й оцінки; рік і оцінка сірим під назвою', (tester) async {
       signIn();
       await HikkaMyList.instance.loadIndex();
       HikkaNav.instance.setTab(HikkaTab.anime);
       await openTab(tester, MainTab.discover, size: kNarrow);
       await load(tester, rounds: 10);
-      expect(find.text('Дивлюсь'), findsWidgets);
-      await shot(tester, 'catalog_status_pill_narrow');
+      expect(find.text('Дивлюсь'), findsNothing, reason: 'статусу на постері немає');
+      expect(find.byIcon(Symbols.star_rounded), findsNothing, reason: 'оцінка — сірим під назвою, без зірки-плашки');
+      expect(find.byType(HikkaMetaLine), findsWidgets);
+      await shot(tester, 'catalog_cards_narrow');
     });
   });
 
@@ -365,25 +375,29 @@ void main() {
 
       expect(find.text('Списки'), findsOneWidget);
       expect(find.text('tester'), findsOneWidget, reason: 'під заголовком — імʼя користувача');
-      expect(find.text('Гість'), findsNothing);
-      for (final t in ['Дивлюсь · 2', 'У планах · 1', 'Переглянуто · 1', 'Відкладено · 0', 'Кинуто · 0', 'Улюблене']) {
-        expect(find.text(t), findsOneWidget, reason: t);
+      expect(find.text('Увійдіть через Hikka'), findsNothing);
+      for (final (label, n) in [('Дивлюсь', '2'), ('У планах', '1'), ('Переглянуто', '1'), ('Відкладено', '0'), ('Кинуто', '0')]) {
+        expect(find.descendant(of: tab(label), matching: find.text(n)), findsOneWidget, reason: '$label $n');
       }
+      expect(find.text('Улюблене'), findsOneWidget);
       expect(find.byType(HikkaAnimeCard), findsNWidgets(2));
-      expect(find.text(pill(aot, 5)), findsOneWidget);
-      expect(find.text(pill(deathNote, 3)), findsOneWidget);
-      expect(find.textContaining('★ 8'), findsOneWidget, reason: 'оцінка в підписі картки');
+      // Progress: "5 з 25 · ★ 8" in grey under the title and a thin bar on the poster
+      expect(find.byWidgetPredicate((w) => w is HikkaMetaLine && w.text.startsWith(progressLine(aot, 5)) && w.text.contains('★ 8')), findsOneWidget);
+      expect(find.byWidgetPredicate((w) => w is HikkaMetaLine && w.text == progressLine(deathNote, 3)), findsOneWidget);
+      expect(find.byType(HikkaProgressBar), findsNWidgets(2));
+      expect(find.text('Оновлені нещодавно'), findsOneWidget, reason: 'тихий рядок сортування');
       await shot(tester, 'lists_signed_in_desktop');
 
-      await tester.tap(find.text('У планах · 1'));
+      await tester.tap(tab('У планах'));
       await load(tester, rounds: 6);
       expect(find.byType(HikkaAnimeCard), findsOneWidget);
-      expect(find.text(pill(onePunch, 0)), findsNothing, reason: 'у «У планах» лічильника серій немає');
+      expect(find.byType(HikkaProgressBar), findsNothing, reason: 'у «У планах» прогресу немає');
 
-      await tester.tap(find.text('Відкладено · 0'));
+      await tester.tap(tab('Відкладено'));
       await load(tester, rounds: 6);
       expect(find.byType(HikkaAnimeCard), findsNothing);
-      expect(find.text('Тут поки порожньо. Додайте тайтл зі сторінки аніме.'), findsOneWidget);
+      expect(find.text('Відкладеного немає'), findsOneWidget);
+      expect(find.text('Перейти до огляду'), findsOneWidget);
 
       await tester.tap(find.text('Улюблене'));
       await load(tester, rounds: 6);
@@ -399,6 +413,8 @@ void main() {
 
       await tester.longPress(find.byType(HikkaAnimeCard).first);
       await load(tester, rounds: 4);
+      expect(find.text('Продовжити · серія 6'), findsOneWidget, reason: 'переглянуто 5');
+      expect(find.text('Мій список…'), findsOneWidget);
       expect(find.text('Прибрати зі списку'), findsOneWidget);
       await tester.tap(find.text('Прибрати зі списку'));
       await load(tester, rounds: 10);
@@ -406,7 +422,7 @@ void main() {
       expect(account.calls, contains('DELETE /watch/$aot'));
       expect(account.mine.containsKey(aot), isFalse);
       expect(find.byType(HikkaAnimeCard), findsOneWidget);
-      expect(find.text('Дивлюсь · 1'), findsOneWidget);
+      expect(find.descendant(of: tab('Дивлюсь'), matching: find.text('1')), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
@@ -445,7 +461,7 @@ void main() {
       expect(find.byType(HikkaAnimeCard), findsNWidgets(2));
       await shot(tester, 'lists_signed_in_narrow');
       expect(tester.getTopLeft(find.text('Улюблене')).dx, greaterThan(kNarrow.width), reason: 'остання вкладка поза екраном, її видно лише після прокрутки');
-      await tester.drag(find.text('Дивлюсь · 2'), const Offset(-700, 0));
+      await tester.drag(tab('Дивлюсь'), const Offset(-700, 0));
       await load(tester, rounds: 3);
       expect(tester.getTopLeft(find.text('Улюблене')).dx, lessThan(kNarrow.width));
       await tester.tap(find.text('Улюблене'));
@@ -470,7 +486,7 @@ void main() {
 
     testWidgets('вікно входу: сторінка дозволу відкривається, вставлена адреса завершує вхід і відкриває списки', (tester) async {
       await openTab(tester, MainTab.lists);
-      expect(find.text('Гість'), findsOneWidget);
+      expect(find.text('Увійдіть через Hikka'), findsOneWidget);
 
       await tester.tap(find.text('Увійти через Hikka'));
       await load(tester, rounds: 6);
@@ -489,7 +505,7 @@ void main() {
       expect(HikkaAuth.instance.signedIn, isTrue);
       expect(HikkaAuth.instance.username, 'tester');
       expect(backend.exchanges.single, {'request_reference': kRequestRef}, reason: 'секрет клієнта до бекенду не передається застосунком');
-      expect(find.text('Дивлюсь · 2'), findsOneWidget, reason: 'списки відкрились без перезапуску');
+      expect(find.descendant(of: tab('Дивлюсь'), matching: find.text('2')), findsOneWidget, reason: 'списки відкрились без перезапуску');
       expect(account.authHeaders.every((h) => h == null || h == 'tok-ui'), isTrue);
       expect(tester.takeException(), isNull);
     });
@@ -525,7 +541,7 @@ void main() {
   });
 
   group('профіль', () {
-    testWidgets('профіль як на hikka.io: шапка, «Список», «Активність», улюблене, «Історія»; акаунт і вихід', (tester) async {
+    testWidgets('профіль: блок акаунта, «Список» смужкою й рядками, «Застосунок», «Акаунт» із виходом через питання, далі «Активність», улюблене, «Історія»', (tester) async {
       signIn();
       await openTab(tester, MainTab.profile);
       await load(tester, rounds: 10);
@@ -537,66 +553,74 @@ void main() {
       expect(find.text('Telegram'), findsOneWidget);
       expect(find.text('Список'), findsOneWidget);
       expect(find.text('Час перегляду'), findsOneWidget);
-      expect(find.text('Активність'), findsOneWidget);
-      expect(find.byType(HikkaActivityHeatmap), findsOneWidget);
-      expect(find.text('Правки'), findsOneWidget);
-      expect(find.text('5\u00a0552'), findsOneWidget);
       expect(account.calls, containsAll(['GET /user/tester', 'GET /user/tester/stats', 'GET /follow/tester/stats', 'GET /user/tester/activity']));
 
-      // Status counters come from `GET /watch/tester/stats`
-      final summary = find.byType(HikkaWatchSummary);
-      expect(find.descendant(of: summary, matching: find.text('4')), findsOneWidget, reason: 'усього 4 тайтли — у центрі кільця');
-      expect(find.descendant(of: summary, matching: find.text('2')), findsOneWidget, reason: 'дивлюсь 2 — у легенді');
-      expect(find.descendant(of: summary, matching: find.textContaining('%')), findsNothing, reason: 'відсотків у легенді немає');
+      // Status counters come from `GET /watch/tester/stats`: a bar of shares and a row per status with its number
+      final summary = find.byType(HikkaListSummary);
+      expect(find.byKey(const ValueKey('list-bar')), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const ValueKey('list-row-watching')), matching: find.text('2')), findsOneWidget, reason: 'дивлюсь 2');
+      expect(find.descendant(of: summary, matching: find.textContaining('%')), findsNothing, reason: 'відсотків немає');
       await shot(tester, 'profile_signed_in_desktop');
 
-      // Below: favorites, "Історія" (manga dropped), "Акаунт"
+      // "Застосунок" and "Акаунт" right under the list; the gear stays in the header
+      expect(find.text('Застосунок'), findsOneWidget);
+      expect(find.byKey(const ValueKey('profile-settings')), findsOneWidget);
+      expect(find.byTooltip('Налаштування застосунку'), findsOneWidget);
+      expect(find.text('Про Miki Miki'), findsNothing, reason: '«Про застосунок» — у налаштуваннях');
+      expect(find.byTooltip('Акаунт'), findsNothing, reason: 'окремого вікна акаунта немає');
+
+      // Below: activity, favorites, "Історія" (manga dropped)
       await tester.scrollUntilVisible(find.text('Історія'), 300, scrollable: find.byType(Scrollable).first);
       await load(tester, rounds: 6);
+      expect(find.text('Активність'), findsOneWidget);
+      expect(find.byType(HikkaActivityHeatmap), findsOneWidget);
+      expect(find.text('правки'), findsOneWidget);
+      expect(find.text('5\u00a0552'), findsOneWidget);
       expect(find.text('Улюблені аніме'), findsOneWidget);
       expect(find.text('Переглянуто епізод 5 з 25'), findsOneWidget);
       expect(find.text('Завершено'), findsOneWidget);
       expect(find.text('Додано до списку «У планах»'), findsOneWidget);
       expect(find.text('Додано до улюблених'), findsOneWidget);
       expect(find.text('Манґа'), findsNothing);
-      expect(find.text('Акаунт Hikka підключено'), findsNothing, reason: 'імʼя й аватар уже в шапці профілю');
 
-      // Account, settings and "Про застосунок" are icons in the header, not at the bottom of the page
-      expect(find.text('Передавати прогрес у списки'), findsNothing);
-      expect(find.text('Налаштування застосунку'), findsNothing);
-      expect(find.byTooltip('Налаштування застосунку'), findsOneWidget);
-      expect(find.byTooltip('Про Miki Miki'), findsNothing, reason: '«Про застосунок» — у налаштуваннях');
-      // The header hides on scrolling down: we scroll up
-      await tester.drag(find.byType(Scrollable).first, const Offset(0, 4000));
-      await load(tester, rounds: 6);
-      await tester.tap(find.byTooltip('Акаунт'));
-      await load(tester, rounds: 6);
+      await tester.scrollUntilVisible(find.text('Передавати прогрес у списки'), -300, scrollable: find.byType(Scrollable).first);
+      await load(tester, rounds: 4);
       await tester.tap(find.text('Передавати прогрес у списки'));
       await load(tester, rounds: 3);
       expect(HikkaAuth.instance.syncProgress, isFalse);
 
+      // Signing out asks first; "Скасувати" keeps the account
+      await tester.ensureVisible(find.text('Вийти з акаунта'));
       await tester.tap(find.text('Вийти з акаунта'));
+      await load(tester, rounds: 6);
+      expect(find.text('Вийти з акаунта Hikka?'), findsOneWidget);
+      await tester.tap(find.text('Скасувати'));
+      await load(tester, rounds: 6);
+      expect(HikkaAuth.instance.signedIn, isTrue);
+      await tester.tap(find.text('Вийти з акаунта'));
+      await load(tester, rounds: 6);
+      await tester.tap(find.text('Вийти'));
       await load(tester, rounds: 8);
       expect(HikkaAuth.instance.signedIn, isFalse);
       expect(account.calls, containsAllInOrder(['GET /auth/token/info', 'DELETE /auth/token/token-ref-1']));
       expect(find.text('Гість'), findsOneWidget);
       expect(find.text('Увійти через Hikka'), findsOneWidget);
-      expect(find.byType(HikkaWatchSummary), findsNothing);
+      expect(find.byType(HikkaListSummary), findsNothing);
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('лічильник статусу в профілі відкриває «Списки» на цьому статусі', (tester) async {
+    testWidgets('рядок статусу в профілі відкриває «Списки» на цьому статусі', (tester) async {
       signIn();
       await openTab(tester, MainTab.profile);
       await load(tester, rounds: 10);
-      await tester.tap(find.descendant(of: find.byType(HikkaWatchSummary), matching: find.text('У планах')));
+      await tester.tap(find.descendant(of: find.byType(HikkaListSummary), matching: find.text('У планах')));
       await load(tester, rounds: 8);
       expect(HikkaNav.instance.main, MainTab.lists);
       expect(account.listBodies.last['watch_status'], 'planned');
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('«Список»: кільце з усіма статусами (дрібні — краплі), натискання на дугу й центр', (tester) async {
+    testWidgets('«Список»: смужка часток за статусами й рядки з числами; дотик до рядка — цей статус', (tester) async {
       setScreen(tester, kNarrow);
       AppPlatform.debugMobile = true;
       addTearDown(() => AppPlatform.debugMobile = null);
@@ -606,54 +630,30 @@ void main() {
         theme: ThemeData.dark(),
         home: Scaffold(
           backgroundColor: uiTheme.bgPrimary,
-          body: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                HikkaWatchSummary(
+          body: ListView(
+            children: [
+              HikkaListSummary(
                 scale: 1,
+                inset: 18,
                 stats: const HikkaWatchStats(completed: 488, watching: 21, planned: 69, dropped: 77, onHold: 18, duration: 215108),
                 onStatus: tapped.add,
               ),
-              ],
-            ),
+            ],
           ),
         ),
       ));
       await tester.pump();
-      await shot(tester, 'profile_donut_zeddy');
-      final donut = tester.widget<HikkaStatusDonut>(find.byType(HikkaStatusDonut));
-      final origin = tester.getTopLeft(find.byType(HikkaStatusDonut));
-      final l = donut.layout;
-      final r = (donut.size - donut.thickness) / 2;
-      Offset at(int j) {
-        final a = l.starts[j] + l.lengths[j] / 2;
-        return origin + Offset(donut.size / 2 + math.cos(a) * r, donut.size / 2 + math.sin(a) * r);
+      await shot(tester, 'profile_list_zeddy');
+      for (final n in ['488', '21', '69', '77', '18']) {
+        expect(find.text(n), findsOneWidget, reason: n);
       }
-
-      await tester.tapAt(at(1)); // "Дивлюсь", 21: a drop
-      await tester.tapAt(at(4)); // "Відкладено", 18
-      await tester.tapAt(origin + Offset(donut.size / 2, donut.size / 2));
+      // The bar: a part per status, as wide as its share
+      final parts = tester.widgetList<Expanded>(find.descendant(of: find.byKey(const ValueKey('list-bar')), matching: find.byType(Expanded))).map((e) => e.flex).toList();
+      expect(parts, [21, 69, 488, 18, 77]);
       await tester.tap(find.text('Кинуто'));
+      await tester.tap(find.text('Дивлюсь'));
       await tester.pump();
-      expect(tapped, [HikkaWatchStatus.watching, HikkaWatchStatus.onHold, null, HikkaWatchStatus.dropped]);
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('аватар профілю: кільце навколо слідує за налаштуванням заокруглення (без заокруглення — квадрат)', (tester) async {
-      final old = uiTheme.radiusKey;
-      addTearDown(() => uiTheme.setRadiusKey(old));
-      uiTheme.setRadiusKey(UiThemeService.radiusMultipliers.entries.firstWhere((e) => e.value == 0).key);
-      signIn();
-      await openTab(tester, MainTab.profile);
-      await load(tester, rounds: 10);
-      final ring = tester.widget<Container>(find.byWidgetPredicate(
-        (w) => w is Container && w.decoration is BoxDecoration && (w.decoration! as BoxDecoration).color == uiTheme.bgPrimary && w.padding != null,
-      ).first);
-      final deco = ring.decoration! as BoxDecoration;
-      expect(deco.shape, BoxShape.rectangle);
-      expect((deco.borderRadius! as BorderRadius).topLeft, Radius.zero);
-      await shot(tester, 'profile_avatar_square');
+      expect(tapped, [HikkaWatchStatus.dropped, HikkaWatchStatus.watching]);
       expect(tester.takeException(), isNull);
     });
 
@@ -710,12 +710,11 @@ void main() {
       HikkaNav.instance.openUser('other');
       await load(tester, rounds: 10);
       expect(find.text('Користувач'), findsOneWidget);
-      expect(find.text('@other'), findsOneWidget);
-      expect(find.text('other'), findsOneWidget);
+      expect(find.text('other'), findsOneWidget, reason: 'ім’я в шапці профілю (смуга — лише «Користувач»)');
       expect(find.text('Модератор'), findsNothing);
       expect(find.text('Час перегляду'), findsOneWidget);
-      // Other users' status counters are not clickable
-      await tester.tap(find.descendant(of: find.byType(HikkaWatchSummary), matching: find.text('Дивлюсь')));
+      // Other users' status rows are not clickable
+      await tester.tap(find.descendant(of: find.byType(HikkaListSummary), matching: find.text('Дивлюсь')));
       await load(tester, rounds: 3);
       expect(HikkaNav.instance.main, MainTab.home);
       expect(tester.takeException(), isNull);
@@ -730,105 +729,116 @@ void main() {
       expect(tester.takeException(), isNull);
     }
 
-    testWidgets('гість: «Додати в список» веде до входу', (tester) async {
+    testWidgets('гість: закладка «Додати в список» веде до входу', (tester) async {
       await openAnime(tester);
-      expect(find.text('Додати в список'), findsOneWidget);
-      expect(find.byTooltip('В улюблене'), findsNothing, reason: 'серце лише для тих, хто ввійшов');
-      await tester.tap(find.text('Додати в список'));
+      expect(find.byTooltip('Додати в список'), findsOneWidget);
+      await tester.tap(find.byTooltip('Додати в список'));
       await load(tester, rounds: 6);
       expect(find.text('Вхід у Hikka'), findsOneWidget);
       await tester.tap(find.text('Скасувати'));
       await load(tester, rounds: 4);
     });
 
-    testWidgets('додати зі статусом, змінити, поставити серце, прибрати', (tester) async {
+    Finder status(String name) => find.byKey(ValueKey('list-status-$name'));
+    Finder score(int n) => find.byKey(ValueKey('list-score-$n'));
+    Future<void> close(WidgetTester tester) async {
+      await tester.tap(find.byTooltip('Закрити').last);
+      await load(tester, rounds: 8);
+    }
+
+    testWidgets('шторка «Мій список»: статус, серії кроками, оцінка, серце, видалення — усе діє одразу, без «Зберегти»', (tester) async {
       signIn();
       account.mine.clear();
       account.favourites.clear();
       await openAnime(tester);
 
-      expect(find.text('Додати в список'), findsOneWidget);
+      expect(find.byTooltip('Додати в список'), findsOneWidget);
       await shot(tester, 'anime_my_list_empty_desktop');
-      await tester.tap(find.text('Додати в список'));
-      await load(tester, rounds: 4);
-      expect(find.text('Серії…'), findsOneWidget, reason: 'випадне меню, а не вікно');
-      expect(find.text('Видалити зі списку'), findsNothing, reason: 'запису ще немає');
-      await tester.tap(find.text('Дивлюсь'));
+      await tester.tap(find.byTooltip('Додати в список'));
+      await load(tester, rounds: 12);
+      expect(find.text('Мій список'), findsOneWidget, reason: 'одна шторка замість меню й вікна');
+      Finder inSheet(String text) => find.descendant(of: find.byType(HikkaListSheetBody), matching: find.text(text));
+      expect(inSheet('Статус'), findsOneWidget);
+      expect(inSheet('Серії'), findsNothing, reason: 'запису ще немає: лічильник і оцінка з’являються після статусу');
+      expect(find.text('Видалити зі списку'), findsNothing);
+      expect(find.text('Зберегти'), findsNothing);
+      await tester.tap(status('watching'));
       await load(tester, rounds: 10);
-
       expect(account.mine[frieren]?['status'], 'watching');
-      expect(find.text('Дивлюсь'), findsOneWidget, reason: 'тепер на сторінці плитка зі статусом');
-      expect(find.textContaining('серій'), findsNothing, reason: 'кількість серій на кнопці статусу не показуємо');
-      await shot(tester, 'anime_my_list_watching_desktop');
+      expect(inSheet('Серії'), findsOneWidget, reason: 'шторка лишається відкритою й показує перегляд');
+      expect(find.text('Переглянуто 0 з 28'), findsOneWidget);
+      await shot(tester, 'anime_my_list_sheet_desktop');
 
-      // Heart
-      await tester.tap(find.byTooltip('В улюблене'));
-      await load(tester, rounds: 6);
-      expect(account.favourites, contains(frieren));
-      expect(find.byTooltip('Прибрати з улюбленого'), findsOneWidget);
+      // Episodes by steps: saved together a moment after the last tap
+      await tester.tap(find.bySemanticsLabel('Більше серій'));
+      await tester.pump();
+      await tester.tap(find.bySemanticsLabel('Більше серій'));
+      await tester.pump();
+      expect(find.text('Переглянуто 2 з 28'), findsOneWidget);
+      expect(account.mine[frieren]?['episodes'], 0, reason: 'ще не збережено');
+      await load(tester, rounds: 14);
+      expect(account.mine[frieren]?['episodes'], 2);
 
-      // The score badge has its own menu and does not open the status one
-      await tester.tap(find.text('Оцінити'));
-      await load(tester, rounds: 10);
-      expect(find.text('Видалити зі списку'), findsNothing, reason: 'меню оцінки не змішане зі статусами');
-      expect(find.text('Серії…'), findsNothing);
-      await tester.tap(find.text('8'));
+      // Score: a plate; the same plate again clears it
+      await tester.tap(score(8));
       await load(tester, rounds: 10);
       expect(account.mine[frieren]?['score'], 8);
       expect(account.mine[frieren]?['status'], 'watching', reason: 'оцінка не чіпає статус');
+      expect(find.text('Оцінка: 8'), findsOneWidget);
 
-      // Change: "Переглянуто" tops up the counter to the end, score 9
-      await tester.tap(find.text('Дивлюсь'));
-      await load(tester, rounds: 12);
-      await tester.tap(find.text('Серії…'));
-      await load(tester, rounds: 10);
-      expect(find.text('Мій список'), findsOneWidget);
-      await tester.tap(find.text('Переглянуто'));
-      await tester.pump();
-      await tester.tap(find.text('9'));
-      await tester.pump();
-      await tester.tap(find.text('Зберегти'));
+      // Favorite is a switch in the same sheet
+      await tester.tap(find.text('В улюблене'));
+      await load(tester, rounds: 6);
+      expect(account.favourites, contains(frieren));
+      await tester.tap(find.text('В улюблене'));
+      await load(tester, rounds: 6);
+      expect(account.favourites, isEmpty);
+
+      // "Переглянуто" tops up the counter to the end
+      await tester.tap(status('completed'));
       await load(tester, rounds: 10);
       expect(account.mine[frieren]?['status'], 'completed');
       expect(account.mine[frieren]?['episodes'], 28);
-      expect(account.mine[frieren]?['score'], 9);
-      expect(find.text('Переглянуто'), findsOneWidget);
-      expect(find.textContaining('серій'), findsNothing);
+      await close(tester);
+      expect(find.byTooltip('У списку: Переглянуто'), findsOneWidget, reason: 'закладка показує статус');
 
-      // Remove
-      await tester.tap(find.text('Переглянуто'));
+      // Remove: the sheet closes, the bookmark is empty again
+      await tester.tap(find.byTooltip('У списку: Переглянуто'));
       await load(tester, rounds: 12);
+      await tester.ensureVisible(find.text('Видалити зі списку'));
       await tester.tap(find.text('Видалити зі списку'));
-      await load(tester, rounds: 10);
+      await load(tester, rounds: 12);
       expect(account.mine.containsKey(frieren), isFalse);
-      expect(find.text('Додати в список'), findsOneWidget);
+      expect(find.text('Мій список'), findsNothing);
+      expect(find.byTooltip('Додати в список'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('уже в списку: плитка показує статус, прогрес і оцінку', (tester) async {
+    testWidgets('уже в списку: закладка показує статус, у шторці — оцінка', (tester) async {
       signIn();
       await openAnime(tester);
-      expect(find.text('Переглянуто'), findsOneWidget);
-      expect(find.textContaining('серій'), findsNothing);
-      expect(find.text('9'), findsOneWidget, reason: 'оцінка окремою плашкою зі зіркою');
-      expect(find.text('Додати в список'), findsNothing);
+      expect(find.byTooltip('У списку: Переглянуто'), findsOneWidget);
+      expect(find.byTooltip('Додати в список'), findsNothing);
+      await tester.tap(find.byTooltip('У списку: Переглянуто'));
+      await load(tester, rounds: 12);
+      expect(find.text('Оцінка: 9'), findsOneWidget);
+      final plate = tester.widget<AppPlate>(score(9));
+      expect(plate.selected, isTrue);
     });
 
-    testWidgets('збій мережі при виборі статусу: запису немає, кнопка лишається; потім спрацьовує', (tester) async {
+    testWidgets('збій мережі при виборі статусу: запису немає, пояснення в шторці; потім спрацьовує', (tester) async {
       signIn();
       account.mine.clear();
       await openAnime(tester);
-      await tester.tap(find.text('Додати в список'));
+      await tester.tap(find.byTooltip('Додати в список'));
       await load(tester, rounds: 12);
       env.server.offline = true;
-      await tester.tap(find.text('У планах'));
+      await tester.tap(status('planned'));
       await load(tester, rounds: 10);
       expect(account.mine, isEmpty);
-      expect(find.text('Додати в список'), findsOneWidget);
+      expect(find.byTooltip('Додати в список'), findsOneWidget);
       env.server.offline = false;
-      await tester.tap(find.text('Додати в список'));
-      await load(tester, rounds: 12);
-      await tester.tap(find.text('У планах'));
+      await tester.tap(status('planned'));
       await load(tester, rounds: 10);
       expect(account.mine[frieren]?['status'], 'planned');
       expect(tester.takeException(), isNull);

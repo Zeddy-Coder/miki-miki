@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
 import 'package:media_kit/media_kit.dart';
-import '../services/playback_clock.dart';
-import '../services/ui_theme_service.dart';
-import '../utils/formatters.dart';
-import 'app_ui_kit.dart';
+import 'line_icons.dart';
+import 'player_kit.dart';
 
+/// The PC player's top bar: "collapse", the title with the grey "серія · озвучка · якість" line (a click opens the
+/// information), then open a file, settings and close — line icons straight on the video, on a soft dark gradient
 class TopDock extends StatelessWidget {
   final double scale;
   final String title;
+
+  /// The grey line under the title ("Серія 6 з 28 · Inari · 1080p"); empty — the title alone
+  final String subtitle;
   final Player player;
   final GlobalKey settingsKey;
   final bool isSettingsOpen;
@@ -22,6 +24,7 @@ class TopDock extends StatelessWidget {
     super.key,
     required this.scale,
     required this.title,
+    this.subtitle = '',
     required this.player,
     required this.settingsKey,
     required this.isSettingsOpen,
@@ -34,125 +37,70 @@ class TopDock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = scale;
+    Widget button(LineIcon icon, String label, VoidCallback onTap, {Key? key, bool active = false}) => PlayerIconButton(
+          key: key,
+          icon: icon,
+          label: label,
+          active: active,
+          onTap: onTap,
+          size: 40 * s,
+          iconSize: 21 * s,
+        );
     return Positioned(
       top: 0,
       left: 0,
       right: 0,
       child: Container(
-        height: 60 * scale,
-        padding: EdgeInsets.symmetric(horizontal: 35 * scale),
+        height: 104 * s,
+        alignment: Alignment.topCenter,
+        padding: EdgeInsets.fromLTRB(12 * s, 10 * s, 14 * s, 0),
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [Colors.black.withValues(alpha: 0.85), Colors.transparent],
+            colors: [Colors.black.withValues(alpha: 0.62), Colors.transparent],
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
           ),
         ),
         child: Row(
           children: [
-            AppOverlayButton(
-              scale: scale,
-              width: 36 * scale,
-              height: 32 * scale,
-              borderRadius: 8 * scale,
-              onTap: onCollapse,
-              child: Icon(
-                Symbols.keyboard_arrow_down_rounded,
-                color: Colors.white,
-                size: 24 * scale,
-                weight: 300,
-                opticalSize: 24,
-              ),
-            ),
-            SizedBox(width: 10 * scale),
+            button(LineIcon.chevronDown, 'Згорнути', onCollapse),
+            SizedBox(width: 6 * s),
             Expanded(
-              child: InkWell(
-                onTap: onInfoTap,
-                borderRadius: uiTheme.borderRadius(6 * scale),
-                splashColor: Colors.transparent,
-                highlightColor: Colors.transparent,
-                hoverColor: Colors.white.withValues(alpha: 0.08),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      title,
-                      style: TextStyle(
-                        fontFamily: 'Arial',
-                        color: Colors.white,
-                        fontWeight: FontWeight.w500,
-                        fontSize: 14.5 * scale,
+              child: MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: onInfoTap,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: playerText(15.5 * s, color: PlayerTones.fg, weight: FontWeight.w700, height: 1.2),
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    SizedBox(height: 2 * scale),
-                    ValueListenableBuilder<Duration>(
-                      valueListenable: PlaybackClock.of(player).duration,
-                      builder: (context, dur, _) {
-                        return Text(
-                          '${AppFormatters.formatTime(dur)} · YouTube Mobile',
-                          style: TextStyle(
-                            fontFamily: 'Arial',
-                            color: Colors.white70,
-                            fontSize: 11.5 * scale,
-                            fontWeight: FontWeight.w300,
+                      if (subtitle.isNotEmpty)
+                        Padding(
+                          padding: EdgeInsets.only(top: 2 * s),
+                          child: Text(
+                            subtitle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: playerText(12 * s, color: PlayerTones.sub, height: 1.2),
                           ),
-                        );
-                      },
-                    ),
-                  ],
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),
-            SizedBox(width: 16 * scale),
-            AppOverlayButton(
-              scale: scale,
-              width: 36 * scale,
-              height: 32 * scale,
-              borderRadius: 8 * scale,
-              onTap: onOpenFile,
-              child: Icon(
-                Symbols.file_open_rounded,
-                color: Colors.white,
-                size: 19 * scale,
-                weight: 300,
-                opticalSize: 24,
-              ),
-            ),
-            SizedBox(width: 8 * scale),
-            AppOverlayButton(
-              key: settingsKey,
-              scale: scale,
-              width: 36 * scale,
-              height: 32 * scale,
-              borderRadius: 8 * scale,
-              isActive: isSettingsOpen,
-              onTap: onSettingsTap,
-              child: Icon(
-                Symbols.settings_rounded,
-                color: AppOverlayButton.foreground(isSettingsOpen),
-                size: 19 * scale,
-                weight: 300,
-                opticalSize: 24,
-              ),
-            ),
-            SizedBox(width: 8 * scale),
-            AppOverlayButton(
-              scale: scale,
-              width: 36 * scale,
-              height: 32 * scale,
-              borderRadius: 8 * scale,
-              onTap: onClose,
-              child: Icon(
-                Symbols.close_rounded,
-                color: Colors.white,
-                size: 20 * scale,
-                weight: 300,
-                opticalSize: 24,
-              ),
-            ),
+            SizedBox(width: 12 * s),
+            button(LineIcon.doc, 'Відкрити файл', onOpenFile),
+            button(LineIcon.gear, 'Налаштування', onSettingsTap, key: settingsKey, active: isSettingsOpen),
+            button(LineIcon.close, 'Закрити плеєр', onClose),
           ],
         ),
       ),

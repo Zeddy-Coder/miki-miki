@@ -10,8 +10,11 @@ import '../services/ui_theme_service.dart';
 import '../utils/platform_info.dart';
 import 'app_animation_kit.dart';
 import 'app_ui_kit.dart';
+import 'downloads/downloads_page.dart' show OfflineStrip;
 import 'hikka/hikka_hub.dart';
+import 'line_icons.dart';
 import 'local_library.dart';
+import 'settings_kit.dart';
 import 'update_prompt.dart';
 
 /// The Miki Miki app shell: four main tabs ("Головна", "Огляд", "Списки", "Профіль") with Hikka
@@ -40,6 +43,14 @@ class HomeHub extends StatefulWidget {
         MainTab.discover => Symbols.explore_rounded,
         MainTab.lists => Symbols.bookmarks_rounded,
         MainTab.profile => Symbols.account_circle_rounded,
+      };
+
+  /// The bottom navigation's icon: the design's line drawing
+  static LineIcon lineIconOf(MainTab tab) => switch (tab) {
+        MainTab.home => LineIcon.home,
+        MainTab.discover => LineIcon.search,
+        MainTab.lists => LineIcon.bookmark,
+        MainTab.profile => LineIcon.person,
       };
 
   final double scale;
@@ -79,25 +90,69 @@ class _HomeHubState extends State<HomeHub> {
     super.initState();
     HomeHub.backHandler = _handleBack;
     _nav.addListener(_onNav);
-    AppUpdater.instance.state.addListener(_maybePromptUpdate);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _maybePromptUpdate());
+    _updater.state.addListener(_maybePromptUpdate);
+    _updater.downloadsDone.addListener(_onDownloadDone);
+    _updater.promptRequests.addListener(_onPromptRequest);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _onPromptRequest();
+      _onDownloadDone();
+      _maybePromptUpdate();
+    });
   }
+
+  final AppUpdater _updater = AppUpdater.instance;
 
   /// The update window is shown once per version per launch: when a newer version is known that was not skipped
   static String _promptedVersion = '';
 
+  /// The last request to show the window and the last finished download that were answered: a notification tap may
+  /// come before this screen exists, and a download may finish while the full player hides it
+  static int _seenRequests = 0;
+  static int _seenDone = 0;
+  static AppUpdater? _seenFor;
+
+  void _syncSeen() {
+    if (identical(_seenFor, _updater)) return;
+    _seenFor = _updater;
+    _seenRequests = 0;
+    _seenDone = 0;
+  }
+
   void _maybePromptUpdate() {
     if (!mounted) return;
-    final st = AppUpdater.instance.state.value;
-    if (st is! UpdateAvailable || !AppUpdater.instance.shouldPrompt(st.info) || _promptedVersion == st.info.version) return;
+    final st = _updater.state.value;
+    if (st is! UpdateAvailable || !_updater.shouldPrompt(st.info) || _promptedVersion == st.info.version) return;
     _promptedVersion = st.info.version;
-    UpdatePrompt.show(context, scale: widget.scale, info: st.info);
+    if (!UpdatePrompt.isOpen) UpdatePrompt.show(context, scale: widget.scale, info: st.info, updater: _updater);
+  }
+
+  /// A tap on a "new version" notification or a `miki://open/update` link: the window, whatever the check finds
+  void _onPromptRequest() {
+    _syncSeen();
+    if (!mounted || _updater.promptRequests.value == _seenRequests) return;
+    _seenRequests = _updater.promptRequests.value;
+    final st = _updater.state.value;
+    if (st is UpdateAvailable) _promptedVersion = st.info.version;
+    if (!UpdatePrompt.isOpen) UpdatePrompt.show(context, scale: widget.scale, info: st is UpdateAvailable ? st.info : null, updater: _updater);
+  }
+
+  /// A download sent to the background has finished: the window offers to install (one already open installs it itself)
+  void _onDownloadDone() {
+    _syncSeen();
+    if (!mounted || _updater.downloadsDone.value == _seenDone) return;
+    _seenDone = _updater.downloadsDone.value;
+    final st = _updater.state.value;
+    if (UpdatePrompt.isOpen || st is! UpdateAvailable || _updater.readyFor(st.info.version) == null) return;
+    _promptedVersion = st.info.version;
+    UpdatePrompt.show(context, scale: widget.scale, info: st.info, updater: _updater);
   }
 
   @override
   void dispose() {
     _nav.removeListener(_onNav);
-    AppUpdater.instance.state.removeListener(_maybePromptUpdate);
+    _updater.state.removeListener(_maybePromptUpdate);
+    _updater.downloadsDone.removeListener(_onDownloadDone);
+    _updater.promptRequests.removeListener(_onPromptRequest);
     if (HomeHub.backHandler == _handleBack) HomeHub.backHandler = null;
     super.dispose();
   }
@@ -127,19 +182,22 @@ class _HomeHubState extends State<HomeHub> {
     // The title page lays itself under the status bar
     final double topPad = HikkaNav.immersive(_nav.top) ? 0 : safe.top;
 
-    final content = HikkaHub(
+    // The catalog takes the Arial look everywhere (a phone has no Arial: the bundled Liberation Sans with its metrics)
+    final content = SettingsFont(
+      child: HikkaHub(
       scale: scale,
       bottomInset: widget.reserveBottom,
       onOpenSettings: ({int? tab}) {
         // Phone in portrait: settings (from the needed section if required) are a page over the tab, navigation visible; otherwise a window
         if (compact && widget.settingsBuilder != null) {
-          _nav.openSettings(tab: tab ?? 0);
+          _nav.openSettings(tab: tab);
         } else {
           widget.onOpenSettings(tab: tab);
         }
       },
       settingsBuilder: widget.settingsBuilder,
       localLibraryBuilder: _localLibrary,
+    ),
     );
 
     if (compact) {
@@ -149,6 +207,8 @@ class _HomeHubState extends State<HomeHub> {
         child: Column(
           children: [
             Expanded(child: content),
+            // No internet: a strip with the way to the downloads (hidden while online)
+            OfflineStrip(scale: scale),
             // With the keyboard open the navigation is not needed: otherwise it rises with it and covers the content
             if (MediaQuery.viewInsetsOf(context).bottom == 0) _buildBottomNav(safe.bottom),
           ],
@@ -162,7 +222,14 @@ class _HomeHubState extends State<HomeHub> {
       child: Row(
         children: [
           _buildSidebar(scale),
-          Expanded(child: content),
+          Expanded(
+            child: Column(
+              children: [
+                Expanded(child: content),
+                OfflineStrip(scale: scale),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -185,40 +252,19 @@ class _HomeHubState extends State<HomeHub> {
             highlightColor: uiTheme.touchHighlight,
             child: SizedBox(
               height: HomeHub.bottomNavHeight,
-              // 0 → 1 on selection: the pill grows from the center, the icon and label smoothly change color, the icon "bounces"
+              // 0 → 1 on selection: the icon and label smoothly turn yellow, the icon "bounces" a little
               child: TweenAnimationBuilder<double>(
                 tween: Tween<double>(end: selected ? 1 : 0),
                 duration: AppAnim.medium,
                 curve: AppAnim.easeOut,
                 builder: (context, t, _) {
-                  final Color fg = Color.lerp(uiTheme.textMuted, uiTheme.accentColor, t)!;
-                  final double pop = 1 + 0.14 * math.sin(math.pi * t.clamp(0.0, 1.0));
+                  final Color fg = Color.lerp(uiTheme.textDarkMuted, uiTheme.accentColor, t)!;
+                  final double pop = 1 + 0.1 * math.sin(math.pi * t.clamp(0.0, 1.0));
                   return Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Container(
-                        width: 58,
-                        height: 30,
-                        alignment: Alignment.center,
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            Container(
-                              width: 22 + 36 * t,
-                              height: 30,
-                              decoration: BoxDecoration(
-                                color: uiTheme.accentWash.withValues(alpha: uiTheme.accentWash.a * t),
-                                borderRadius: uiTheme.borderRadius(15),
-                              ),
-                            ),
-                            Transform.scale(
-                              scale: pop,
-                              child: Icon(HomeHub.iconOf(tab), color: fg, size: 25, fill: t > 0.5 ? 1 : 0, weight: 300, opticalSize: 24),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 3),
+                      Transform.scale(scale: pop, child: LineIconView(HomeHub.lineIconOf(tab), size: 25, color: fg)),
+                      const SizedBox(height: 4),
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 2),
                         child: FittedBox(
@@ -226,7 +272,7 @@ class _HomeHubState extends State<HomeHub> {
                           child: Text(
                             tab.label,
                             maxLines: 1,
-                            style: TextStyle(fontFamily: 'Arial', color: fg, fontSize: 11.5, fontWeight: selected ? FontWeight.w700 : FontWeight.w500),
+                            style: TextStyle(fontFamily: 'Arial', fontFamilyFallback: kUiFontFallback, color: fg, fontSize: 12),
                           ),
                         ),
                       ),

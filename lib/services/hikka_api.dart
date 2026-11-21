@@ -14,6 +14,8 @@ import '../models/hikka_profile_models.dart';
 import '../models/hikka_user_models.dart';
 import 'app_log.dart';
 import 'hikka_disk_cache.dart';
+import 'json_worker.dart';
+import 'network_status.dart';
 
 enum HikkaErrorKind { network, timeout, notFound, rateLimited, server, badResponse, unauthorized, forbidden }
 
@@ -230,15 +232,23 @@ class HikkaApi {
     final label = '$method ${url.path}${url.hasQuery ? '?${url.query}' : ''}';
     HikkaException? last;
     for (int attempt = 1; attempt <= _maxNetworkAttempts; attempt++) {
+      // The system says there is no internet: one quick try (it fails at once without a network), no retries, so the
+      // page takes what the cache has right away
+      if (attempt > 1 && last != null && !NetworkStatus.instance.online && NetworkStatus.instance.certain) throw last;
       final sw = Stopwatch()..start();
       try {
         networkCalls++;
         AppLog.d('hikka', '→ $label (спроба $attempt)');
         final res = await _send(HikkaRequest(method, url, raw, headers));
+        NetworkStatus.instance.reportSuccess();
         if (res.status >= 200 && res.status < 300) {
           AppLog.d('hikka', '← ${res.status} за ${sw.elapsedMilliseconds} мс, ${res.body.length} симв. ($label)${attempt > 1 ? ' — вдалося з спроби $attempt' : ''}');
           try {
-            return res.body.trim().isEmpty ? null : jsonDecode(res.body);
+            if (res.body.trim().isEmpty) return null;
+            final json = await JsonWorker.decode(res.body);
+            // The text as it came: the disk cache writes it as is instead of encoding the decoded data again
+            if (json is Map || json is List) _rawText[json!] = res.body;
+            return json;
           } on FormatException catch (e) {
             throw HikkaException(HikkaErrorKind.badResponse, 'JSON: ${e.message}', status: res.status);
           }
@@ -263,6 +273,7 @@ class HikkaApi {
         last = HikkaException(HikkaErrorKind.network, describeError(e));
         final more = attempt < _maxNetworkAttempts;
         AppLog.w('hikka', 'збій мережі за ${sw.elapsedMilliseconds} мс ($label), спроба $attempt/$_maxNetworkAttempts: ${last.detail}${more ? ' — повторюю' : ''}');
+        if (attempt == 2) NetworkStatus.instance.reportFailure();
         if (!more) throw last;
         await Future<void>.delayed(_backoff(attempt));
       }
@@ -373,9 +384,14 @@ class HikkaApi {
     _cache[key] = _CacheEntry(json, at.add(ttl));
     _trim();
     final d = disk;
-    if (d != null) unawaited(d.write(key, json, at));
+    final raw = json is Map || json is List ? _rawText[json!] : null;
+    if (raw != null) _rawText[json!] = null;
+    if (d != null) unawaited(d.write(key, json, at, raw: raw));
     return json;
   }
+
+  /// The response text by its decoded data, until the disk cache has taken it (see [_request])
+  static final Expando<String> _rawText = Expando('hikka raw json');
 
   static String _shortKey(String key) => key.length > 100 ? '${key.substring(0, 100)}…' : key;
 
@@ -431,6 +447,14 @@ class HikkaApi {
         () => _request('GET', '/anime/${_seg(slug)}'),
         (j) => HikkaAnime.fromJson(j is Map<String, dynamic> ? j : const {}),
       );
+
+  /// MyAnimeList's id of a title opened from Hikka (`hikka:<slug>`, AniSkip and the opening songs go by it); null for
+  /// other titles or when Hikka does not know it
+  Future<int?> malIdOf(String animeKey) async {
+    if (!animeKey.startsWith('hikka:')) return null;
+    final a = await anime(animeKey.substring(6));
+    return a.malId > 0 ? a.malId : null;
+  }
 
   Future<HikkaPage<HikkaCharacterRole>> animeCharacters(String slug, {int page = 1, int size = 30}) => _cached(
         'anime/$slug/characters?$page&$size',

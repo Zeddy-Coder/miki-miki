@@ -12,6 +12,7 @@ import '../../services/hikka_prefs.dart';
 import '../../services/ui_theme_service.dart';
 import '../app_animation_kit.dart';
 import '../app_ui_kit.dart';
+import '../settings_kit.dart';
 import 'hikka_banner.dart';
 import 'hikka_cards.dart';
 import 'hikka_common.dart';
@@ -21,7 +22,6 @@ import 'hikka_page_kit.dart';
 import 'hikka_shelf.dart';
 import 'hikka_watch_dialogs.dart';
 import 'hikka_watch_section.dart';
-import '../../utils/app_clock.dart';
 
 /// Anime page: the header (from the list data, immediately), description, information, characters, franchise,
 /// recommendations, authors, links, videos and music. Full data loads separately.
@@ -92,6 +92,9 @@ class _HikkaAnimePageState extends State<HikkaAnimePage> {
 
   void _toggle(String key) => setState(() => _route.memo[key] = _route.memo[key] != true);
 
+  /// Two columns (PC, a phone on its side) or the phone's single column: decided by the page width on each build
+  bool _wideLayout = false;
+
   // ── Header ──────────────────────────────────────────────────────────────────
 
   double get _scale => widget.scale;
@@ -130,34 +133,10 @@ class _HikkaAnimePageState extends State<HikkaAnimePage> {
     );
   }
 
-  Widget _genres(HikkaAnime a, {bool scroll = false}) {
+  Widget _genres(HikkaAnime a) {
     final adult = HikkaPrefs.instance.allowAdult;
     final genres = a.genres.where((g) => adult || !g.isExplicit).toList();
     if (genres.isEmpty) return const SizedBox.shrink();
-    final chips = [
-      for (final g in genres)
-        HikkaChip(
-          label: g.name,
-          scale: _scale,
-          onTap: () => HikkaNav.instance.openCatalog(HikkaSearchFilters(genres: {g.slug})),
-        ),
-    ];
-    if (scroll) {
-      // Phone: one row that scrolls sideways instead of a column of chips
-      return Padding(
-        padding: EdgeInsets.only(top: 12 * _scale, bottom: 14 * _scale),
-        child: SizedBox(
-          height: 34 * _scale,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            clipBehavior: Clip.none,
-            itemCount: chips.length,
-            separatorBuilder: (_, __) => SizedBox(width: 8 * _scale),
-            itemBuilder: (_, i) => Center(child: chips[i]),
-          ),
-        ),
-      );
-    }
     return Padding(
       padding: EdgeInsets.only(bottom: 14 * _scale),
       child: Wrap(
@@ -202,85 +181,33 @@ class _HikkaAnimePageState extends State<HikkaAnimePage> {
     );
   }
 
-  /// Phone: one card, scores side by side: "value ★" and the vote count under it
-  Widget _scoresCard(HikkaAnime a) {
+  /// Phone description: a heading and [HikkaSynopsis] (four lines fading out, «Читати далі ⌄»); the opened state lives
+  /// in the route, so coming back shows the same view
+  Widget _phoneSynopsis(HikkaAnime a) {
     final scale = _scale;
-    Widget half(String label, double score, int votes) => Expanded(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(score.toStringAsFixed(2), style: hikkaStyle(18 * scale, weight: FontWeight.bold)),
-                  SizedBox(width: 5 * scale),
-                  Icon(Symbols.star_rounded, color: const Color(0xFFFFC23D), size: 18 * scale, fill: 1),
-                ],
-              ),
-              SizedBox(height: 2 * scale),
-              Text('$label · ${HikkaText.count(votes)} оцінок', style: hikkaStyle(11.5 * scale, color: uiTheme.textDarkMuted)),
-            ],
-          ),
-        );
-    final items = <Widget>[
-      if (a.hasScore) half('MAL', a.score, a.scoredBy),
-      if (a.nativeScore > 0 && a.nativeScoredBy > 0) half('Hikka', a.nativeScore, a.nativeScoredBy),
-    ];
-    if (items.isEmpty) return const SizedBox.shrink();
+    final text = a.synopsis;
     return Padding(
-      padding: EdgeInsets.only(bottom: 12 * scale),
-      child: AppCard(
-        scale: scale,
-        radius: 14,
-        padding: EdgeInsets.symmetric(vertical: 12 * scale),
-        child: IntrinsicHeight(
-          child: Row(
-            children: [
-              for (int i = 0; i < items.length; i++) ...[
-                if (i > 0) VerticalDivider(width: 1, thickness: 1, color: uiTheme.borderSubtle),
-                items[i],
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _nextEpisode(HikkaAnime a) {
-    final now = AppClock.now();
-    final slot = a.nextEpisode(now);
-    if (slot == null) return const SizedBox.shrink();
-    final scale = _scale;
-    return Padding(
-      padding: EdgeInsets.only(bottom: 14 * scale),
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: AppCard(
-          scale: scale,
-          radius: 10,
-          padding: EdgeInsets.symmetric(horizontal: 12 * scale, vertical: 9 * scale),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Symbols.schedule_rounded, color: uiTheme.accentColor, size: 22 * scale, weight: 300),
-              SizedBox(width: 10 * scale),
-              Flexible(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('Наступна серія', style: hikkaStyle(11.5 * scale, color: uiTheme.textDarkMuted)),
-                    Text(
-                      '${slot.episode} · ${HikkaText.airingLabel(slot.time, now)}',
-                      style: hikkaStyle(13.5 * scale, weight: FontWeight.bold),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
+      padding: EdgeInsets.only(top: 13 * scale),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Опис', style: hikkaStyle(15 * scale, weight: FontWeight.bold)),
+          SizedBox(height: 6 * scale),
+          if (text == null)
+            Text('Опису поки немає.', style: hikkaStyle(13 * scale, color: uiTheme.textMuted, height: 1.5))
+          else
+            HikkaSynopsis(
+              source: text,
+              scale: scale,
+              open: _route.memo['synopsis'] == true,
+              onOpen: (v) => _route.memo['synopsis'] = v,
+            ),
+          if (text != null && a.synopsisUa == null)
+            Padding(
+              padding: EdgeInsets.only(top: 6 * scale),
+              child: Text('Опис англійською: українського поки немає.', style: hikkaStyle(11.5 * scale, color: uiTheme.textDarkMuted)),
+            ),
+        ],
       ),
     );
   }
@@ -296,11 +223,13 @@ class _HikkaAnimePageState extends State<HikkaAnimePage> {
         if (text == null)
           Text('Опису поки немає.', style: hikkaStyle(13 * scale, color: uiTheme.textMuted))
         else ...[
-          HikkaCollapsible(
-            collapsedHeight: 170 * scale,
+          HikkaSynopsis(
+            source: text,
             scale: scale,
-            fadeColor: uiTheme.bgPrimary,
-            child: HikkaMarkdownView(source: text, scale: scale),
+            fontSize: 13.5,
+            lines: 5,
+            open: _route.memo['synopsis'] == true,
+            onOpen: (v) => _route.memo['synopsis'] = v,
           ),
           if (a.synopsisUa == null)
             Padding(
@@ -312,7 +241,15 @@ class _HikkaAnimePageState extends State<HikkaAnimePage> {
     );
   }
 
-  List<List<(String, String)>> _infoGroups(HikkaAnime a) => [
+  String _scoreLine(double score, int votes) =>
+      '${score.toStringAsFixed(2)} · ${HikkaText.count(votes)} ${HikkaText.plural(votes, 'оцінка', 'оцінки', 'оцінок')}';
+
+  List<List<(String, String)>> _infoGroups(HikkaAnime a, {bool scores = false}) => [
+        if (scores && (a.hasScore || (a.nativeScore > 0 && a.nativeScoredBy > 0)))
+          [
+            if (a.hasScore) ('Оцінка MAL', _scoreLine(a.score, a.scoredBy)),
+            if (a.nativeScore > 0 && a.nativeScoredBy > 0) ('Оцінка Hikka', _scoreLine(a.nativeScore, a.nativeScoredBy)),
+          ],
         [('Тип', a.typeLabel), ('Статус', a.statusLabel), ('Сезон', a.seasonLabel)],
         [('Серії', a.episodesLabel), ('Тривалість', a.durationLabel)],
         [
@@ -321,9 +258,9 @@ class _HikkaAnimePageState extends State<HikkaAnimePage> {
         ],
       ];
 
-  Widget _info(HikkaAnime a) => HikkaInfoTable(
+  Widget _info(HikkaAnime a, {bool scores = false}) => HikkaInfoTable(
         scale: _scale,
-        groups: _infoGroups(a),
+        groups: _infoGroups(a, scores: scores),
         pills: const {'Статус'},
         logos: {
           (a.studios.length > 1 ? 'Студії' : 'Студія'): [
@@ -333,6 +270,8 @@ class _HikkaAnimePageState extends State<HikkaAnimePage> {
           ],
         },
         icons: const {
+          'Оцінка MAL': Symbols.star_rounded,
+          'Оцінка Hikka': Symbols.star_rounded,
           'Тип': Symbols.play_arrow_rounded,
           'Статус': Symbols.donut_large_rounded,
           'Сезон': Symbols.calendar_month_rounded,
@@ -344,7 +283,7 @@ class _HikkaAnimePageState extends State<HikkaAnimePage> {
         },
       );
 
-  /// The "Опис" block and, on a narrow screen, "Інформація"; until full data arrives, an indicator or an error
+  /// The "Опис" block; until full data arrives, an indicator or an error
   List<Widget> _details({required bool wide}) {
     final scale = _scale;
     final a = _full;
@@ -355,14 +294,7 @@ class _HikkaAnimePageState extends State<HikkaAnimePage> {
             : HikkaLoading(scale: scale, height: 140),
       ];
     }
-    return [
-      _nextEpisode(a),
-      _synopsis(a),
-      if (!wide) ...[
-        SizedBox(height: 18 * scale),
-        _info(a),
-      ],
-    ];
+    return [wide ? _synopsis(a) : _phoneSynopsis(a)];
   }
 
   Widget _gate(HikkaAnime a) {
@@ -399,14 +331,15 @@ class _HikkaAnimePageState extends State<HikkaAnimePage> {
     );
   }
 
-  /// "Мій список" (status, episodes, score, favorite) above the "Дивитись" button
+  /// The "Мій список" bookmark button on the banner (status, episodes, score, favorite in its menu)
   Widget _myList(HikkaAnime a) => HikkaMyListBar(key: ValueKey('mylist-${a.slug}'), anime: a, scale: _scale);
 
-  /// "Дивитись" right under the header (the page sets the margins itself, so 0 here)
-  Widget _watch() {
+  /// "Дивитись" right under the header (the page sets the margins itself, so 0 here); on a phone the description follows
+  /// it closely, as in the design
+  Widget _watch({required bool wide}) {
     final f = _full;
     if (f == null) return const SizedBox.shrink();
-    return HikkaWatchSection(key: ValueKey('watch-${_route.id}'), anime: f, route: _route, scale: _scale, pad: 0);
+    return HikkaWatchSection(key: ValueKey('watch-${_route.id}'), anime: f, route: _route, scale: _scale, pad: 0, bottom: wide ? 22 : 0);
   }
 
   /// Extra room at the top when the banner goes under the status bar: the bar itself and the row for the "Back" button
@@ -414,87 +347,172 @@ class _HikkaAnimePageState extends State<HikkaAnimePage> {
 
   Widget _top(HikkaAnime a, {required bool wide, required bool gated}) {
     final scale = _scale;
+    final up = _upper;
     if (gated) {
-      return Column(
+      return Padding(
+        padding: EdgeInsets.only(top: up),
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(a.title(HikkaPrefs.instance.titleLang), style: hikkaStyle((wide ? 24 : 19) * scale, weight: FontWeight.bold, height: 1.2)),
           SizedBox(height: 16 * scale),
           _gate(a),
         ],
+        ),
       );
     }
     final posterW = hikkaHeaderPosterWidth(scale, wide: wide);
     final shown = _full ?? a;
     final pad = HikkaLayout.sidePad(context, scale);
-    final up = _upper;
-    // The banner only under the poster and title (down to the scores row), not under the whole header: to the screen edges and a bit higher, under the bar
-    Widget backdrop({double? height}) => Positioned(
-          left: -pad,
-          right: -pad,
-          top: -(4 * scale + up + 6 * scale),
-          height: height == null ? null : height + up + 6 * scale + 4 * scale,
-          bottom: height == null ? -12 * scale : null,
-          child: HikkaTitleBackdrop(anime: shown),
-        );
     if (wide) {
+      // The banner only under the poster and title (down to the scores row), not under the whole header: to the screen edges and a bit higher, under the bar
       return Stack(
         clipBehavior: Clip.none,
         children: [
-          backdrop(height: posterW / 0.7 + 16 * scale - 4 * scale),
-          Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: posterW,
-            child: Column(
+          Positioned(
+            left: -pad,
+            right: -pad,
+            top: -(4 * scale + 6 * scale),
+            height: posterW / 0.7 + 16 * scale - 4 * scale + up + 6 * scale + 4 * scale,
+            child: HikkaTitleBackdrop(anime: shown),
+          ),
+          Padding(
+            padding: EdgeInsets.only(top: up),
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _poster(shown),
-                if (_full != null) ...[SizedBox(height: 16 * scale), _info(_full!)],
+                SizedBox(
+                  width: posterW,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _poster(shown),
+                      if (_full != null) ...[SizedBox(height: 16 * scale), _info(_full!)],
+                    ],
+                  ),
+                ),
+                SizedBox(width: 28 * scale),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _titleBlock(shown, wide: true),
+                      SizedBox(height: 14 * scale),
+                      _scores(shown),
+                      _watch(wide: true),
+                      _genres(shown),
+                      ..._details(wide: true),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
-          SizedBox(width: 28 * scale),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _titleBlock(shown, wide: true),
-                SizedBox(height: 14 * scale),
-                _scores(shown),
-                _myList(shown),
-                _watch(),
-                _genres(shown),
-                ..._details(wide: true),
-              ],
-            ),
-          ),
-        ],
-          ),
+          // The "Мій список" bookmark in the top right corner of the banner (level with the floating "Назад" on a phone)
+          _bookmark(shown, pad),
         ],
       );
     }
-    // Phone, as on hikka.io: the poster centered on the banner, under it the title, genres, scores, "Мій список", "Дивитись"
-    final phonePosterW = math.min(MediaQuery.sizeOf(context).width * 0.46, 230 * scale);
+    return _phoneTop(shown, pad);
+  }
+
+  /// Phone: a bright banner under the status bar with the poster on its lower edge, "Назад" and the list bookmark on its
+  /// corners; under it the title, the second title, genres, the main button with its one-line summary and the description.
+  /// Everything on the banner is measured from the top of the screen.
+  Widget _phoneTop(HikkaAnime shown, double pad) {
+    final scale = _scale;
+    final status = HikkaNav.immersive(widget.route) ? MediaQuery.paddingOf(context).top : 0.0;
+    final origin = _origin;
+    final bannerBottom = status + 120 * scale;
+    final posterW = 128 * scale;
+    final lang = HikkaPrefs.instance.titleLang;
+    final prefs = HikkaPrefs.instance;
+    final second = prefs.showSecondary ? shown.secondaryTitle(lang, prefs.secondaryLang) : null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Stack(
           clipBehavior: Clip.none,
           children: [
-            backdrop(height: phonePosterW / 0.7 + 8 * scale),
-            Center(child: SizedBox(width: phonePosterW, child: _poster(shown))),
+            Positioned(left: -pad, right: -pad, top: -origin, height: bannerBottom, child: HikkaTitleBackdrop(anime: shown, soft: true)),
+            Padding(
+              padding: EdgeInsets.only(top: math.max(0.0, status + 24 * scale - origin)),
+              child: Center(
+                child: SizedBox(
+                  width: posterW,
+                  child: HikkaPoster(url: shown.image, malId: shown.malId, scale: scale, radius: 14, aspect: 128 / 180, icon: Symbols.movie_rounded),
+                ),
+              ),
+            ),
+            _bookmark(shown, pad),
           ],
         ),
-        SizedBox(height: 20 * scale),
-        _titleBlock(shown, wide: false, compact: true),
-        _genres(shown, scroll: true),
-        _scoresCard(shown),
-        _myList(shown),
-        _watch(),
+        SizedBox(height: 14 * scale),
+        Text(shown.title(lang), style: hikkaStyle(21 * scale, weight: FontWeight.bold, height: 1.2)),
+        if (second != null)
+          Padding(
+            padding: EdgeInsets.only(top: 2 * scale),
+            child: Text(second, maxLines: 2, overflow: TextOverflow.ellipsis, style: hikkaStyle(13 * scale, color: uiTheme.textMuted, height: 1.3)),
+          ),
+        if (shown.isAdult) ...[SizedBox(height: 8 * scale), HikkaPill(text: '18+', scale: scale * 1.1, background: const Color(0xE6C62828))],
+        _phoneGenres(shown),
+        SizedBox(height: 16 * scale),
+        _watch(wide: false),
         ..._details(wide: false),
       ],
+    );
+  }
+
+  /// Where the page column starts on the screen: the frame's padding and ours
+  double get _origin => 6 * _scale + AppHeaderInset.of(context) + 4 * _scale;
+
+  /// The list bookmark in the banner's top right corner: the same circle as the floating "Назад" opposite, at the same height
+  Widget _bookmark(HikkaAnime shown, double pad) => Positioned(
+        right: floatingButtonInset(context, _scale) - pad,
+        top: math.max(0.0, floatingButtonTop(context, _scale) - _origin),
+        child: _myList(shown),
+      );
+
+  /// Phone genres: soft plates in one row that scrolls sideways; a tap opens the catalog with the genre
+  Widget _phoneGenres(HikkaAnime a) {
+    final scale = _scale;
+    final adult = HikkaPrefs.instance.allowAdult;
+    final genres = a.genres.where((g) => adult || !g.isExplicit).toList();
+    if (genres.isEmpty) return const SizedBox.shrink();
+    final r = uiTheme.borderRadius(16 * scale);
+    return Padding(
+      padding: EdgeInsets.only(top: 10 * scale),
+      child: SizedBox(
+        height: 32 * scale,
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          clipBehavior: Clip.none,
+          itemCount: genres.length,
+          separatorBuilder: (_, __) => SizedBox(width: 8 * scale),
+          itemBuilder: (_, i) => Semantics(
+            button: true,
+            label: genres[i].name,
+            child: Material(
+              color: uiTheme.bgElevated,
+              shape: RoundedRectangleBorder(borderRadius: r),
+              child: InkWell(
+                borderRadius: r,
+                splashColor: Colors.transparent,
+                highlightColor: uiTheme.touchHighlight,
+                hoverColor: uiTheme.hoverOverlay,
+                onTap: () => HikkaNav.instance.openCatalog(HikkaSearchFilters(genres: {genres[i].slug})),
+                child: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 13 * scale),
+                  child: Center(
+                    widthFactor: 1,
+                    child: Text(genres[i].name, style: hikkaStyle(12.5 * scale, color: Color.lerp(uiTheme.textMuted, uiTheme.textSecondary, 0.5))),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -507,6 +525,8 @@ class _HikkaAnimePageState extends State<HikkaAnimePage> {
       scale: scale,
       pad: pad,
       title: 'Автори',
+      titleSize: _headSize,
+      calm: !_wideLayout,
       token: _route.id,
       load: () async => (await HikkaApi.instance.animeStaff(a.slug, size: 30)).items,
       onMore: () => HikkaNav.instance.openAnimeStaff(a.slug, seed: a),
@@ -547,6 +567,7 @@ class _HikkaAnimePageState extends State<HikkaAnimePage> {
       scale: scale,
       pad: pad,
       title: 'Відео',
+      titleSize: _headSize,
       child: Wrap(
         spacing: 8 * scale,
         runSpacing: 8 * scale,
@@ -575,10 +596,30 @@ class _HikkaAnimePageState extends State<HikkaAnimePage> {
       scale: scale,
       pad: pad,
       title: 'Музика',
+      titleSize: _headSize,
       count: items.length,
       cardWidth: HikkaShelfMetrics.cardWidth(scale),
       cardHeight: HikkaShelfMetrics.cardWidth(scale) + 92 * scale,
       itemBuilder: (context, i) => _OstCard(ost: items[i], scale: scale),
+    );
+  }
+
+  /// Section headings: larger on the phone layout, as in its design
+  double get _headSize => _wideLayout ? 13.5 : 15;
+
+  /// The phone's "Інформація": what the header there does not show (the scores among it), under "Персонажі"
+  Widget _phoneInfo(HikkaAnime a, double pad) {
+    final scale = _scale;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(pad, 0, pad, 22 * scale),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          AppSectionHeader(scale: scale, title: 'Інформація', titleSize: _headSize),
+          SizedBox(height: 10 * scale),
+          _info(a, scores: true),
+        ],
+      ),
     );
   }
 
@@ -587,28 +628,41 @@ class _HikkaAnimePageState extends State<HikkaAnimePage> {
     final api = HikkaApi.instance;
     final adult = HikkaPrefs.instance.allowAdult;
     final id = _route.id;
+    final wide = _wideLayout;
     bool visible(HikkaAnime x) => adult || !x.isAdult;
+    // Phone: small portraits with only the name, as in the design
+    final castW = 84 * scale;
+    final castH = 118 * scale + 5 * scale + 12 * scale * 1.2 + 2;
 
     return [
-      HikkaLazy(height: HikkaShelfMetrics.height(context, scale) + 70 * scale, builder: (_) => HikkaShelfAsync<HikkaCharacterRole>(
+      HikkaLazy(height: (wide ? HikkaShelfMetrics.height(context, scale) : castH) + 70 * scale, builder: (_) => HikkaShelfAsync<HikkaCharacterRole>(
         scale: scale,
         pad: pad,
         title: 'Персонажі',
+        titleSize: _headSize,
+        calm: !_wideLayout,
         token: id,
+        cardWidth: wide ? null : castW,
+        cardHeight: wide ? null : castH,
+        gap: wide ? 12 : 10,
         load: () async => (await api.animeCharacters(a.slug, size: 20)).items,
         onMore: () => HikkaNav.instance.openAnimeCharacters(a.slug, seed: a),
         itemBuilder: (context, r) => HikkaCharacterCard(
           character: r.character,
           scale: scale,
+          plain: !wide,
           caption: r.main ? 'Головний' : 'Другорядний',
         ),
       )),
+      if (!wide) _phoneInfo(a, pad),
       if (a.hasFranchise)
         HikkaLazy(height: HikkaShelfMetrics.height(context, scale) + 70 * scale, builder: (_) => HikkaShelfAsync<FranchiseDirect>(
           scale: scale,
           pad: pad,
           title: 'Франшиза',
           subtitle: 'Пов’язані тайтли',
+          titleSize: _headSize,
+          calm: !_wideLayout,
           token: id,
           load: () async {
             final model = FranchiseModel.build(await api.franchise(a.slug), a.slug);
@@ -634,6 +688,8 @@ class _HikkaAnimePageState extends State<HikkaAnimePage> {
         pad: pad,
         title: 'Рекомендації',
         subtitle: 'Схоже на це аніме',
+        titleSize: _headSize,
+        calm: !_wideLayout,
         token: id,
         load: () async => (await api.recommendations(a.slug, size: 20, allowAdult: adult)).items,
         itemBuilder: (context, x) => HikkaAnimeCard(anime: x, scale: scale),
@@ -655,22 +711,24 @@ class _HikkaAnimePageState extends State<HikkaAnimePage> {
     final gated = a.isAdult && !HikkaPrefs.instance.allowAdult && !_revealed;
     final full = _full;
 
-    return HikkaPageFrame(
-      scale: scale,
-      controller: _scroll,
-      bottomInset: widget.bottomInset,
-      children: [
-        LayoutBuilder(
-          builder: (context, c) {
-            final wide = c.maxWidth >= hikkaWideBreakpoint;
-            return Padding(
-              padding: EdgeInsets.fromLTRB(pad, 4 * scale + _upper, pad, 22 * scale),
+    return LayoutBuilder(
+      builder: (context, c) {
+        final wide = _wideLayout = math.min(c.maxWidth, HikkaLayout.maxContentWidth) >= hikkaWideBreakpoint;
+        final page = HikkaPageFrame(
+          scale: scale,
+          controller: _scroll,
+          bottomInset: widget.bottomInset,
+          children: [
+            Padding(
+              padding: EdgeInsets.fromLTRB(pad, 4 * scale, pad, (wide || gated ? 22 : 16) * scale),
               child: _top(a, wide: wide, gated: gated),
-            );
-          },
-        ),
-        if (!gated && full != null) ..._sections(full, pad),
-      ],
+            ),
+            if (!gated && full != null) ..._sections(full, pad),
+          ],
+        );
+        // The phone layout is drawn with the same font as the design (Arial, and Liberation Sans where there is none)
+        return wide ? page : SettingsFont(child: page);
+      },
     );
   }
 }

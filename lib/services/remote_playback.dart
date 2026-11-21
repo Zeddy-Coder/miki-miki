@@ -51,7 +51,7 @@ List<VideoChapter> chaptersFromTimestamps(List<TimeStamp> stamps, Duration total
     } else {
       start = cursor; // a tiny gap is attached to the chapter
     }
-    out.add(VideoChapter(title: _title(s), startTime: _sec(start), endTime: _sec(end)));
+    out.add(VideoChapter(title: _title(s), startTime: _sec(start), endTime: _sec(end), autoSkip: s.exact));
     cursor = end;
   }
   if (out.isEmpty) return const [];

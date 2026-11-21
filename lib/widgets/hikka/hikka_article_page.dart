@@ -4,8 +4,13 @@ import 'package:material_symbols_icons/symbols.dart';
 import '../../models/hikka_models.dart';
 import '../../services/hikka_api.dart';
 import '../../services/hikka_nav.dart';
+import '../../services/hikka_prefs.dart';
 import '../../services/ui_theme_service.dart';
+import '../../utils/app_clock.dart';
 import '../app_animation_kit.dart';
+import '../app_tones.dart';
+import '../design_kit.dart' show AppPlate;
+import '../line_icons.dart';
 import 'hikka_common.dart';
 import 'hikka_community_cards.dart';
 import 'hikka_page_kit.dart';
@@ -76,79 +81,71 @@ class _HikkaArticlePageState extends State<HikkaArticlePage> {
     _load();
   }
 
+  /// The category and date in grey, the title, the author with the counters on one line, and the title the article is
+  /// about as a quiet card
   Widget _header(HikkaArticle a, double pad) {
     final scale = _scale;
+    final now = AppClock.now();
+    final content = a.content;
     return Padding(
-      padding: EdgeInsets.fromLTRB(pad, 6 * scale, pad, 16 * scale),
+      padding: EdgeInsets.fromLTRB(pad, 4 * scale, pad, 8 * scale),
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: hikkaReadableWidth(scale)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                HikkaPill(text: a.categoryLabel, scale: scale, background: uiTheme.accentWash, foreground: uiTheme.accentColor),
-                SizedBox(width: 8 * scale),
-                Flexible(
-                  child: InkWell(
-                    // The author's name leads to their profile
-                    onTap: a.author.username.isEmpty ? null : () => HikkaNav.instance.openUser(a.author.username),
-                    borderRadius: uiTheme.borderRadius(6 * scale),
-                    splashColor: Colors.transparent,
-                    highlightColor: uiTheme.touchHighlight,
-                    hoverColor: uiTheme.hoverOverlay,
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(vertical: 4 * scale, horizontal: 2 * scale),
-                      child: Text(hikkaByline(a.author, a.createdAt), maxLines: 1, overflow: TextOverflow.ellipsis, style: hikkaStyle(12 * scale, color: uiTheme.textMuted)),
-                    ),
-                  ),
-                ),
-              ],
+            Text(
+              '${a.categoryLabel} · ${HikkaText.dayMonth(a.createdAt, now: now)}',
+              style: hikkaStyle(12.5 * scale, color: uiTheme.textMuted),
             ),
-            SizedBox(height: 10 * scale),
+            SizedBox(height: 6 * scale),
             Text(a.title, style: hikkaStyle(22 * scale, weight: FontWeight.bold, height: 1.22)),
-            SizedBox(height: 12 * scale),
-            Wrap(
-              spacing: 14 * scale,
-              runSpacing: 4 * scale,
-              children: [
-                HikkaStat(icon: Symbols.visibility_rounded, text: HikkaText.compact(a.views), scale: scale, tooltip: 'Перегляди'),
-                HikkaStat(icon: Symbols.arrow_circle_up_rounded, text: HikkaText.compact(a.voteScore), scale: scale, tooltip: 'Оцінка'),
-                HikkaStat(icon: Symbols.chat_bubble_rounded, text: HikkaText.compact(a.commentsCount), scale: scale, tooltip: 'Коментарі'),
-              ],
+            SizedBox(height: 10 * scale),
+            HikkaAuthorLine(
+              author: a.author,
+              scale: scale,
+              trailing: Wrap(
+                spacing: 12 * scale,
+                children: [
+                  HikkaStat(icon: LineIcon.eye, text: HikkaText.compact(a.views), scale: scale, tooltip: 'Перегляди'),
+                  HikkaStat(icon: LineIcon.arrowUp, text: HikkaText.compact(a.voteScore), scale: scale, tooltip: 'Оцінка'),
+                  HikkaStat(icon: LineIcon.comment, text: HikkaText.compact(a.commentsCount), scale: scale, tooltip: 'Коментарі'),
+                ],
+              ),
             ),
+            if (content != null) Padding(padding: EdgeInsets.only(top: 12 * scale), child: _AnimeLink(anime: content, scale: scale)),
           ],
         ),
       ),
     );
   }
 
-  Widget _body(HikkaArticle? full, double pad) {
+  /// While the text loads: a spinner (or the error) under the header
+  Widget _waiting(double pad) {
     final scale = _scale;
-    if (full == null) {
-      return _error != null
-          ? HikkaErrorView(scale: scale, error: _error!, onRetry: _retry, compact: true)
-          : HikkaLoading(scale: scale, height: 200);
-    }
     return Padding(
-      padding: EdgeInsets.fromLTRB(pad, 0, pad, 12 * scale),
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: hikkaReadableWidth(scale)),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            HikkaSlateView(nodes: full.document, scale: scale),
-            if (full.tags.isNotEmpty) ...[
-              SizedBox(height: 8 * scale),
-              Wrap(
-                spacing: 8 * scale,
-                runSpacing: 6 * scale,
-                children: [for (final t in full.tags.take(12)) HikkaChip(label: '#$t', scale: scale)],
-              ),
-            ],
-          ],
-        ),
-      ),
+      padding: EdgeInsets.symmetric(horizontal: pad),
+      child: _error != null ? HikkaErrorView(scale: scale, error: _error!, onRetry: _retry, compact: true) : HikkaLoading(scale: scale, height: 200),
+    );
+  }
+
+  /// One piece of the text (see [HikkaSlateView.pieces]) or, after the last one, the tags: in the reading column
+  Widget _piece(HikkaArticle full, List<List<SlateNode>> pieces, int i, double pad) {
+    final scale = _scale;
+    final last = i == pieces.length - (full.tags.isEmpty ? 1 : 0);
+    final Widget child = i < pieces.length
+        ? HikkaSlateView(nodes: pieces[i], scale: scale)
+        : Padding(
+            padding: EdgeInsets.only(top: 10 * scale),
+            child: Wrap(
+              spacing: 8 * scale,
+              runSpacing: 8 * scale,
+              children: [for (final t in full.tags.take(12)) AppPlate(scale: scale, label: '#$t', height: 30, radius: 15)],
+            ),
+          );
+    return Padding(
+      padding: EdgeInsets.fromLTRB(pad, i == 0 ? 8 * scale : 0, pad, last ? 12 * scale : 0),
+      child: ConstrainedBox(constraints: BoxConstraints(maxWidth: hikkaReadableWidth(scale)), child: child),
     );
   }
 
@@ -160,14 +157,95 @@ class _HikkaArticlePageState extends State<HikkaArticlePage> {
       return _error != null ? HikkaErrorView(scale: scale, error: _error!, onRetry: _retry) : HikkaLoading(scale: scale, height: 320);
     }
     final pad = HikkaLayout.sidePad(context, scale);
+    final full = _full;
+    // The text is a lazy list of its blocks: a long article built all at once laid out every paragraph and asked for
+    // every picture on opening, and repainted the whole page on every scroll frame
+    final pieces = full == null ? const <List<SlateNode>>[] : HikkaSlateView.pieces(full.document);
     return HikkaPageFrame(
       scale: scale,
       controller: _scroll,
       bottomInset: widget.bottomInset,
+      itemCount: full == null ? 0 : pieces.length + (full.tags.isEmpty ? 0 : 1),
+      itemBuilder: (context, i) => _piece(full!, pieces, i, pad),
+      // The reading column in the middle of a wide window, as before
+      columnWidth: hikkaReadableWidth(scale) + pad * 2,
       children: [
-        _header(_full ?? a, pad),
-        _body(_full, pad),
+        _header(full ?? a, pad),
+        if (full == null) _waiting(pad),
       ],
+    );
+  }
+}
+
+/// The title an article is about: a small poster, the title, type, year and score, a chevron
+class _AnimeLink extends StatelessWidget {
+  final HikkaAnime anime;
+  final double scale;
+
+  const _AnimeLink({required this.anime, required this.scale});
+
+  @override
+  Widget build(BuildContext context) {
+    final a = anime;
+    final grey = AppTones.rowSub;
+    final meta = [if (a.typeLabel.isNotEmpty) a.typeLabel, if (a.year != null) '${a.year}'].join(' · ');
+    final shape = RoundedRectangleBorder(borderRadius: uiTheme.borderRadius(12 * scale), side: BorderSide(color: uiTheme.borderSubtle));
+    return Semantics(
+      button: true,
+      label: a.title(HikkaPrefs.instance.titleLang),
+      excludeSemantics: true,
+      child: Material(
+        color: AppTones.menu,
+        shape: shape,
+        child: InkWell(
+          key: const ValueKey('article-anime'),
+          customBorder: shape,
+          splashColor: Colors.transparent,
+          highlightColor: uiTheme.touchHighlight,
+          hoverColor: uiTheme.hoverOverlay,
+          onTap: () => HikkaNav.instance.openAnime(a.slug, seed: a),
+          child: Padding(
+            padding: EdgeInsets.all(10 * scale),
+            child: Row(
+              children: [
+                SizedBox(width: 40 * scale, child: HikkaPoster(url: a.image, malId: a.malId, scale: scale, radius: 6, aspect: 40 / 56, icon: Symbols.movie_rounded)),
+                SizedBox(width: 12 * scale),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(a.title(HikkaPrefs.instance.titleLang), maxLines: 2, overflow: TextOverflow.ellipsis, style: hikkaStyle(14.5 * scale, height: 1.25)),
+                      if (meta.isNotEmpty || a.hasScore)
+                        Padding(
+                          padding: EdgeInsets.only(top: 3 * scale),
+                          child: Text.rich(
+                            TextSpan(
+                              style: hikkaStyle(12.5 * scale, color: grey),
+                              children: [
+                                TextSpan(text: meta),
+                                if (a.hasScore) ...[
+                                  TextSpan(text: meta.isEmpty ? '' : ' · '),
+                                  WidgetSpan(
+                                    alignment: PlaceholderAlignment.middle,
+                                    child: Padding(padding: EdgeInsets.only(right: 3 * scale), child: LineIconView(LineIcon.star, size: 12 * scale, color: grey, stroke: 1.8)),
+                                  ),
+                                  TextSpan(text: a.score.toStringAsFixed(2)),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                SizedBox(width: 8 * scale),
+                LineIconView(LineIcon.chevronRight, size: 18 * scale, color: AppTones.chevron),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
 import 'package:media_kit/media_kit.dart';
 import 'app_animation_kit.dart';
+import 'line_icons.dart';
+import 'player_kit.dart';
 
-/// A short large pause/play icon in the middle of the video (instead of permanent central buttons)
+/// A short large pause/play icon in the middle of the video (instead of permanent central buttons): the same
+/// translucent circle as the transport's pause button
 class CenterFlash extends StatefulWidget {
   final double scale;
   final Player player;
@@ -56,21 +58,12 @@ class _CenterFlashState extends State<CenterFlash> {
             slide: Offset.zero,
             duration: AppAnim.medium,
             child: Container(
-              width: 76 * scale,
-              height: 76 * scale,
-              decoration: BoxDecoration(
-                color: const Color(0xFF16161A).withValues(alpha: 0.72),
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white.withValues(alpha: 0.16), width: 1.0),
-              ),
-              child: Icon(
-                _playing ? Symbols.play_arrow_rounded : Symbols.pause_rounded,
-                color: Colors.white,
-                size: 42 * scale,
-                fill: 1,
-                weight: 300,
-                opticalSize: 24,
-              ),
+              key: const ValueKey('center-flash'),
+              width: 72 * scale,
+              height: 72 * scale,
+              alignment: Alignment.center,
+              decoration: const BoxDecoration(color: PlayerTones.circleBig, shape: BoxShape.circle),
+              child: LineIconView(_playing ? LineIcon.play : LineIcon.pause, size: 32 * scale, color: PlayerTones.fg, stroke: 1.2),
             ),
           ),
         ),

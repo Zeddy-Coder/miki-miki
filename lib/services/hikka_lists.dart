@@ -24,6 +24,9 @@ class HikkaMyList extends ChangeNotifier {
 
   /// Saved statuses: poster badges appear immediately, and a network refresh happens at most once every few hours
   static const String indexSection = 'hikka_status_index';
+
+  /// Marks made without internet, waiting to go to Hikka: slug → `{e: episode, t: total, u: true when it is a removal}`
+  static const String pendingSection = 'hikka_pending';
   static const Duration indexMaxAge = Duration(hours: 6);
 
   /// Entry for a title by slug (`null` means it is in no lists)
@@ -63,6 +66,8 @@ class HikkaMyList extends ChangeNotifier {
     if (now == _wasSignedIn) return;
     _wasSignedIn = now;
     clear();
+    // Marks that waited for the network belong to the account that made them
+    if (!now) StorageService.saveSection(pendingSection, {});
     if (now) unawaited(loadIndex());
   }
 
@@ -292,6 +297,48 @@ class HikkaMyList extends ChangeNotifier {
     });
   }
 
+  /// The network failed: the mark waits ([flushPending]). The furthest episode wins; a removal replaces what waited
+  void _queuePending(String slug, int episode, int? total, {bool unmark = false}) {
+    final all = Map<String, dynamic>.of(StorageService.getSection(pendingSection));
+    final old = all[slug];
+    if (!unmark && old is Map && old['u'] != true && ((old['e'] as num?)?.toInt() ?? 0) >= episode) return;
+    all[slug] = {'e': episode, if (total != null) 't': total, if (unmark) 'u': true};
+    StorageService.saveSection(pendingSection, all);
+    AppLog.i('hikka', 'немає мережі: ${unmark ? 'зняття позначки' : 'позначку'} $slug (серія $episode) буде передано пізніше');
+  }
+
+  static bool _isOffline(HikkaException e) => e.kind == HikkaErrorKind.network || e.kind == HikkaErrorKind.timeout;
+
+  bool _flushing = false;
+
+  /// How many marks wait for the network
+  int get pendingCount => StorageService.getSection(pendingSection).length;
+
+  /// Sends the marks made without internet (when it is back; failures wait again)
+  Future<void> flushPending() async {
+    if (_flushing || !signedIn) return;
+    final all = StorageService.getSection(pendingSection);
+    if (all.isEmpty) return;
+    _flushing = true;
+    try {
+      StorageService.saveSection(pendingSection, {});
+      AppLog.i('hikka', 'передаю позначки, зроблені без мережі: ${all.length}');
+      for (final e in all.entries) {
+        final v = e.value;
+        if (v is! Map) continue;
+        final episode = (v['e'] as num?)?.toInt() ?? 0;
+        final total = (v['t'] as num?)?.toInt();
+        if (v['u'] == true) {
+          await unmarkEpisode(e.key, episode, total: total);
+        } else {
+          await syncEpisode(e.key, episode, total: total);
+        }
+      }
+    } finally {
+      _flushing = false;
+    }
+  }
+
   Future<void> _unmarkOne(String slug, int episode, int? total) async {
     try {
       final old = await entry(slug, refresh: true);
@@ -304,6 +351,7 @@ class HikkaMyList extends ChangeNotifier {
       );
       AppLog.d('hikka', 'позначку знято: $slug, серія $episode');
     } on HikkaException catch (e) {
+      if (_isOffline(e)) _queuePending(slug, episode, total, unmark: true);
       AppLog.w('hikka', 'позначку не знято ($slug, серія $episode): $e');
     } catch (e) {
       AppLog.w('hikka', 'позначку не знято ($slug, серія $episode): $e');
@@ -328,6 +376,7 @@ class HikkaMyList extends ChangeNotifier {
       );
       AppLog.d('hikka', 'прогрес передано: $slug, серія $episode${done ? ' (завершено)' : ''}');
     } on HikkaException catch (e) {
+      if (_isOffline(e)) _queuePending(slug, episode, total);
       AppLog.w('hikka', 'прогрес не передано ($slug, серія $episode): $e');
     } catch (e) {
       AppLog.w('hikka', 'прогрес не передано ($slug, серія $episode): $e');

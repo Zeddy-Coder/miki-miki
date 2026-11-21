@@ -2,7 +2,6 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
 import 'package:media_kit/media_kit.dart';
 import '../models/media_models.dart';
 import '../services/playback_clock.dart';
@@ -10,6 +9,8 @@ import '../services/seek_preview_service.dart';
 import '../services/ui_theme_service.dart';
 import '../utils/formatters.dart';
 import 'app_animation_kit.dart';
+import 'line_icons.dart';
+import 'player_kit.dart';
 
 /// Mouse wheel over a widget. Fires only for the deepest (closest to the cursor)
 /// listener, so the wheel over a button does not also change the volume of the video under it.
@@ -113,24 +114,13 @@ class AppProgressLine extends StatelessWidget {
   }
 }
 
-/// Glass overlay surface (the same as in AppOverlayButton)
-BoxDecoration _glass({double radius = 8, bool hover = false}) {
-  var bg = const Color(0xFF16161A).withValues(alpha: 0.55);
-  if (hover) bg = Color.alphaBlend(Colors.white.withValues(alpha: 0.08), bg);
-  return BoxDecoration(
-    color: bg,
-    borderRadius: uiTheme.borderRadius(radius),
-    border: Border.all(color: Colors.white.withValues(alpha: 0.16), width: 1.0),
-  );
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Volume
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// A volume button with a sliding-out slider. The slider is always mounted (it does not disappear
-/// or "lose" hover), stays open while dragging even when the cursor
-/// left the bounds, and the clickable area takes the full height.
+/// The volume: a line icon (a click mutes) and a thin slider always in view, white on the video like the concept;
+/// under the cursor or while dragged the bar thickens and a round thumb appears. The slider keeps following a drag
+/// that left its bounds, and the clickable area takes the full height.
 class AppVolumeControl extends StatefulWidget {
   final double scale;
   final double volume; // 0..100
@@ -165,91 +155,53 @@ class _AppVolumeControlState extends State<AppVolumeControl> {
     final expanded = _hover || _drag;
     final muted = widget.isMuted || widget.volume == 0;
     final shown = widget.isMuted ? 0.0 : widget.volume / 100;
-    final iconData = muted
-        ? Symbols.volume_off_rounded
-        : (widget.volume > 50 ? Symbols.volume_up_rounded : Symbols.volume_down_rounded);
+    final icon = muted ? LineIcon.volumeOff : (widget.volume > 50 ? LineIcon.volume : LineIcon.volumeLow);
 
-    final double btnW = 38 * scale;
-    final double sliderW = 92 * scale; // slider zone (with the padding)
-    final double trackW = 70 * scale;
+    final double pad = 6 * scale; // the slider zone's side padding (it responds too)
+    final double trackW = 76 * scale;
+    final double h = 40 * scale;
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hover = true),
       onExit: (_) => setState(() => _hover = false),
-      child: AppAnimatedContainer(
-          duration: AppAnim.normal,
-          width: btnW + (expanded ? sliderW : 0),
-          height: 30 * scale,
-          clipBehavior: Clip.hardEdge,
-          decoration: _glass(radius: 8, hover: expanded),
-          child: OverflowBox(
-            alignment: Alignment.centerLeft,
-            minWidth: 0,
-            maxWidth: btnW + sliderW,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: widget.onToggleMute,
-                  child: SizedBox(
-                    width: btnW - 2,
-                    height: 30 * scale,
-                    child: Center(
-                      child: AppFadeSwitcher(
-                        alignment: Alignment.center,
-                        child: Icon(
-                          iconData,
-                          key: ValueKey(iconData),
-                          color: Colors.white,
-                          size: 18 * scale,
-                          weight: 300,
-                          opticalSize: 24,
-                        ),
-                      ),
-                    ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          PlayerIconButton(
+            key: const ValueKey('volume-mute'),
+            icon: icon,
+            label: muted ? 'Увімкнути звук' : 'Вимкнути звук',
+            onTap: widget.onToggleMute,
+            size: h,
+            iconSize: 21 * scale,
+          ),
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTapDown: (d) => _setFromDx(d.localPosition.dx - pad, trackW),
+            onHorizontalDragStart: (d) {
+              setState(() => _drag = true);
+              _setFromDx(d.localPosition.dx - pad, trackW);
+            },
+            onHorizontalDragUpdate: (d) => _setFromDx(d.localPosition.dx - pad, trackW),
+            onHorizontalDragEnd: (_) => setState(() => _drag = false),
+            onHorizontalDragCancel: () => setState(() => _drag = false),
+            child: SizedBox(
+              key: const ValueKey('volume-slider'),
+              width: trackW + pad * 2,
+              height: h,
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: pad),
+                child: AppAnimatedValue(
+                  value: expanded ? 1 : 0,
+                  builder: (context, t) => CustomPaint(
+                    painter: _VolumePainter(fraction: shown.clamp(0.0, 1.0), scale: scale, active: t),
                   ),
                 ),
-                // Slider zone: full height, the side padding responds too
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTapDown: (d) => _setFromDx(d.localPosition.dx - 6 * scale, trackW),
-                  onHorizontalDragStart: (d) {
-                    setState(() => _drag = true);
-                    _setFromDx(d.localPosition.dx - 6 * scale, trackW);
-                  },
-                  onHorizontalDragUpdate: (d) => _setFromDx(d.localPosition.dx - 6 * scale, trackW),
-                  onHorizontalDragEnd: (_) => setState(() => _drag = false),
-                  onHorizontalDragCancel: () => setState(() => _drag = false),
-                  child: SizedBox(
-                    width: sliderW,
-                    height: 30 * scale,
-                    child: Padding(
-                      padding: EdgeInsets.only(left: 6 * scale),
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: SizedBox(
-                          width: trackW,
-                          height: 18 * scale,
-                          child: AppAnimatedValue(
-                            value: _drag ? 1 : 0,
-                            builder: (context, t) => CustomPaint(
-                              painter: _VolumePainter(
-                                fraction: shown.clamp(0.0, 1.0),
-                                scale: scale,
-                                active: t,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
-        ),
+        ],
+      ),
     );
   }
 }
@@ -263,23 +215,21 @@ class _VolumePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final h = (3.5 + 1.5 * active) * scale;
+    final h = (3.0 + 1.0 * active) * scale;
     final cy = size.height / 2;
-    final track = RRect.fromRectAndRadius(
-      Rect.fromLTWH(0, cy - h / 2, size.width, h),
-      Radius.circular(uiTheme.radius(h / 2)),
+    final radius = Radius.circular(h / 2);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(Rect.fromLTWH(0, cy - h / 2, size.width, h), radius),
+      Paint()..color = Colors.white.withValues(alpha: 0.25),
     );
-    canvas.drawRRect(track, Paint()..color = Colors.white.withValues(alpha: 0.22));
-
     final fillW = size.width * fraction;
     if (fillW > 0) {
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(Rect.fromLTWH(0, cy - h / 2, fillW, h), Radius.circular(uiTheme.radius(h / 2))),
-        Paint()..color = uiTheme.accentOnDark,
-      );
+      canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(0, cy - h / 2, fillW, h), radius), Paint()..color = PlayerTones.fg);
     }
-    final r = (5.0 + 1.5 * active) * scale;
-    canvas.drawCircle(Offset(fillW.clamp(r, size.width - r), cy), r, Paint()..color = Colors.white);
+    if (active > 0.01) {
+      final r = 5.5 * scale * active;
+      canvas.drawCircle(Offset(fillW.clamp(r, size.width - r), cy), r, Paint()..color = PlayerTones.fg);
+    }
   }
 
   @override
@@ -515,96 +465,68 @@ class _AppSeekBarState extends State<AppSeekBar> {
     );
   }
 
+  /// Under the cursor: the frame (a local file) with a thin light edge and, under it, "8:40 · Частина А" on a dark plate
   Widget _buildBubble(double scale, double width, double hitH) {
     final time = _snap(_timeAt(_hoverX, width));
     final chTitle = _chapterTitleAt(time);
     final uri = _currentUri();
     final bool preview = SeekPreviewService.supports(uri);
-    final double bw = preview ? 176 * scale : (chTitle.isNotEmpty ? 200 : 84) * scale;
+    final double bw = preview ? 176 * scale : (chTitle.isNotEmpty ? 220 : 84) * scale;
     final double left = (_hoverX - bw / 2).clamp(0.0, (width - bw).clamp(0.0, double.infinity));
+    final label = chTitle.isEmpty ? AppFormatters.formatTime(time) : '${AppFormatters.formatTime(time)} · $chTitle';
 
     return Positioned(
       left: left,
       bottom: hitH - 2 * scale,
       child: IgnorePointer(
-          child: Container(
-            width: bw,
-            padding: EdgeInsets.all(preview ? 4 * scale : 0),
-            decoration: BoxDecoration(
-              color: uiTheme.colors.drawerBg,
-              borderRadius: uiTheme.borderRadius(12 * scale),
-              border: Border.all(color: uiTheme.colors.borderSubtle, width: 1.0),
-              boxShadow: [
-                BoxShadow(color: Colors.black.withValues(alpha: 0.6), blurRadius: 12 * scale, offset: Offset(0, 3 * scale)),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (preview)
-                  ClipRRect(
-                    borderRadius: uiTheme.borderRadius(9 * scale),
-                    child: SizedBox(
-                      width: double.infinity,
-                      height: (bw - 8 * scale) * 9 / 16,
-                      child: ValueListenableBuilder<int>(
-                        valueListenable: SeekPreviewService.revision,
-                        builder: (context, _, __) {
-                          final Uint8List? bytes = SeekPreviewService.frame(time);
-                          return Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              Container(
-                                color: Colors.black,
-                                child: Center(
-                                  child: Icon(Symbols.movie_rounded, color: Colors.white24, size: 22 * scale),
-                                ),
-                              ),
-                              if (bytes != null)
-                                Image.memory(bytes, fit: BoxFit.cover, gaplessPlayback: true, filterQuality: FilterQuality.medium),
-                            ],
-                          );
-                        },
-                      ),
-                    ),
+        child: SizedBox(
+          key: const ValueKey('seek-preview'),
+          width: bw,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (preview) ...[
+                Container(
+                  width: bw,
+                  height: bw * 9 / 16,
+                  clipBehavior: Clip.antiAlias,
+                  decoration: BoxDecoration(
+                    color: Colors.black,
+                    borderRadius: BorderRadius.circular(8 * scale),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
+                    boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.5), blurRadius: 14 * scale, offset: Offset(0, 4 * scale))],
                   ),
-                Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 10 * scale, vertical: 5 * scale),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        AppFormatters.formatTime(time),
-                        style: TextStyle(
-                          fontFamily: 'Arial',
-                          color: uiTheme.colors.textPrimary,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 11.5 * scale,
-                        ),
-                      ),
-                      if (chTitle.isNotEmpty) ...[
-                        Text(' • ', style: TextStyle(fontFamily: 'Arial', color: uiTheme.accentColor, fontWeight: FontWeight.bold, fontSize: 12 * scale)),
-                        Flexible(
-                          child: Text(
-                            chTitle,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontFamily: 'Arial',
-                              color: uiTheme.colors.textSecondary,
-                              fontWeight: FontWeight.w500,
-                              fontSize: 11.5 * scale,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
+                  child: ValueListenableBuilder<int>(
+                    valueListenable: SeekPreviewService.revision,
+                    builder: (context, _, __) {
+                      final Uint8List? bytes = SeekPreviewService.frame(time);
+                      return bytes == null
+                          ? Center(child: LineIconView(LineIcon.play, size: 20 * scale, color: Colors.white24))
+                          : Image.memory(bytes, fit: BoxFit.cover, gaplessPlayback: true, filterQuality: FilterQuality.medium);
+                    },
                   ),
                 ),
+                SizedBox(height: 6 * scale),
               ],
-            ),
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 9 * scale, vertical: 4 * scale),
+                decoration: BoxDecoration(color: const Color(0xDB18181C), borderRadius: BorderRadius.circular(7 * scale)),
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontFamily: 'Arial',
+                    fontFamilyFallback: const ['MikiSans'],
+                    color: const Color(0xFFF0F0F2),
+                    fontSize: 12.5 * scale,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ),
+            ],
           ),
+        ),
       ),
     );
   }
@@ -673,18 +595,15 @@ class _SeekPainter extends CustomPainter {
       band(s, playedX, s, e, act);
     }
 
-    // A thumb in the style of the kit's sliders: an accent ring with a dark dot inside
-    final thumbR = (6.0 + 1.5 * t) * scale;
+    // A solid accent thumb; under the finger or cursor a soft halo around it
+    final thumbR = (5.5 + 1.5 * t) * scale;
     final cx = playedX.clamp(thumbR, w - thumbR);
-    if (t > 0.01) {
-      canvas.drawCircle(
-        Offset(cx, cy),
-        thumbR + 3.5 * scale * t,
-        Paint()..color = uiTheme.accentOnDark.withValues(alpha: 0.22 * t),
-      );
-    }
+    canvas.drawCircle(
+      Offset(cx, cy),
+      thumbR + (2.0 + 2.5 * t) * scale,
+      Paint()..color = uiTheme.accentOnDark.withValues(alpha: 0.16 + 0.08 * t),
+    );
     canvas.drawCircle(Offset(cx, cy), thumbR, Paint()..color = uiTheme.accentOnDark);
-    canvas.drawCircle(Offset(cx, cy), thumbR * 0.43, Paint()..color = const Color(0xFF111111));
   }
 
   @override

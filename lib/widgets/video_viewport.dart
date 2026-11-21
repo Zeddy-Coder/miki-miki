@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import '../services/video_zoom.dart';
 import 'app_animation_kit.dart';
-import 'app_ui_kit.dart';
+import 'line_icons.dart';
+import 'player_kit.dart';
 
 class VideoViewport extends StatefulWidget {
   final double scale;
@@ -14,6 +15,9 @@ class VideoViewport extends StatefulWidget {
   /// Double tap: true = right side (forward), false = left (back); null = off
   final ValueChanged<bool>? onDoubleTapSide;
   final String doubleTapLabel;
+
+  /// The rate while the video is held ("2×"), shown at the top while [isSpeeding]
+  final String speedLabel;
   final List<Widget> overlays;
 
   /// Pinch zoom (phone); null means no zoom
@@ -29,6 +33,7 @@ class VideoViewport extends StatefulWidget {
     required this.onTap,
     this.onDoubleTapSide,
     this.doubleTapLabel = '',
+    this.speedLabel = '2×',
     required this.overlays,
     this.zoom,
   });
@@ -88,7 +93,7 @@ class _VideoViewportState extends State<VideoViewport> {
           ),
         ),
 
-        // 2. 2.0x BADGE
+        // 2. 2× BADGE (hold on the video)
         Positioned(
           top: 45 * scale,
           left: 0,
@@ -96,22 +101,7 @@ class _VideoViewportState extends State<VideoViewport> {
           child: IgnorePointer(
             child: AppPresence(
               visible: isSpeeding,
-              child: AppOverlayButton(
-                scale: scale,
-                width: 104 * scale,
-                height: 32 * scale,
-                borderRadius: 16 * scale,
-                opacity: 0.85,
-                child: Text(
-                  '▶▶  2.0x',
-                  style: TextStyle(
-                    fontFamily: 'Arial',
-                    color: Colors.white,
-                    fontWeight: FontWeight.w500,
-                    fontSize: 13 * scale,
-                  ),
-                ),
-              ),
+              child: Center(child: _chip(scale, LineIcon.speed, widget.speedLabel, key: const ValueKey('speed-hold'))),
             ),
           ),
         ),
@@ -143,20 +133,26 @@ class _VideoViewportState extends State<VideoViewport> {
     });
   }
 
-  Widget _seekChip(double scale, bool forward) {
+  Widget _seekChip(double scale, bool forward) =>
+      _chip(scale, forward ? LineIcon.forward : LineIcon.replay, widget.doubleTapLabel, key: ValueKey(forward ? 'double-tap-forward' : 'double-tap-back'));
+
+  /// A dark plate over the video with a line icon and a short bold value (double-tap seek, hold for 2×)
+  Widget _chip(double scale, LineIcon icon, String text, {Key? key}) {
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: 16 * scale, vertical: 10 * scale),
+      key: key,
+      height: 40 * scale,
+      padding: EdgeInsets.symmetric(horizontal: 14 * scale),
       decoration: BoxDecoration(
-        color: const Color(0xFF16161A).withValues(alpha: 0.72),
-        borderRadius: BorderRadius.circular(22 * scale),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
+        color: const Color(0xDB18181C),
+        borderRadius: BorderRadius.circular(20 * scale),
+        border: Border.all(color: PlayerTones.pillLine),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(forward ? Icons.fast_forward_rounded : Icons.fast_rewind_rounded, color: Colors.white, size: 22 * scale),
-          SizedBox(width: 6 * scale),
-          Text(widget.doubleTapLabel, style: TextStyle(fontFamily: 'Arial', color: Colors.white, fontSize: 14 * scale, fontWeight: FontWeight.w500)),
+          LineIconView(icon, size: 21 * scale, color: PlayerTones.fg),
+          SizedBox(width: 8 * scale),
+          Text(text, style: TextStyle(fontFamily: 'Arial', fontFamilyFallback: const ['MikiSans'], color: PlayerTones.fg, fontSize: 14 * scale, fontWeight: FontWeight.w700)),
         ],
       ),
     );

@@ -10,6 +10,8 @@ import '../utils/platform_info.dart';
 import 'app_animation_kit.dart';
 import 'app_media_thumbnail.dart';
 import 'app_ui_kit.dart';
+import 'design_kit.dart' show AppGroupCaption, AppLineRow, AppMediaRow, AppPillTab;
+import 'line_icons.dart';
 
 /// Local media library: open a file or link, file history, the last queue and playlists. It used to be
 /// the main screen; now Miki Miki works from the Hikka catalog, so the library is hidden and enabled in
@@ -216,21 +218,32 @@ class _LocalLibraryState extends State<LocalLibrary> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Library sections (formerly the items of the bottom navigation and side menu)
-        Padding(
-          padding: EdgeInsets.fromLTRB(_sidePad(scale), 4 * scale, _sidePad(scale), 2 * scale),
-          child: AppSegmentedBar<int>(
-            scale: scale * (_compact ? 0.95 : 1),
-            selectedValue: _tab,
-            options: [
-              const AppSegmentOption(value: 0, label: 'Огляд'),
-              AppSegmentOption(value: 1, label: recentFiles.isEmpty ? 'Історія' : 'Історія · ${recentFiles.length}'),
-              AppSegmentOption(value: 2, label: playlists == 0 ? 'Плейлисти' : 'Плейлисти · $playlists'),
+        // Library sections as pill tabs (as in "Списки"): an icon, a name and a grey counter
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: EdgeInsets.fromLTRB(_sidePad(scale), 4 * scale, _sidePad(scale), 6 * scale),
+          child: Row(
+            children: [
+              for (final (i, label, icon, count) in [
+                (0, 'Огляд', LineIcon.grid, 0),
+                (1, 'Історія', LineIcon.history, recentFiles.length),
+                (2, 'Плейлисти', LineIcon.playlist, playlists),
+              ]) ...[
+                if (i > 0) SizedBox(width: 8 * scale),
+                AppPillTab(
+                  key: ValueKey('library-tab-$i'),
+                  scale: scale,
+                  label: label,
+                  count: count > 0 ? '$count' : null,
+                  selected: _tab == i,
+                  icon: (c) => LineIconView(icon, size: 16 * scale, color: c),
+                  onTap: () => setState(() {
+                    _tab = i;
+                    if (i == 2) _openPlaylistId = null;
+                  }),
+                ),
+              ],
             ],
-            onSelected: (v) => setState(() {
-              _tab = v;
-              if (v == 2) _openPlaylistId = null;
-            }),
           ),
         ),
         AppFadeSwitcher(
@@ -282,93 +295,63 @@ class _LocalLibraryState extends State<LocalLibrary> {
       );
     }
 
-    return AppPaneHeader(
-      scale: scale,
-      title: 'Локальні файли',
-      subtitle: 'Продовжуйте перегляд або відкрийте нове відео',
-      actions: [
-        AppSecondaryButton(
-          scale: scale,
-          expand: false,
-          icon: Symbols.link_rounded,
-          label: 'URL / Потік',
-          onTap: _showUrlDialog,
-        ),
-        AppAccentButton(
-          scale: scale,
-          icon: Symbols.file_open_rounded,
-          label: 'Відкрити файл',
-          onTap: _pickFile,
-        ),
-      ],
-    );
+    return const SizedBox.shrink();
   }
 
   // ── The "Головна" tab ──────────────────────────────────────────────────────
 
+  /// "Відкрити" (a file, a folder, a network stream) as rows with line icons, the last queue as a tile, recent files
+  /// with a frame; hotkeys only with a keyboard
   Widget _buildOverviewTab(double scale, List<String> recentFiles) {
-    final String? lastFile = recentFiles.isNotEmpty ? recentFiles.first : null;
-    final int lastPosMs = lastFile != null ? StorageService.getPlaybackPosition(lastFile) : 0;
-    final bool canResume = lastFile != null && lastPosMs > 5000;
+    final pad = _sidePad(scale);
     final preview = recentFiles.take(4).toList();
-
+    final queue = _buildLastQueueSection(scale);
     return AppScrollbar(
       scale: scale,
       controller: _overviewScroll,
       child: SingleChildScrollView(
         controller: _overviewScroll,
-        padding: EdgeInsets.fromLTRB(_sidePad(scale), 4 * scale, _sidePad(scale), 24 * scale + _belowContent()),
+        padding: EdgeInsets.only(bottom: 24 * scale + _belowContent()),
         child: Align(
           alignment: Alignment.topLeft,
           child: ConstrainedBox(
             constraints: BoxConstraints(maxWidth: 920 * scale),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (canResume) ...[
-                  AppSectionHeader(scale: scale, title: 'Продовжити перегляд', subtitle: 'Останній файл, який ви не додивились'),
-                  SizedBox(height: 10 * scale),
-                  _buildResumeCard(scale, lastFile, lastPosMs),
-                  SizedBox(height: 26 * scale),
-                ],
-                ..._buildLastQueueSection(scale),
-                AppSectionHeader(scale: scale, title: 'Швидкі дії', subtitle: 'Відкрийте файл, папку або мережевий потік'),
-                SizedBox(height: 10 * scale),
-                _buildActionCards(scale),
+                AppGroupCaption(scale: scale, text: 'Відкрити', inset: pad, top: 10),
+                AppLineRow(scale: scale, inset: pad, icon: LineIcon.doc, title: 'Файл', subtitle: 'MKV, MP4, 4K HDR', chevron: true, onTap: _pickFile),
+                AppLineRow(scale: scale, inset: pad, icon: LineIcon.folder, title: 'Папку', subtitle: 'Серіал або сезон — усі серії чергою', chevron: true, onTap: _pickFolder),
+                AppLineRow(scale: scale, inset: pad, icon: LineIcon.link, title: 'Мережевий потік', subtitle: 'URL, HLS, M3U8', chevron: true, onTap: _showUrlDialog),
+                ...queue,
                 if (preview.isNotEmpty) ...[
-                  SizedBox(height: 26 * scale),
-                  AppSectionHeader(
-                    scale: scale,
-                    title: 'Нещодавні',
-                    subtitle: 'Останні відкриті файли',
-                    trailing: recentFiles.length > preview.length
-                        ? _buildLinkButton(scale, 'Усі (${recentFiles.length})', () => setState(() => _tab = 1))
-                        : null,
+                  Padding(
+                    padding: EdgeInsets.only(right: pad - 8 * scale),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Expanded(child: AppGroupCaption(scale: scale, text: 'Нещодавно', inset: pad)),
+                        if (recentFiles.length > preview.length) _buildLinkButton(scale, 'Усі ${recentFiles.length}', () => setState(() => _tab = 1)),
+                      ],
+                    ),
                   ),
-                  SizedBox(height: 10 * scale),
                   for (int i = 0; i < preview.length; i++) _buildRecentRow(scale, i, preview[i]),
                 ],
                 // Hotkeys are needed only with a keyboard: we do not show the section on a phone
                 if (!AppPlatform.isMobile) ...[
-                  SizedBox(height: 22 * scale),
-                  AppSectionHeader(scale: scale, title: 'Гарячі клавіші', subtitle: 'Працюють під час відтворення'),
-                  SizedBox(height: 10 * scale),
-                  AppCard(
-                    scale: scale,
-                    padding: EdgeInsets.symmetric(horizontal: 16 * scale, vertical: 14 * scale),
-                    child: SizedBox(
-                      width: double.infinity,
-                      child: Wrap(
-                        spacing: 30 * scale,
-                        runSpacing: 12 * scale,
-                        children: [
-                          _buildKeyHint(scale, 'Space', 'Пауза / Пуск'),
-                          _buildKeyHint(scale, 'F', 'Повний екран'),
-                          _buildKeyHint(scale, 'J / L', '±10 секунд'),
-                          _buildKeyHint(scale, '↑ / ↓', 'Гучність'),
-                          _buildKeyHint(scale, 'C', 'Субтитри'),
-                        ],
-                      ),
+                  AppGroupCaption(scale: scale, text: 'Гарячі клавіші', inset: pad, top: 22),
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(pad, 6 * scale, pad, 0),
+                    child: Wrap(
+                      spacing: 30 * scale,
+                      runSpacing: 12 * scale,
+                      children: [
+                        _buildKeyHint(scale, 'Space', 'Пауза / Пуск'),
+                        _buildKeyHint(scale, 'F', 'Повний екран'),
+                        _buildKeyHint(scale, 'J / L', '±10 секунд'),
+                        _buildKeyHint(scale, '↑ / ↓', 'Гучність'),
+                        _buildKeyHint(scale, 'C', 'Субтитри'),
+                      ],
                     ),
                   ),
                 ],
@@ -383,191 +366,6 @@ class _LocalLibraryState extends State<LocalLibrary> {
   /// Extra bottom padding so the collapsed player (a floating card) does not cover the end of the list
   double _belowContent() => widget.reserveBottom;
 
-  /// Three quick actions: in a row on a wide screen, in a column on a narrow one
-  Widget _buildActionCards(double scale) {
-    final cards = <Widget>[
-      _buildActionCard(
-        scale,
-        icon: Symbols.file_open_rounded,
-        title: 'Відкрити файл',
-        subtitle: 'MKV, MP4, 4K HDR',
-        onTap: _pickFile,
-      ),
-      _buildActionCard(
-        scale,
-        icon: Symbols.folder_open_rounded,
-        title: 'Відкрити папку',
-        subtitle: 'Серіал або сезон',
-        onTap: _pickFolder,
-      ),
-      _buildActionCard(
-        scale,
-        icon: Symbols.link_rounded,
-        title: 'Мережевий потік',
-        subtitle: 'URL / HLS / M3U8',
-        onTap: _showUrlDialog,
-      ),
-    ];
-    if (_compact) {
-      return Column(
-        children: [
-          for (int i = 0; i < cards.length; i++) ...[
-            if (i > 0) SizedBox(height: 8 * scale),
-            SizedBox(width: double.infinity, child: cards[i]),
-          ],
-        ],
-      );
-    }
-    return Row(
-      children: [
-        for (int i = 0; i < cards.length; i++) ...[
-          if (i > 0) SizedBox(width: 12 * scale),
-          Expanded(child: cards[i]),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildResumeCard(double scale, String path, int posMs) {
-    final bool compact = _compact;
-    final thumb = AppMediaThumbnail(
-      uri: path,
-      scale: scale,
-      width: (compact ? 104 : 112) * scale,
-      height: (compact ? 58.5 : 63) * scale,
-      radius: 8,
-      borderColor: uiTheme.accentBorder,
-      overlay: Center(
-        child: Container(
-          width: 28 * scale,
-          height: 28 * scale,
-          decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.55), shape: BoxShape.circle),
-          child: Icon(Symbols.play_arrow_rounded, color: Colors.white, size: 18 * scale, fill: 1),
-        ),
-      ),
-    );
-    final info = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          AppFormatters.cleanMediaTitle(path),
-          maxLines: compact ? 2 : 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            fontFamily: 'Arial',
-            color: uiTheme.textPrimary,
-            fontSize: 14 * scale,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        SizedBox(height: 4 * scale),
-        Text(
-          'Зупинено на ${AppFormatters.formatTime(Duration(milliseconds: posMs))}',
-          style: TextStyle(fontFamily: 'Arial', color: uiTheme.textMuted, fontSize: 11.5 * scale),
-        ),
-      ],
-    );
-    final resume = AppAccentButton(
-      scale: scale,
-      expand: compact,
-      icon: Symbols.play_arrow_rounded,
-      label: 'Продовжити',
-      onTap: () => widget.onOpenFile(path),
-    );
-
-    return AppCard(
-      scale: scale,
-      radius: 14,
-      isHighlighted: true,
-      padding: EdgeInsets.all(16 * scale),
-      child: compact
-          ? Column(
-              children: [
-                Row(
-                  children: [
-                    thumb,
-                    SizedBox(width: 14 * scale),
-                    Expanded(child: info),
-                  ],
-                ),
-                SizedBox(height: 14 * scale),
-                SizedBox(width: double.infinity, child: resume),
-              ],
-            )
-          : Row(
-              children: [
-                thumb,
-                SizedBox(width: 16 * scale),
-                Expanded(child: info),
-                SizedBox(width: 12 * scale),
-                resume,
-              ],
-            ),
-    );
-  }
-
-  Widget _buildActionCard(
-    double scale, {
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required VoidCallback onTap,
-  }) {
-    final iconBox = Container(
-      width: 40 * scale,
-      height: 40 * scale,
-      decoration: BoxDecoration(
-        color: uiTheme.accentWash,
-        borderRadius: uiTheme.borderRadius(10 * scale),
-      ),
-      child: Icon(icon, color: uiTheme.accentColor, size: 22 * scale, weight: 300, opticalSize: 24),
-    );
-    final texts = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            fontFamily: 'Arial',
-            color: uiTheme.textPrimary,
-            fontWeight: FontWeight.bold,
-            fontSize: 13 * scale,
-          ),
-        ),
-        SizedBox(height: 3 * scale),
-        Text(
-          subtitle,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(fontFamily: 'Arial', color: uiTheme.textMuted, fontSize: 11 * scale),
-        ),
-      ],
-    );
-    // Phone in landscape: three cards in a row are too narrow for "icon + text" side by side, so we put the icon on top
-    final bool stacked = AppPlatform.isMobile && !_compact;
-    return AppCard(
-      scale: scale,
-      onTap: onTap,
-      padding: EdgeInsets.all(16 * scale),
-      child: stacked
-          ? Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [iconBox, SizedBox(height: 12 * scale), texts],
-            )
-          : Row(
-              children: [
-                iconBox,
-                SizedBox(width: 12 * scale),
-                Expanded(child: texts),
-              ],
-            ),
-    );
-  }
-
   Widget _buildLinkButton(double scale, String label, VoidCallback onTap) {
     return InkWell(
       onTap: onTap,
@@ -580,16 +378,8 @@ class _LocalLibraryState extends State<LocalLibrary> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              label,
-              style: TextStyle(
-                fontFamily: 'Arial',
-                color: uiTheme.accentColor,
-                fontSize: 12 * scale,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            Icon(Symbols.chevron_right_rounded, color: uiTheme.accentColor, size: 16 * scale),
+            Text(label, style: TextStyle(fontFamily: 'Arial', fontFamilyFallback: const ['MikiSans'], color: uiTheme.textMuted, fontSize: 12.5 * scale)),
+            LineIconView(LineIcon.chevronRight, size: 14 * scale, color: uiTheme.textMuted),
           ],
         ),
       ),
@@ -599,75 +389,16 @@ class _LocalLibraryState extends State<LocalLibrary> {
   Widget _buildRecentRow(double scale, int idx, String path) {
     final title = AppFormatters.cleanMediaTitle(path);
     final posMs = StorageService.getPlaybackPosition(path);
-
-    return Padding(
-      padding: EdgeInsets.only(bottom: 8 * scale),
-      child: AppCard(
-        scale: scale,
-        radius: 10,
-        onTap: () => widget.onOpenFile(path),
-        padding: EdgeInsets.symmetric(horizontal: 12 * scale, vertical: 9 * scale),
-        child: Row(
-          children: [
-            AppMediaThumbnail(
-              uri: path,
-              scale: scale,
-              width: 80 * scale,
-              height: 45 * scale,
-              radius: 6,
-              overlay: Stack(
-                children: [
-                  Positioned(
-                    top: 3 * scale,
-                    left: 3 * scale,
-                    child: Container(
-                      padding: EdgeInsets.symmetric(horizontal: 4 * scale, vertical: 1 * scale),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.72),
-                        borderRadius: uiTheme.borderRadius(4 * scale),
-                      ),
-                      child: Text(
-                        '#${idx + 1}',
-                        style: TextStyle(
-                          fontFamily: 'Arial',
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 9.5 * scale,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            SizedBox(width: 14 * scale),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontFamily: 'Arial',
-                      color: uiTheme.textPrimary,
-                      fontWeight: FontWeight.w500,
-                      fontSize: 13 * scale,
-                    ),
-                  ),
-                  SizedBox(height: 2 * scale),
-                  Text(
-                    posMs > 0 ? 'Зупинено на ${AppFormatters.formatTime(Duration(milliseconds: posMs))}' : 'З початку',
-                    style: TextStyle(fontFamily: 'Arial', color: uiTheme.textMuted, fontSize: 11 * scale),
-                  ),
-                ],
-              ),
-            ),
-            Icon(Symbols.play_arrow_rounded, color: uiTheme.accentColor, size: 20 * scale, weight: 300, opticalSize: 24),
-          ],
-        ),
-      ),
+    return AppMediaRow(
+      key: ValueKey('recent-$idx'),
+      scale: scale,
+      inset: _sidePad(scale),
+      gap: 12,
+      leading: AppMediaThumbnail(uri: path, scale: scale, width: 96 * scale, height: 54 * scale, radius: 8),
+      title: title,
+      titleLines: 1,
+      subtitle: posMs > 0 ? 'Зупинено на ${AppFormatters.formatTime(Duration(milliseconds: posMs))}' : 'З початку',
+      onTap: () => widget.onOpenFile(path),
     );
   }
 
@@ -698,82 +429,92 @@ class _LocalLibraryState extends State<LocalLibrary> {
     final curTitle = (cur['title'] ?? '').isNotEmpty ? cur['title']! : AppFormatters.cleanMediaTitle(cur['uri']!);
 
     return [
-      AppSectionHeader(scale: scale, title: 'Остання черга', subtitle: 'Відновіть чергу відтворення з того місця, де зупинились'),
-      SizedBox(height: 10 * scale),
-      _buildLastQueueCard(scale, items, idx, curTitle, cur['uri']!),
-      SizedBox(height: 26 * scale),
+      AppGroupCaption(scale: scale, text: 'Остання черга', inset: _sidePad(scale)),
+      Padding(
+        padding: EdgeInsets.fromLTRB(_sidePad(scale), 6 * scale, _sidePad(scale), 4 * scale),
+        child: _buildLastQueueCard(scale, items, idx, curTitle, cur['uri']!),
+      ),
     ];
   }
 
+  /// The queue as a tile: a frame, the current title and "Серія 6 з 12"; "Зберегти" keeps it as a playlist, the round
+  /// play button (or a tap on the tile) brings it back
   Widget _buildLastQueueCard(double scale, List<Map<String, String>> items, int idx, String curTitle, String uri) {
-    final bool compact = _compact;
-    final thumb = _queueThumb(scale, uri, items.length, compact ? 104 : 112, compact ? 58.5 : 63);
-    final info = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          curTitle,
-          maxLines: compact ? 2 : 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(fontFamily: 'Arial', color: uiTheme.textPrimary, fontSize: 14 * scale, fontWeight: FontWeight.w600),
-        ),
-        SizedBox(height: 4 * scale),
-        Text(
-          'Серія ${idx + 1} з ${items.length}',
-          style: TextStyle(fontFamily: 'Arial', color: uiTheme.textMuted, fontSize: 11.5 * scale),
-        ),
-      ],
-    );
-    final save = AppSecondaryButton(
-      scale: scale,
-      expand: compact,
-      icon: Symbols.playlist_add_rounded,
-      label: 'Зберегти',
-      onTap: () => _saveQueueAsPlaylist(items),
-    );
-    final restore = AppAccentButton(
-      scale: scale,
-      expand: compact,
-      icon: Symbols.play_arrow_rounded,
-      label: 'Відновити',
-      onTap: () => widget.onOpenQueue(items, idx),
-    );
-
-    return AppCard(
-      scale: scale,
-      radius: 14,
-      padding: EdgeInsets.all(16 * scale),
-      child: compact
-          ? Column(
-              children: [
-                Row(
-                  children: [
-                    thumb,
-                    SizedBox(width: 14 * scale),
-                    Expanded(child: info),
-                  ],
-                ),
-                SizedBox(height: 14 * scale),
-                Row(
-                  children: [
-                    Expanded(child: save),
-                    SizedBox(width: 10 * scale),
-                    Expanded(child: restore),
-                  ],
-                ),
-              ],
-            )
-          : Row(
-              children: [
-                thumb,
-                SizedBox(width: 16 * scale),
-                Expanded(child: info),
-                SizedBox(width: 12 * scale),
-                save,
-                SizedBox(width: 8 * scale),
-                restore,
-              ],
+    final shape = RoundedRectangleBorder(borderRadius: uiTheme.borderRadius(14 * scale), side: BorderSide(color: uiTheme.borderSubtle));
+    return Material(
+      color: uiTheme.bgSurface,
+      shape: shape,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        key: const ValueKey('library-queue'),
+        onTap: () => widget.onOpenQueue(items, idx),
+        splashColor: Colors.transparent,
+        highlightColor: uiTheme.touchHighlight,
+        hoverColor: uiTheme.hoverOverlay,
+        child: Stack(
+          children: [
+            Padding(
+              padding: EdgeInsets.all(10 * scale),
+              child: Row(
+                children: [
+                  _queueThumb(scale, uri, items.length, 88, 49.5),
+                  SizedBox(width: 12 * scale),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(curTitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontFamily: 'Arial', fontFamilyFallback: const ['MikiSans'], color: uiTheme.textPrimary, fontSize: 14 * scale, fontWeight: FontWeight.bold, height: 1.25)),
+                        SizedBox(height: 3 * scale),
+                        Text('Серія ${idx + 1} з ${items.length}', style: TextStyle(fontFamily: 'Arial', fontFamilyFallback: const ['MikiSans'], color: uiTheme.textMuted, fontSize: 12 * scale)),
+                      ],
+                    ),
+                  ),
+                  Tooltip(
+                    message: 'Зберегти як плейлист',
+                    child: InkResponse(
+                      onTap: () => _saveQueueAsPlaylist(items),
+                      radius: 20 * scale,
+                      child: SizedBox.square(
+                        dimension: AppPlatform.isMobile ? 44.0 : 36 * scale,
+                        child: Center(child: LineIconView(LineIcon.playlist, size: 20 * scale, color: uiTheme.textMuted)),
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: 4 * scale),
+                  Semantics(
+                    button: true,
+                    label: 'Відновити чергу',
+                    child: Container(
+                      width: 36 * scale,
+                      height: 36 * scale,
+                      decoration: const BoxDecoration(color: Color(0xFF2A2A30), shape: BoxShape.circle),
+                      child: Center(child: LineIconView(LineIcon.play, size: 14 * scale, color: const Color(0xFFEEEEEE))),
+                    ),
+                  ),
+                ],
+              ),
             ),
+            // How far into the queue: a thin accent line along the bottom edge
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: SizedBox(
+                height: 3 * scale,
+                child: ColoredBox(
+                  color: const Color(0xFF26262B),
+                  child: FractionallySizedBox(
+                    alignment: Alignment.centerLeft,
+                    widthFactor: ((idx + 1) / items.length).clamp(0.0, 1.0),
+                    child: ColoredBox(color: uiTheme.accentColor),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

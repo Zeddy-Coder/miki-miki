@@ -83,12 +83,19 @@ class MikiMessagingService : FirebaseMessagingService() {
         val channel = if (type == "episode") PushChannels.EPISODES else PushChannels.NEWS
         val open = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-            if (slug.isNotEmpty()) putExtra("push_slug", slug)
+            when {
+                // "New version": the tap opens the update window
+                type == "update" -> putExtra("push_open", "update")
+                slug.isNotEmpty() -> putExtra("push_slug", slug)
+                // An announcement without a title opens the "Сповіщення" page, where it is shown whole
+                type == "news" -> putExtra("push_open", "notifications")
+            }
         }
         val notifId = if (slug.isNotEmpty() && type == "episode") slug.hashCode() else id.hashCode()
         val tap = PendingIntent.getActivity(this, notifId, open, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val b = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(this, channel) else Notification.Builder(this)
-        b.setSmallIcon(applicationInfo.icon)
+        // The status bar draws only the shape of the small icon: a white silhouette, not the colored launcher icon
+        b.setSmallIcon(R.drawable.ic_stat_notify)
             .setContentTitle(title)
             .setContentText(body)
             .setStyle(Notification.BigTextStyle().bigText(body))

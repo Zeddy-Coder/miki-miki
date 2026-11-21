@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
 
 import '../../models/hikka_models.dart';
 import '../../services/hikka_api.dart';
@@ -11,6 +10,7 @@ import '../../services/hikka_prefs.dart';
 import '../../services/ui_theme_service.dart';
 import '../../utils/platform_info.dart';
 import '../app_animation_kit.dart';
+import '../line_icons.dart';
 import '../mobile_sheet.dart';
 import 'hikka_cards.dart';
 import 'hikka_common.dart';
@@ -23,7 +23,11 @@ class HikkaCatalogPage extends StatefulWidget {
   final double bottomInset;
   final int refreshToken;
 
-  const HikkaCatalogPage({super.key, required this.scale, this.bottomInset = 0, this.refreshToken = 0});
+  /// The query and focus of "Огляд"'s search field (the field is in its header): then the section has no field of its own
+  final TextEditingController? search;
+  final FocusNode? searchFocus;
+
+  const HikkaCatalogPage({super.key, required this.scale, this.bottomInset = 0, this.refreshToken = 0, this.search, this.searchFocus});
 
   @override
   State<HikkaCatalogPage> createState() => _HikkaCatalogPageState();
@@ -31,8 +35,11 @@ class HikkaCatalogPage extends StatefulWidget {
 
 class _HikkaCatalogPageState extends State<HikkaCatalogPage> {
   late final HikkaPager<HikkaAnime> _pager;
-  final TextEditingController _search = TextEditingController();
-  final FocusNode _searchFocus = FocusNode(debugLabel: 'catalog-search');
+  TextEditingController? _ownSearch;
+  FocusNode? _ownFocus;
+  TextEditingController get _search => widget.search ?? (_ownSearch ??= TextEditingController());
+  FocusNode get _searchFocus => widget.searchFocus ?? (_ownFocus ??= FocusNode(debugLabel: 'catalog-search'));
+  String _text = '';
   final ScrollController _scroll = AppSmoothScrollController();
   HikkaSearchFilters _filters = const HikkaSearchFilters();
   Timer? _debounce;
@@ -55,9 +62,22 @@ class _HikkaCatalogPageState extends State<HikkaCatalogPage> {
     if (pending != null) {
       _filters = pending;
       _search.text = pending.query;
+    } else if (_search.text.trim().isNotEmpty) {
+      // The shared field already has a query (typed in another section)
+      _filters = _filters.copyWith(query: _search.text);
     }
+    _text = _search.text;
+    widget.search?.addListener(_onShared);
     _pager.reload();
     _takeSearchFocus();
+  }
+
+  /// The shared field changed (typing in "Огляд"'s header)
+  void _onShared() {
+    final t = _search.text;
+    if (t == _text) return;
+    _text = t;
+    _onQuery(t);
   }
 
   @override
@@ -76,8 +96,9 @@ class _HikkaCatalogPageState extends State<HikkaCatalogPage> {
     HikkaNav.instance.removeListener(_takePending);
     HikkaNav.instance.removeBackGuard(_backGuard);
     _debounce?.cancel();
-    _search.dispose();
-    _searchFocus.dispose();
+    widget.search?.removeListener(_onShared);
+    _ownSearch?.dispose();
+    _ownFocus?.dispose();
     _scroll.dispose();
     _pager.dispose();
     super.dispose();
@@ -116,7 +137,10 @@ class _HikkaCatalogPageState extends State<HikkaCatalogPage> {
       _filters = f;
       _sheetOpen = false;
     });
-    if (_search.text != f.query) _search.text = f.query;
+    if (_search.text != f.query) {
+      _text = f.query;
+      _search.text = f.query;
+    }
     if (_scroll.hasClients) _scroll.jumpTo(0);
     _pager.reload();
   }
@@ -142,73 +166,59 @@ class _HikkaCatalogPageState extends State<HikkaCatalogPage> {
     final count = _filters.activeCount;
     final pad = HikkaLayout.sidePad(context, scale);
 
-    final filterButton = Stack(
-      clipBehavior: Clip.none,
-      children: [
-        HikkaIconButton(
-          icon: Symbols.tune_rounded,
-          tooltip: 'Фільтри',
-          scale: scale,
-          active: count > 0,
-          onTap: () => setState(() => _sheetOpen = true),
-        ),
-        if (count > 0)
-          Positioned(
-            right: 2,
-            top: 2,
-            child: IgnorePointer(
-              child: Container(
-                constraints: const BoxConstraints(minWidth: 17, minHeight: 17),
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                alignment: Alignment.center,
-                decoration: BoxDecoration(color: uiTheme.accentColor, borderRadius: uiTheme.borderRadius(9)),
-                child: Text('$count', style: TextStyle(fontFamily: 'Arial', color: uiTheme.onAccent, fontSize: 10.5, fontWeight: FontWeight.bold)),
-              ),
-            ),
+    final filterButton = HikkaLineButton(
+      scale: scale,
+      icon: LineIcon.sliders,
+      tooltip: 'Фільтри',
+      dot: count > 0,
+      onTap: () => setState(() => _sheetOpen = true),
+    );
+    final shared = widget.search != null;
+    final summary = InkWell(
+      onTap: () => setState(() => _sheetOpen = true),
+      borderRadius: uiTheme.borderRadius(6 * scale),
+      splashColor: Colors.transparent,
+      highlightColor: uiTheme.touchHighlight,
+      hoverColor: uiTheme.hoverOverlay,
+      child: Padding(
+        padding: EdgeInsets.symmetric(vertical: AppPlatform.isMobile ? 8 : 3 * scale, horizontal: 2),
+        child: ListenableBuilder(
+          listenable: _pager,
+          builder: (context, _) => Text(
+            _summary,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontFamily: 'Arial', color: uiTheme.textMuted, fontSize: 13 * scale),
           ),
-      ],
+        ),
+      ),
     );
 
     return Stack(
       children: [
         HikkaCollapsingHeader(
-          header: Column(
-            children: [
-            HikkaSearchBar(
-              scale: scale,
-              controller: _search,
-              focusNode: _searchFocus,
-              hint: 'Пошук аніме за назвою…',
-              onChanged: _onQuery,
-              trailing: filterButton,
-            ),
-            Padding(
-              padding: EdgeInsets.fromLTRB(pad, 0, pad, 6 * scale),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: InkWell(
-                  onTap: () => setState(() => _sheetOpen = true),
-                  borderRadius: uiTheme.borderRadius(6 * scale),
-                  splashColor: Colors.transparent,
-                  highlightColor: uiTheme.touchHighlight,
-                  hoverColor: uiTheme.hoverOverlay,
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(vertical: AppPlatform.isMobile ? 8 : 3 * scale, horizontal: 2),
-                    child: ListenableBuilder(
-                      listenable: _pager,
-                      builder: (context, _) => Text(
-                        _summary,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontFamily: 'Arial', color: uiTheme.textDarkMuted, fontSize: 12 * scale),
-                      ),
+          header: shared
+              // "Огляд" has the search field in its header: here the summary with the filter button
+              ? Padding(
+                  padding: EdgeInsets.fromLTRB(pad, 2 * scale, pad - 8 * scale, 4 * scale),
+                  child: Row(children: [Expanded(child: Align(alignment: Alignment.centerLeft, child: summary)), filterButton]),
+                )
+              : Column(
+                  children: [
+                    HikkaSearchBar(
+                      scale: scale,
+                      controller: _search,
+                      focusNode: _searchFocus,
+                      hint: 'Пошук аніме за назвою…',
+                      onChanged: _onQuery,
+                      trailing: filterButton,
                     ),
-                  ),
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(pad, 0, pad, 6 * scale),
+                      child: Align(alignment: Alignment.centerLeft, child: summary),
+                    ),
+                  ],
                 ),
-              ),
-            ),
-            ],
-          ),
           body: HikkaPagedGrid<HikkaAnime>(
                 pager: _pager,
                 scale: scale,
@@ -225,6 +235,7 @@ class _HikkaCatalogPageState extends State<HikkaCatalogPage> {
             scale: scale,
             initial: _filters,
             allowAdult: HikkaPrefs.instance.allowAdult,
+            countOf: (f) async => (await HikkaApi.instance.searchAnime(f, page: 1, size: 1, allowAdult: HikkaPrefs.instance.allowAdult)).total,
             onApply: _apply,
             onClose: () => setState(() => _sheetOpen = false),
           ),

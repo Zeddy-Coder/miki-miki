@@ -5,7 +5,10 @@ import 'package:flutter/material.dart';
 import '../../services/ui_theme_service.dart';
 import '../../utils/platform_info.dart';
 import '../app_animation_kit.dart';
+import '../app_tones.dart';
 import '../app_ui_kit.dart';
+import '../design_kit.dart' show showAppMenu, appRectOf, AppMenuEntry;
+import '../line_icons.dart';
 import 'hikka_common.dart';
 
 /// A scrolling page frame: content centered up to [HikkaLayout.maxContentWidth], a thin scrollbar,
@@ -15,6 +18,16 @@ class HikkaPageFrame extends StatelessWidget {
   final ScrollController controller;
   final double bottomInset;
   final List<Widget> children;
+
+  /// A long run after [children] (a hundred notifications, the titles of a franchise, the blocks of an article):
+  /// [itemCount] pieces, each built only when it comes near the screen. Laid out as [children] are: in the content
+  /// column, each at its own width from the left edge
+  final int itemCount;
+  final IndexedWidgetBuilder? itemBuilder;
+
+  /// With [itemBuilder]: how wide the page's content is when narrower than the frame (an article's reading column).
+  /// The column is centered, as the content of an ordinary page (a column as wide as its widest child) is
+  final double? columnWidth;
 
   /// Pull-down refresh (phone only; on PC there is an "Оновити" button)
   final Future<void> Function()? onRefresh;
@@ -26,27 +39,70 @@ class HikkaPageFrame extends StatelessWidget {
     required this.children,
     this.bottomInset = 0,
     this.onRefresh,
+    this.itemCount = 0,
+    this.itemBuilder,
+    this.columnWidth,
   });
 
   @override
   Widget build(BuildContext context) {
     final refresh = AppPlatform.isMobile ? onRefresh : null;
-    Widget content = AppScrollbar(
-      scale: scale,
-      controller: controller,
-      child: SingleChildScrollView(
+    final physics = refresh == null ? null : const AlwaysScrollableScrollPhysics();
+    final top = 6 * scale + AppHeaderInset.of(context);
+    final bottom = 28 * scale + bottomInset;
+    final builder = itemBuilder;
+    Widget content;
+    if (builder == null || itemCount <= 0) {
+      content = AppScrollbar(
+        scale: scale,
         controller: controller,
-        physics: refresh == null ? null : const AlwaysScrollableScrollPhysics(),
-        padding: EdgeInsets.only(top: 6 * scale + AppHeaderInset.of(context), bottom: 28 * scale + bottomInset),
-        child: Align(
-          alignment: Alignment.topCenter,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: HikkaLayout.maxContentWidth),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: children),
+        child: SingleChildScrollView(
+          controller: controller,
+          physics: physics,
+          padding: EdgeInsets.only(top: top, bottom: bottom),
+          child: Align(
+            alignment: Alignment.topCenter,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: HikkaLayout.maxContentWidth),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: children),
+            ),
           ),
         ),
-      ),
-    );
+      );
+    } else {
+      // A lazy list: a column with everything built at once laid out a hundred posters on opening and repainted the
+      // whole page on every scroll frame. The column is centered from the frame's width alone (a SliverLayoutBuilder
+      // would run on every scroll frame); the pieces keep the column's loose width, as in it
+      content = LayoutBuilder(
+        builder: (context, box) {
+          final column = math.min(HikkaLayout.maxContentWidth, columnWidth ?? double.infinity);
+          final side = math.max(0.0, (box.maxWidth - column) / 2);
+          return AppScrollbar(
+            scale: scale,
+            controller: controller,
+            child: CustomScrollView(
+              controller: controller,
+              physics: physics,
+              slivers: [
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(side, top, side, 0),
+                  sliver: SliverToBoxAdapter(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: children)),
+                ),
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(side, 0, side, bottom),
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, i) => Align(alignment: AlignmentDirectional.topStart, child: builder(context, i)),
+                      childCount: itemCount,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      );
+    }
     if (refresh != null) {
       content = AppPullToRefresh(onRefresh: refresh, child: content);
     }
@@ -64,6 +120,9 @@ class HikkaSection extends StatelessWidget {
   final Widget child;
   final double bottom;
 
+  /// Heading size before scaling (the title page's phone layout uses a larger one)
+  final double titleSize;
+
   const HikkaSection({
     super.key,
     required this.scale,
@@ -73,6 +132,7 @@ class HikkaSection extends StatelessWidget {
     this.subtitle,
     this.trailing,
     this.bottom = 22,
+    this.titleSize = 13.5,
   });
 
   @override
@@ -82,7 +142,7 @@ class HikkaSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          AppSectionHeader(scale: scale, title: title, subtitle: subtitle, trailing: trailing),
+          AppSectionHeader(scale: scale, title: title, subtitle: subtitle, trailing: trailing, titleSize: titleSize, calm: titleSize >= 15),
           SizedBox(height: 10 * scale),
           child,
         ],
@@ -90,6 +150,105 @@ class HikkaSection extends StatelessWidget {
     );
   }
 }
+
+/// A quiet order line ("Популярні ⌄", as the sort line of "Списки"): a tap opens the shared drop-down under it
+class HikkaSortLine<T> extends StatelessWidget {
+  final double scale;
+  final double pad;
+  final T value;
+  final List<(T, String)> options;
+  final ValueChanged<T> onChanged;
+
+  /// The menu's caption ("Порядок")
+  final String caption;
+  final double top;
+
+  const HikkaSortLine({
+    super.key,
+    required this.scale,
+    required this.pad,
+    required this.value,
+    required this.options,
+    required this.onChanged,
+    this.caption = 'Порядок',
+    this.top = 8,
+  });
+
+  Future<void> _pick(BuildContext context, BuildContext anchor) async {
+    final picked = await showAppMenu<T>(
+      context,
+      scale: scale,
+      anchor: appRectOf(anchor),
+      caption: caption,
+      entries: [for (final (v, label) in options) AppMenuEntry<T>(v, label, selected: v == value)],
+    );
+    if (picked != null && picked != value) onChanged(picked);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final label = options.firstWhere((o) => o.$1 == value, orElse: () => options.first).$2;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(pad, top * scale, pad, 0),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Builder(
+          builder: (anchor) => Semantics(
+            button: true,
+            label: '$caption: $label',
+            excludeSemantics: true,
+            child: InkWell(
+              onTap: () => _pick(context, anchor),
+              borderRadius: uiTheme.borderRadius(8 * scale),
+              splashColor: Colors.transparent,
+              highlightColor: uiTheme.touchHighlight,
+              hoverColor: uiTheme.hoverOverlay,
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 8 * scale),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(label, style: hikkaStyle(13.5 * scale, color: AppTones.plateText)),
+                    SizedBox(width: 4 * scale),
+                    LineIconView(LineIcon.chevronDown, size: 16 * scale, color: uiTheme.textMuted),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A grey line right under the bar of an open page: what the page is about ("Проводжальниця Фрірен · 53")
+class HikkaLeadLine extends StatelessWidget {
+  final double scale;
+  final double pad;
+  final List<String> parts;
+
+  const HikkaLeadLine({super.key, required this.scale, required this.pad, required this.parts});
+
+  @override
+  Widget build(BuildContext context) {
+    if (parts.isEmpty) return SizedBox(height: 4 * scale);
+    return Padding(
+      padding: EdgeInsets.fromLTRB(pad, 0, pad, 8 * scale),
+      child: Text(parts.join(' · '), maxLines: 2, overflow: TextOverflow.ellipsis, style: hikkaStyle(13 * scale, color: uiTheme.textMuted, height: 1.35)),
+    );
+  }
+}
+
+/// A quiet counter under a name in a page header: a line icon and "5 аніме"
+Widget hikkaCountLine(double scale, LineIcon icon, String text) => Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        LineIconView(icon, size: 18 * scale, color: AppTones.rowSub),
+        SizedBox(width: 8 * scale),
+        Flexible(child: Text(text, style: hikkaStyle(13 * scale, color: AppTones.plateText))),
+      ],
+    );
 
 /// Width of the poster / portrait in the page header
 double hikkaHeaderPosterWidth(double scale, {required bool wide}) {
@@ -118,18 +277,18 @@ class HikkaTabHeader extends StatelessWidget {
     final mobile = AppPlatform.isMobile;
     final pad = HikkaLayout.sidePad(context, scale);
     return Padding(
-      padding: EdgeInsets.fromLTRB(pad, (mobile ? 6 : 14) * scale, math.max(pad - 8, 4), (mobile ? 4 : 8) * scale),
+      padding: EdgeInsets.fromLTRB(pad, (mobile ? 8 : 14) * scale, math.max(pad - 8, 4), (mobile ? 0 : 6) * scale),
       child: Row(
         children: [
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: hikkaStyle((mobile ? 22 : 18) * scale, weight: FontWeight.bold, height: 1.2)),
+                Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: hikkaStyle((mobile ? 24 : 20) * scale, weight: FontWeight.bold, height: 1.2)),
                 if (subtitle != null)
                   Padding(
                     padding: EdgeInsets.only(top: 2 * scale),
-                    child: Text(subtitle!, maxLines: 1, overflow: TextOverflow.ellipsis, style: hikkaStyle(12 * scale, color: uiTheme.textDarkMuted)),
+                    child: Text(subtitle!, maxLines: 1, overflow: TextOverflow.ellipsis, style: hikkaStyle(13 * scale, color: uiTheme.textMuted)),
                   ),
               ],
             ),
@@ -278,20 +437,25 @@ class HikkaHeaderSlot extends ChangeNotifier {
   Widget? _widget;
   Object? _resetOn;
   Object? _seenReset;
+  Object? _same;
 
   Widget? get widget => _widget;
 
-  /// Puts [w] into the slot; a change of [resetOn] shows the header again
-  void put(Widget? w, {Object? resetOn}) {
+  /// Puts [w] into the slot; a change of [resetOn] shows the header again. [same] — what [w] is made of: while it is
+  /// equal, the slot keeps the widget it has and the header is not rebuilt (the page puts its part after every build)
+  void put(Widget? w, {Object? resetOn, Object? same}) {
     if (_dead) return;
+    if (same != null && same == _same && _widget != null && resetOn == _resetOn) return;
     _widget = w;
     _resetOn = resetOn;
+    _same = same;
     notifyListeners();
   }
 
   void clear() {
     if (_dead || _widget == null) return;
     _widget = null;
+    _same = null;
     notifyListeners();
   }
 

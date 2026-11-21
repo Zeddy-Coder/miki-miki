@@ -4,10 +4,11 @@ import 'package:material_symbols_icons/symbols.dart';
 import '../../models/hikka_models.dart';
 import '../../services/hikka_api.dart';
 import '../../services/hikka_pager.dart';
-import '../../services/ui_theme_service.dart';
 import '../app_animation_kit.dart';
+import '../design_kit.dart' show AppPlate;
 import 'hikka_common.dart';
 import 'hikka_community_cards.dart';
+import 'hikka_page_kit.dart';
 import 'hikka_paged_list.dart';
 
 /// The "Статті" section: news, reviews and original texts of the Hikka community. A category filter and order
@@ -80,27 +81,53 @@ class _HikkaArticlesPageState extends State<HikkaArticlesPage> {
   @override
   Widget build(BuildContext context) {
     final scale = widget.scale;
+    final pad = HikkaLayout.sidePad(context, scale);
     return HikkaPagedList<HikkaArticle>(
       pager: _pager,
       scale: scale,
       controller: _scroll,
       bottomInset: widget.bottomInset,
+      flush: true,
       emptyIcon: Symbols.article_rounded,
       emptyText: 'Статей не знайдено',
-      header: Padding(
-        padding: EdgeInsets.only(top: 4 * scale, bottom: 8 * scale),
-        child: HikkaChipRow(
-          scale: scale,
-          children: [
-            for (final (key, label) in _categories)
-              HikkaChip(label: label, scale: scale, selected: _category == key, onTap: () => _apply(category: key, resetCategory: true)),
-            SizedBox(height: 22 * scale, child: VerticalDivider(width: 8 * scale, thickness: 1, color: uiTheme.borderSubtle)),
-            HikkaChip(label: 'Нові', icon: Symbols.schedule_rounded, scale: scale, selected: _sort == 'new', onTap: () => _apply(sort: 'new')),
-            HikkaChip(label: 'Найкращі', icon: Symbols.star_rounded, scale: scale, selected: _sort == 'top', onTap: () => _apply(sort: 'top')),
-          ],
-        ),
+      header: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Categories as round plates (as the filters), the order as a quiet line under them
+          Padding(
+            padding: EdgeInsets.fromLTRB(pad, 6 * scale, pad, 0),
+            child: Wrap(
+              spacing: 8 * scale,
+              runSpacing: 8 * scale,
+              children: [
+                for (final (key, label) in _categories)
+                  AppPlate(
+                    key: ValueKey('articles-category-${key ?? 'all'}'),
+                    scale: scale,
+                    label: label,
+                    height: 34,
+                    radius: 17,
+                    selected: _category == key,
+                    onTap: () => _apply(category: key, resetCategory: true),
+                  ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: EdgeInsets.only(bottom: 2 * scale),
+            child: HikkaSortLine<String>(
+              key: const ValueKey('articles-sort'),
+              scale: scale,
+              pad: pad,
+              top: 6,
+              value: _sort,
+              options: const [('new', 'Спершу нові'), ('top', 'Спершу найкращі')],
+              onChanged: (v) => _apply(sort: v),
+            ),
+          ),
+        ],
       ),
-      itemBuilder: (context, a) => HikkaArticleCard(article: a, scale: scale),
+      itemBuilder: (context, a) => HikkaArticleRow(article: a, scale: scale, pad: pad),
     );
   }
 }

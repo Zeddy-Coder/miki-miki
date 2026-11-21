@@ -13,14 +13,20 @@ import '../../services/hikka_prefs.dart';
 import '../../services/ui_theme_service.dart';
 import '../../utils/platform_info.dart';
 import '../app_animation_kit.dart';
+import '../app_tones.dart';
+import '../app_ui_kit.dart' show onAccent;
+import '../line_icons.dart';
 import 'hikka_common.dart';
 
 /// Banner sizes (the loading skeleton repeats them so the page does not jump)
 class HikkaBannerCarouselMetrics {
   const HikkaBannerCarouselMetrics._();
 
-  /// Banner height by its width
+  /// Banner height by its width (a wide window)
   static double heightFor(double cardWidth) => (cardWidth * 0.5).clamp(150.0, 210.0);
+
+  /// Banner height on a phone: the same at any width
+  static double phoneHeight(double scale) => 198 * scale;
 }
 
 /// Title banner loader (MAL id → image); replaced in tests
@@ -62,12 +68,24 @@ class _HikkaBannerCarouselState extends State<HikkaBannerCarousel> {
   Map<int, BannerArtwork> _art = const {};
   int _artGeneration = 0;
 
+  /// The banner list has answered: titles without a wide banner may show the poster instead
+  bool _artKnown = false;
+
   @override
   void initState() {
     super.initState();
     _timer = Timer.periodic(widget.autoAdvance, (_) => _tick());
     BackendClient.keyEpoch.addListener(_loadArt);
     _loadArt();
+  }
+
+  /// The screen the carousel is on: a window opened over it (the settings on a PC) stops the turning too
+  ModalRoute<Object?>? _route;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _route = ModalRoute.of(context);
   }
 
   @override
@@ -91,9 +109,13 @@ class _HikkaBannerCarouselState extends State<HikkaBannerCarousel> {
     final load = widget.artLoader ?? BannerArt.instance.load;
     load(widget.items).then<void>((map) {
       if (!mounted || gen != _artGeneration) return;
-      setState(() => _art = map);
+      setState(() {
+        _art = map;
+        _artKnown = true;
+      });
     }, onError: (Object e) {
       AppLog.w('banners', 'банери не завантажились: ${e.runtimeType}: $e');
+      if (mounted && gen == _artGeneration) setState(() => _artKnown = true);
     });
   }
 
@@ -111,6 +133,9 @@ class _HikkaBannerCarouselState extends State<HikkaBannerCarousel> {
     // The tab is on another screen (Offstage): we do not scroll
     if (!TickerMode.valuesOf(context).enabled) return;
     if (DateTime.now().isBefore(_pausedUntil)) return;
+    // Scrolled out of sight (the page is read further down) or under a window: turning the pages there only woke the
+    // phone up for half a second of frames every few seconds
+    if (_route?.isCurrent == false || !_onScreen()) return;
     // Phone: the carousel is endless and always goes forward; wide window: after the last one, back to the start
     final n = widget.items.length;
     var cur = (c.page ?? c.initialPage.toDouble()).round();
@@ -124,6 +149,17 @@ class _HikkaBannerCarouselState extends State<HikkaBannerCarousel> {
   }
 
   void _pause() => _pausedUntil = DateTime.now().add(widget.autoAdvance * 2);
+
+  /// Whether some of the carousel is inside the page's scroll view (or the page does not scroll)
+  bool _onScreen() {
+    final box = context.findRenderObject();
+    if (box is! RenderBox || !box.hasSize || !box.attached) return false;
+    final page = Scrollable.maybeOf(context)?.context.findRenderObject();
+    if (page is! RenderBox || !page.hasSize || !page.attached) return true;
+    final mine = box.localToGlobal(Offset.zero) & box.size;
+    final view = page.localToGlobal(Offset.zero) & page.size;
+    return mine.overlaps(view);
+  }
 
   /// How many "laps" of virtual pages: endless scrolling both ways without jumps
   static const int _loops = 50;
@@ -145,17 +181,18 @@ class _HikkaBannerCarouselState extends State<HikkaBannerCarousel> {
     final items = widget.items;
     if (items.isEmpty) return const SizedBox.shrink();
     return Padding(
-      padding: EdgeInsets.only(bottom: 20 * scale),
+      padding: EdgeInsets.only(bottom: 4 * scale),
       child: LayoutBuilder(
         builder: (context, box) {
           final width = box.maxWidth;
           final maxCard = 640 * (AppPlatform.isMobile ? 1.0 : scale);
-          // Phone: the banner is almost full width, the neighbor peeks from the side. Wide window: a fixed-width banner on the left.
-          final single = items.length == 1;
-          final fraction = width <= maxCard / 0.92 ? (single ? 1.0 : 0.92) : (maxCard / width).clamp(0.3, 1.0);
+          // Phone: one banner across the page with the page margins (swiping brings the next). Wide window: a fixed-width
+          // banner on the left, the neighbors beside it.
+          final phone = width <= maxCard + widget.pad * 2;
+          final fraction = phone ? 1.0 : (maxCard / width).clamp(0.3, 1.0);
           final centered = fraction >= 0.8;
-          final cardWidth = width * fraction;
-          final height = HikkaBannerCarouselMetrics.heightFor(cardWidth);
+          final cardWidth = phone ? width - widget.pad * 2 : width * fraction;
+          final height = phone ? HikkaBannerCarouselMetrics.phoneHeight(scale) : HikkaBannerCarouselMetrics.heightFor(cardWidth);
           final loop = centered && items.length > 1;
           final n = items.length;
           final controller = _controllerFor(fraction, loop);
@@ -173,11 +210,10 @@ class _HikkaBannerCarouselState extends State<HikkaBannerCarousel> {
                     itemBuilder: (context, page) {
                       final i = loop ? page % n : page;
                       return Padding(
-                        padding: EdgeInsets.only(
-                          left: centered ? 5 : (i == 0 ? widget.pad : 5),
-                          right: centered ? 5 : 5,
-                        ),
-                        child: _Banner(anime: items[i], art: _art[items[i].malId], scale: scale, height: height),
+                        padding: phone
+                            ? EdgeInsets.symmetric(horizontal: widget.pad)
+                            : EdgeInsets.only(left: centered ? 5 : (i == 0 ? widget.pad : 5), right: 5),
+                        child: _Banner(anime: items[i], art: _art[items[i].malId], artKnown: _artKnown, scale: scale, height: height),
                       );
                     },
                   ),
@@ -211,11 +247,11 @@ class _Dots extends StatelessWidget {
           for (int i = 0; i < count; i++)
             AppAnimatedContainer(
               margin: EdgeInsets.symmetric(horizontal: 3 * scale),
-              width: (i == index ? 18 : 6) * scale,
+              width: (i == index ? 16 : 6) * scale,
               height: 6 * scale,
               decoration: BoxDecoration(
-                color: i == index ? uiTheme.accentColor : uiTheme.textDarkMuted.withValues(alpha: 0.4),
-                borderRadius: uiTheme.borderRadius(3 * scale),
+                color: i == index ? uiTheme.accentColor : AppTones.dot,
+                borderRadius: BorderRadius.circular(3 * scale),
               ),
             ),
         ],
@@ -224,31 +260,42 @@ class _Dots extends StatelessWidget {
   }
 }
 
+/// One banner: the wide picture under a soft darkening towards the bottom, on it the season and the released episode,
+/// the title, one accent "Дивитись" and the score in grey. Without a wide picture, the poster fills the card.
 class _Banner extends StatelessWidget {
   final HikkaAnime anime;
   final BannerArtwork? art;
+
+  /// The banner list has answered (until then an empty card, not the poster: the picture would jump)
+  final bool artKnown;
   final double scale;
   final double height;
 
-  const _Banner({required this.anime, required this.art, required this.scale, required this.height});
+  const _Banner({required this.anime, required this.art, required this.artKnown, required this.scale, required this.height});
 
   @override
   Widget build(BuildContext context) {
     final a = anime;
     final r = uiTheme.borderRadius(18 * scale);
     final title = a.title(HikkaPrefs.instance.titleLang);
-    // "TV-серіал" is the ordinary case and not worth the room on a narrow banner: we mark only movies, OVAs etc.
-    final meta = [if (a.typeLabel.isNotEmpty && a.mediaType != 'tv') a.typeLabel, if (a.seasonLabel.isNotEmpty) a.seasonLabel].join(' · ');
-    final posterHeight = height - 24 * scale;
-    final progress = a.episodesLabel;
-    const white = Colors.white;
+    final released = a.episodesReleased ?? 0;
+    final total = a.episodesTotal ?? 0;
+    final meta = [
+      if (a.seasonLabel.isNotEmpty) a.seasonLabel,
+      if (a.isOngoing && released > 0) 'вийшла $released серія' else if (total > 0) '$total ${HikkaText.plural(total, 'серія', 'серії', 'серій')}',
+    ].join(' · ');
+    const shade = Color(0xFF0B0B0C);
+    const text = Color(0xFFD7D7DC);
+    const soft = Color(0xFFCFCFD4);
+    final accent = uiTheme.accentColor;
+    final url = art?.url;
     return Semantics(
       button: true,
-      label: '$title. ${progress.isEmpty ? '' : '$progress. '}Дивитись',
+      label: '$title. ${meta.isEmpty ? '' : '$meta. '}Дивитись',
       excludeSemantics: true,
       child: Material(
         color: art?.color != null ? Color(art!.color!).withValues(alpha: 0.35) : uiTheme.bgElevated,
-        shape: RoundedRectangleBorder(borderRadius: r, side: BorderSide(color: uiTheme.borderSubtle)),
+        shape: RoundedRectangleBorder(borderRadius: r),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           splashColor: Colors.transparent,
@@ -258,83 +305,64 @@ class _Banner extends StatelessWidget {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              if (art?.url != null) _WideBackdrop(key: ValueKey(art!.url), url: art!.url!),
-              // Darkening from left to right: the text is readable on any poster
+              if (url != null)
+                _WideBackdrop(key: ValueKey(url), url: url)
+              else if (artKnown)
+                HikkaPoster(url: a.image, malId: a.malId, scale: scale, radius: 0, border: false, alignment: const Alignment(0, -0.4), icon: Symbols.movie_rounded),
+              // Darkening towards the bottom: the text stays readable on any picture
               const DecoratedBox(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
-                    colors: [Color(0xA6000000), Color(0x73000000), Color(0x40000000)],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Color(0x0D0B0B0C), Color(0x0D0B0B0C), Color(0xEB0B0B0C)],
+                    stops: [0.0, 0.2, 1.0],
                   ),
                 ),
               ),
-              Padding(
-                padding: EdgeInsets.all(12 * scale),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+              Positioned(
+                left: 16 * scale,
+                right: 16 * scale,
+                bottom: 14 * scale,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    SizedBox(
-                      width: posterHeight * 0.7,
-                      child: HikkaPoster(url: a.image, malId: a.malId, scale: scale, radius: 10, icon: Symbols.movie_rounded, border: false),
+                    if (meta.isNotEmpty) Text(meta, maxLines: 1, overflow: TextOverflow.ellipsis, style: hikkaStyle(12 * scale, color: text)),
+                    Padding(
+                      padding: EdgeInsets.only(top: 3 * scale),
+                      child: Text(
+                        title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: hikkaStyle(20 * scale, color: Colors.white, weight: FontWeight.bold, height: 1.2).copyWith(
+                          shadows: [Shadow(color: shade.withValues(alpha: 0.5), blurRadius: 12)],
+                        ),
+                      ),
                     ),
-                    SizedBox(width: 14 * scale),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
+                    SizedBox(height: 10 * scale),
+                    Row(
+                      children: [
+                        Container(
+                          height: 36 * scale,
+                          padding: EdgeInsets.symmetric(horizontal: 14 * scale),
+                          decoration: BoxDecoration(color: accent, borderRadius: uiTheme.borderRadius(12 * scale)),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              if (a.isOngoing) HikkaPill(text: 'Виходить', scale: scale, background: uiTheme.accentColor.withValues(alpha: 0.8), foreground: uiTheme.onAccent),
-                              if (progress.isNotEmpty) ...[
-                                SizedBox(width: 8 * scale),
-                                Flexible(
-                                  child: Text(progress, maxLines: 1, overflow: TextOverflow.ellipsis, style: hikkaStyle(11.5 * scale, color: white.withValues(alpha: 0.85))),
-                                ),
-                              ],
+                              LineIconView(LineIcon.play, size: 15 * scale, color: onAccent(accent)),
+                              SizedBox(width: 8 * scale),
+                              Text('Дивитись', style: hikkaStyle(13.5 * scale, color: onAccent(accent), weight: FontWeight.bold)),
                             ],
                           ),
-                          SizedBox(height: 8 * scale),
-                          Text(
-                            title,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: hikkaStyle(17 * scale, color: white, weight: FontWeight.bold, height: 1.2),
-                          ),
-                          // Type with season and score on one line: so the banner does not grow on a narrow screen
-                          if (meta.isNotEmpty || a.hasScore)
-                            Padding(
-                              padding: EdgeInsets.only(top: 4 * scale),
-                              child: Row(
-                                children: [
-                                  if (meta.isNotEmpty)
-                                    Flexible(
-                                      child: Text(meta, maxLines: 1, overflow: TextOverflow.ellipsis, style: hikkaStyle(12 * scale, color: white.withValues(alpha: 0.75))),
-                                    ),
-                                  if (meta.isNotEmpty && a.hasScore) SizedBox(width: 10 * scale),
-                                  if (a.hasScore) ...[
-                                    Icon(Symbols.star_rounded, color: const Color(0xFFFFC23D), size: 15 * scale, fill: 1),
-                                    SizedBox(width: 3 * scale),
-                                    Text(a.score.toStringAsFixed(2), style: hikkaStyle(12 * scale, color: white, weight: FontWeight.w600)),
-                                  ],
-                                ],
-                              ),
-                            ),
-                          const Spacer(),
-                          Container(
-                            padding: EdgeInsets.symmetric(horizontal: 14 * scale, vertical: 7 * scale),
-                            decoration: BoxDecoration(color: uiTheme.accentColor, borderRadius: uiTheme.borderRadius(12 * scale)),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Symbols.play_arrow_rounded, color: uiTheme.onAccent, size: 18 * scale, fill: 1),
-                                SizedBox(width: 4 * scale),
-                                Text('Дивитись', style: hikkaStyle(12.5 * scale, color: uiTheme.onAccent, weight: FontWeight.bold)),
-                              ],
-                            ),
-                          ),
+                        ),
+                        if (a.hasScore) ...[
+                          SizedBox(width: 10 * scale),
+                          LineIconView(LineIcon.star, size: 13 * scale, color: soft, stroke: 1.8),
+                          SizedBox(width: 4 * scale),
+                          Text(a.score.toStringAsFixed(2), style: hikkaStyle(12.5 * scale, color: soft)),
                         ],
-                      ),
+                      ],
                     ),
                   ],
                 ),
@@ -381,7 +409,11 @@ class HikkaTitleBackdrop extends StatefulWidget {
   final HikkaAnime anime;
   final HikkaBannerArtLoader? artLoader;
 
-  const HikkaTitleBackdrop({super.key, required this.anime, this.artLoader});
+  /// Phone header: the picture stays bright (only a light veil at the top) and sinks into the background by its lower edge;
+  /// nothing but the poster and the round buttons lies on it
+  final bool soft;
+
+  const HikkaTitleBackdrop({super.key, required this.anime, this.artLoader, this.soft = false});
 
   @override
   State<HikkaTitleBackdrop> createState() => _HikkaTitleBackdropState();
@@ -437,8 +469,8 @@ class _HikkaTitleBackdropState extends State<HikkaTitleBackdrop> {
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [bg.withValues(alpha: 0.66), bg.withValues(alpha: 0.82), bg],
-                stops: const [0.0, 0.55, 1.0],
+                colors: widget.soft ? [bg.withValues(alpha: 0.25), bg] : [bg.withValues(alpha: 0.66), bg.withValues(alpha: 0.82), bg],
+                stops: widget.soft ? const [0.0, 1.0] : const [0.0, 0.55, 1.0],
               ),
             ),
           ),

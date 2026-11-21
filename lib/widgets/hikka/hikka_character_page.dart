@@ -9,6 +9,8 @@ import '../../services/hikka_prefs.dart';
 import '../../services/ui_theme_service.dart';
 import '../app_animation_kit.dart';
 import '../app_ui_kit.dart';
+import '../design_kit.dart' show AppMediaRow;
+import '../line_icons.dart';
 import 'hikka_cards.dart';
 import 'hikka_common.dart';
 import 'hikka_markdown_view.dart';
@@ -94,6 +96,7 @@ class _HikkaCharacterPageState extends State<HikkaCharacterPage> {
 
   // ── Header ──────────────────────────────────────────────────────────────────
 
+  /// Name, the other spellings in grey, then quietly "5 аніме" and "6 озвучень" with line icons
   Widget _names(HikkaCharacter c, {required bool wide}) {
     final scale = _scale;
     final others = c.otherNames;
@@ -101,35 +104,37 @@ class _HikkaCharacterPageState extends State<HikkaCharacterPage> {
       for (final s in c.synonyms)
         if (s.toLowerCase() != c.name.toLowerCase() && !others.any((o) => o.toLowerCase() == s.toLowerCase())) s,
     ];
+    final full = _full;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(c.name, style: hikkaStyle((wide ? 24 : 19) * scale, weight: FontWeight.bold, height: 1.2)),
+        Text(c.name, style: hikkaStyle((wide ? 26 : 22) * scale, weight: FontWeight.bold, height: 1.2)),
         if (others.isNotEmpty)
           Padding(
-            padding: EdgeInsets.only(top: 6 * scale),
-            child: Text(others.join('\n'), style: hikkaStyle(12.5 * scale, color: uiTheme.textMuted, height: 1.35)),
+            padding: EdgeInsets.only(top: 5 * scale),
+            child: Text(others.join(' · '), style: hikkaStyle(13 * scale, color: uiTheme.textMuted, height: 1.35)),
           ),
         if (synonyms.isNotEmpty)
           Padding(
-            padding: EdgeInsets.only(top: 6 * scale),
+            padding: EdgeInsets.only(top: 4 * scale),
             child: Text(
               synonyms.take(6).join(', '),
-              maxLines: 3,
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: hikkaStyle(11.5 * scale, color: uiTheme.textDarkMuted, height: 1.35),
+              style: hikkaStyle(12 * scale, color: uiTheme.textDarkMuted, height: 1.35),
             ),
           ),
-        if (_full != null && (_full!.animeCount > 0 || _full!.voicesCount > 0))
+        if (full != null && (full.animeCount > 0 || full.voicesCount > 0))
           Padding(
-            padding: EdgeInsets.only(top: 12 * scale),
-            child: Wrap(
-              spacing: 8 * scale,
-              runSpacing: 6 * scale,
+            padding: EdgeInsets.only(top: 14 * scale),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (_full!.animeCount > 0) HikkaChip(label: 'Аніме: ${HikkaText.count(_full!.animeCount)}', scale: scale),
-                if (_full!.voicesCount > 0) HikkaChip(label: 'Озвучень: ${HikkaText.count(_full!.voicesCount)}', scale: scale),
+                if (full.animeCount > 0) hikkaCountLine(scale, LineIcon.monitor, '${HikkaText.count(full.animeCount)} аніме'),
+                if (full.animeCount > 0 && full.voicesCount > 0) SizedBox(height: 7 * scale),
+                if (full.voicesCount > 0)
+                  hikkaCountLine(scale, LineIcon.mic, '${HikkaText.count(full.voicesCount)} ${HikkaText.plural(full.voicesCount, 'озвучення', 'озвучення', 'озвучень')}'),
               ],
             ),
           ),
@@ -137,6 +142,7 @@ class _HikkaCharacterPageState extends State<HikkaCharacterPage> {
     );
   }
 
+  /// The description as on the title page: four lines fading out and «Читати далі ⌄»; links work only when it is open
   Widget _description() {
     final scale = _scale;
     final c = _full;
@@ -144,26 +150,26 @@ class _HikkaCharacterPageState extends State<HikkaCharacterPage> {
     if (c == null) {
       body = _error != null ? HikkaErrorView(scale: scale, error: _error!, onRetry: _retry, compact: true) : HikkaLoading(scale: scale, height: 90);
     } else if (c.descriptionUa == null) {
-      body = Text('Опису поки немає.', style: hikkaStyle(13 * scale, color: uiTheme.textMuted));
+      body = Text('Опису поки немає.', style: hikkaStyle(13 * scale, color: uiTheme.textMuted, height: 1.5));
     } else {
-      body = HikkaCollapsible(
-        collapsedHeight: 190 * scale,
+      body = HikkaSynopsis(
+        source: c.descriptionUa!,
         scale: scale,
-        fadeColor: uiTheme.bgPrimary,
-        child: HikkaMarkdownView(source: c.descriptionUa, scale: scale),
+        open: _route.memo['synopsis'] == true,
+        onOpen: (v) => _route.memo['synopsis'] = v,
       );
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Опис', style: hikkaStyle(13.5 * scale, weight: FontWeight.bold)),
-        SizedBox(height: 8 * scale),
+        Text('Опис', style: hikkaStyle(15 * scale, weight: FontWeight.bold)),
+        SizedBox(height: 6 * scale),
         body,
       ],
     );
   }
 
-  /// Voice acting by language: Japanese, Ukrainian, English, then alphabetically; people without repeats
+  /// Voice actors one by one: a round photo, the name, the language and the number of anime; a tap opens the person
   Widget _voices(double pad) {
     final scale = _scale;
     return HikkaAsync<HikkaPage<HikkaCharacterVoice>>(
@@ -173,28 +179,34 @@ class _HikkaCharacterPageState extends State<HikkaCharacterPage> {
       load: () => HikkaApi.instance.characterVoices(_route.slug, size: 100, allowAdult: HikkaPrefs.instance.allowAdult),
       loading: (context) => const SizedBox.shrink(),
       builder: (context, page) {
-        final groups = HikkaCharacterVoice.groupByLanguage(page.items);
-        if (groups.isEmpty) return const SizedBox.shrink();
-        return HikkaSection(
-          scale: scale,
-          pad: pad,
-          title: 'Озвучення',
+        final actors = HikkaCharacterVoice.actors(page.items);
+        if (actors.isEmpty) return const SizedBox.shrink();
+        return Padding(
+          padding: EdgeInsets.only(bottom: 14 * scale),
           child: Align(
             alignment: Alignment.centerLeft,
             child: ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: hikkaReadableWidth(scale)),
-              child: AppCard(
-                scale: scale,
-                radius: 12,
-                padding: EdgeInsets.symmetric(horizontal: 14 * scale, vertical: 6 * scale),
-                child: Column(
-                  children: [
-                    for (int i = 0; i < groups.length; i++) ...[
-                      if (i > 0) Divider(height: 1, color: uiTheme.borderSubtle),
-                      _voiceRow(groups[i].$1, groups[i].$2),
-                    ],
-                  ],
-                ),
+              constraints: BoxConstraints(maxWidth: hikkaReadableWidth(scale) + pad * 2),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(pad, 0, pad, 4 * scale),
+                    child: Text('Озвучення', style: hikkaStyle(15 * scale, weight: FontWeight.bold)),
+                  ),
+                  for (final a in actors.take(12))
+                    AppMediaRow(
+                      key: ValueKey('voice-${a.person.slug}-${a.language}'),
+                      scale: scale,
+                      inset: pad,
+                      leading: HikkaAvatar(url: a.person.image, size: 42 * scale, scale: scale),
+                      title: a.person.name,
+                      subtitle: '${a.language} · ${a.anime} аніме',
+                      titleLines: 1,
+                      chevron: true,
+                      onTap: () => HikkaNav.instance.openPerson(a.person.slug, seed: a.person, roles: true),
+                    ),
+                ],
               ),
             ),
           ),
@@ -203,34 +215,18 @@ class _HikkaCharacterPageState extends State<HikkaCharacterPage> {
     );
   }
 
-  Widget _voiceRow(String language, List<String> people) {
-    final scale = _scale;
-    const limit = 10;
-    final text = people.length > limit ? '${people.take(limit).join(', ')} та ще ${people.length - limit}' : people.join(', ');
-    return Padding(
-      padding: EdgeInsets.symmetric(vertical: 9 * scale),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(width: 108 * scale, child: Text(language, style: hikkaStyle(12 * scale, color: uiTheme.textDarkMuted, height: 1.35))),
-          Expanded(child: Text(text, style: hikkaStyle(12.5 * scale, height: 1.35))),
-        ],
-      ),
-    );
-  }
-
   Widget _header(HikkaCharacter c, double pad) {
     final scale = _scale;
     return LayoutBuilder(
       builder: (context, constraints) {
         final wide = constraints.maxWidth >= hikkaWideBreakpoint;
-        final posterW = hikkaHeaderPosterWidth(scale, wide: wide);
+        final posterW = wide ? hikkaHeaderPosterWidth(scale, wide: true) : 112 * scale;
         final poster = SizedBox(
           width: posterW,
-          child: HikkaPoster(url: c.image, scale: scale, radius: 12, icon: Symbols.person_rounded),
+          child: HikkaPoster(url: c.image, scale: scale, radius: 14, aspect: 112 / 158, icon: Symbols.person_rounded),
         );
         return Padding(
-          padding: EdgeInsets.fromLTRB(pad, 4 * scale, pad, 22 * scale),
+          padding: EdgeInsets.fromLTRB(pad, 6 * scale, pad, 20 * scale),
           child: wide
               ? Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -240,7 +236,7 @@ class _HikkaCharacterPageState extends State<HikkaCharacterPage> {
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [_names(c, wide: true), SizedBox(height: 18 * scale), _description()],
+                        children: [_names(c, wide: true), SizedBox(height: 22 * scale), _description()],
                       ),
                     ),
                   ],
@@ -250,9 +246,9 @@ class _HikkaCharacterPageState extends State<HikkaCharacterPage> {
                   children: [
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [poster, SizedBox(width: 14 * scale), Expanded(child: _names(c, wide: false))],
+                      children: [poster, SizedBox(width: 16 * scale), Expanded(child: Padding(padding: EdgeInsets.only(top: 4 * scale), child: _names(c, wide: false)))],
                     ),
-                    SizedBox(height: 18 * scale),
+                    SizedBox(height: 20 * scale),
                     _description(),
                   ],
                 ),
@@ -290,7 +286,9 @@ class _HikkaCharacterPageState extends State<HikkaCharacterPage> {
               child: AppSectionHeader(
                 scale: scale,
                 title: 'Аніме',
-                subtitle: _pager.total > 0 ? 'Усього: ${HikkaText.count(_pager.total)}' : null,
+                titleSize: 15,
+                calm: true,
+                subtitle: _pager.total > 0 ? '${HikkaText.count(_pager.total)} ${HikkaText.plural(_pager.total, 'тайтл', 'тайтли', 'тайтлів')}' : null,
               ),
             ),
           ),
@@ -300,7 +298,7 @@ class _HikkaCharacterPageState extends State<HikkaCharacterPage> {
         anime: e.anime,
         scale: scale,
         caption: [
-          e.main ? 'Головний' : 'Другорядний',
+          e.main ? 'Головна' : 'Другорядна',
           if (e.anime.year != null) '${e.anime.year}',
         ].join(' · '),
       ),

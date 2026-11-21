@@ -17,10 +17,13 @@ class SourceException implements Exception {
   /// Technical description (for logs)
   final String detail;
 
-  const SourceException(this.kind, this.detail, {this.status});
+  /// Our own words for the person instead of the kind's general ones
+  final String? note;
+
+  const SourceException(this.kind, this.detail, {this.status, this.note});
 
   /// Message for the user
-  String get message => switch (kind) {
+  String get message => note ?? switch (kind) {
         SourceErrorKind.network => 'Немає зв’язку із сайтом. Перевірте інтернет.',
         SourceErrorKind.timeout => 'Сайт довго не відповідає. Спробуйте ще раз.',
         SourceErrorKind.notFound => 'Сторінку не знайдено — можливо, сайт змінив адреси.',

@@ -1,17 +1,20 @@
-import '../../services/anilist_posters.dart';
+import 'dart:collection';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show SliverConstraints, SliverGridLayout, SliverGridRegularTileLayout;
 import 'package:material_symbols_icons/symbols.dart';
 
+import '../../services/anilist_posters.dart';
 import '../../services/hikka_api.dart';
 import '../../services/hikka_images.dart';
 import '../../services/hikka_pager.dart';
 import '../../services/ui_theme_service.dart';
 import '../../utils/platform_info.dart';
 import '../app_animation_kit.dart';
+import '../app_tones.dart';
 import '../app_ui_kit.dart';
+import '../line_icons.dart';
 
 /// Shared catalog page sizes
 class HikkaLayout {
@@ -30,6 +33,22 @@ class HikkaLayout {
   /// Height of the page title row
   static double barHeight(double scale) => AppPlatform.isMobile ? 56.0 : 52 * scale;
 }
+
+// ── Round buttons over the title page banner ("Назад" on the left, the list bookmark on the right) ──
+
+/// The visible circle
+double floatingButtonSize(double scale) => AppPlatform.isMobile ? 40 * scale : 38 * scale;
+
+/// The touch area around the circle: at least 48 dp on a phone
+double floatingButtonHit(double scale) => math.max(floatingButtonSize(scale), AppPlatform.isMobile ? AppPlatform.touchTarget : 0);
+
+/// From the screen edge to the touch area: the circle stands a little outside the content margin
+double floatingButtonInset(BuildContext context, double scale) =>
+    HikkaLayout.sidePad(context, scale) - 2 * scale - (floatingButtonHit(scale) - floatingButtonSize(scale)) / 2;
+
+/// From the screen top to the touch area: the circle is 8 under the status bar
+double floatingButtonTop(BuildContext context, double scale) =>
+    MediaQuery.paddingOf(context).top + 8 * scale - (floatingButtonHit(scale) - floatingButtonSize(scale)) / 2;
 
 /// Catalog page text style (Arial, theme colors). The size is already multiplied by the scale.
 TextStyle hikkaStyle(
@@ -136,6 +155,28 @@ class HikkaPoster extends StatelessWidget {
       ),
     );
   }
+}
+
+/// A round photo [size] across (a person, an author, a voice actor); without one, a grey circle with a person glyph
+class HikkaAvatar extends StatelessWidget {
+  final String? url;
+  final double size;
+  final double scale;
+
+  const HikkaAvatar({super.key, required this.url, required this.size, required this.scale});
+
+  @override
+  Widget build(BuildContext context) => SizedBox.square(
+        dimension: size,
+        child: ClipOval(
+          child: url == null || url!.isEmpty
+              ? ColoredBox(
+                  color: AppTones.plate,
+                  child: Center(child: LineIconView(LineIcon.person, size: size * 0.46, color: AppTones.chevron)),
+                )
+              : HikkaPoster(url: url, scale: scale, aspect: 1, radius: 0, border: false, icon: Symbols.person_rounded),
+        ),
+      );
 }
 
 // ── Data loading ───────────────────────────────────────────────────────────
@@ -382,33 +423,6 @@ class HikkaChip extends StatelessWidget {
   }
 }
 
-/// A score in a star (a badge over the poster or in a row)
-class HikkaScoreBadge extends StatelessWidget {
-  final double score;
-  final double scale;
-
-  const HikkaScoreBadge({super.key, required this.score, required this.scale});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 6 * scale, vertical: 2.5 * scale),
-      decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.65), borderRadius: uiTheme.borderRadius(6 * scale)),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Symbols.star_rounded, color: const Color(0xFFFFC23D), size: 13 * scale, fill: 1),
-          SizedBox(width: 3 * scale),
-          Text(
-            score.toStringAsFixed(2),
-            style: TextStyle(fontFamily: 'Arial', color: Colors.white, fontSize: 11 * scale, fontWeight: FontWeight.bold),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 /// A small badge over the poster (type, 18+, episode number)
 class HikkaPill extends StatelessWidget {
   final String text;
@@ -446,7 +460,10 @@ class HikkaLinkButton extends StatelessWidget {
   /// An icon before the label: then it is a "quiet" action (like "Скинути" in settings), without an arrow and accent
   final IconData? icon;
 
-  const HikkaLinkButton({super.key, required this.label, required this.scale, required this.onTap, this.icon});
+  /// Gray and low (the title page's shelves): it does not push its heading down and does not take the accent
+  final bool calm;
+
+  const HikkaLinkButton({super.key, required this.label, required this.scale, required this.onTap, this.icon, this.calm = false});
 
   @override
   Widget build(BuildContext context) {
@@ -460,9 +477,9 @@ class HikkaLinkButton extends StatelessWidget {
         highlightColor: uiTheme.touchHighlight,
         hoverColor: uiTheme.hoverOverlay,
         child: ConstrainedBox(
-          constraints: BoxConstraints(minHeight: AppPlatform.isMobile ? AppPlatform.touchTarget : 0),
+          constraints: BoxConstraints(minHeight: AppPlatform.isMobile && !calm ? AppPlatform.touchTarget : 0),
           child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: 8 * scale, vertical: 4 * scale),
+            padding: EdgeInsets.symmetric(horizontal: 8 * scale, vertical: (calm ? 2 : 4) * scale),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -472,9 +489,14 @@ class HikkaLinkButton extends StatelessWidget {
                 ],
                 Text(
                   label,
-                  style: TextStyle(fontFamily: 'Arial', color: icon != null ? uiTheme.textMuted : uiTheme.accentColor, fontSize: 12 * scale, fontWeight: icon != null ? FontWeight.w500 : FontWeight.w600),
+                  style: TextStyle(
+                    fontFamily: 'Arial',
+                    color: calm ? uiTheme.textDarkMuted : (icon != null ? uiTheme.textMuted : uiTheme.accentColor),
+                    fontSize: (calm ? 12.5 : 12) * scale,
+                    fontWeight: icon != null || calm ? FontWeight.w500 : FontWeight.w600,
+                  ),
                 ),
-                if (icon == null) Icon(Symbols.chevron_right_rounded, color: uiTheme.accentColor, size: 16 * scale),
+                if (icon == null) Icon(Symbols.chevron_right_rounded, color: calm ? uiTheme.textDarkMuted : uiTheme.accentColor, size: (calm ? 14 : 16) * scale),
               ],
             ),
           ),
@@ -530,7 +552,75 @@ class HikkaIconButton extends StatelessWidget {
   }
 }
 
-/// Title row of an open page: "Back", the title, actions on the right
+/// A round line-icon button of the main tabs' headers (the bell, the sliders, the gear): 40 wide, 48 to touch on a
+/// phone, with an accent dot in the corner when [dot]
+class HikkaLineButton extends StatelessWidget {
+  final double scale;
+  final LineIcon icon;
+  final String tooltip;
+  final VoidCallback onTap;
+  final bool dot;
+  final double iconSize;
+
+  /// A key for the dot (tests look for it)
+  final Key? dotKey;
+
+  const HikkaLineButton({
+    super.key,
+    required this.scale,
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+    this.dot = false,
+    this.iconSize = 22,
+    this.dotKey,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final double size = AppPlatform.isMobile ? math.max(AppPlatform.touchTarget, 40 * scale) : 40 * scale;
+    return Semantics(
+      button: true,
+      label: tooltip,
+      excludeSemantics: true,
+      child: Tooltip(
+        message: tooltip,
+        child: InkResponse(
+          onTap: onTap,
+          radius: size / 2,
+          splashColor: Colors.transparent,
+          highlightColor: uiTheme.touchHighlight,
+          child: SizedBox.square(
+            dimension: size,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                LineIconView(icon, size: iconSize * scale, color: uiTheme.isLight ? uiTheme.textPrimary : const Color(0xFFDDDDDD)),
+                if (dot)
+                  Positioned(
+                    key: dotKey,
+                    top: size / 2 - 11 * scale,
+                    right: size / 2 - 10 * scale,
+                    child: Container(
+                      width: 11 * scale,
+                      height: 11 * scale,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: uiTheme.accentColor,
+                        border: Border.all(color: uiTheme.bgPrimary, width: 2 * scale),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Title row of an open page: a line "Back", the title (17), actions on the right (line buttons)
 class HikkaBackBar extends StatelessWidget {
   final double scale;
   final String title;
@@ -550,13 +640,15 @@ class HikkaBackBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pad = HikkaLayout.sidePad(context, scale);
+    // The arrow's own edge lines up with the page text: the touch area sticks out past it
+    final edge = math.max(pad - 11 * (AppPlatform.isMobile ? 1 : scale), 2.0);
     return Container(
       height: HikkaLayout.barHeight(scale),
-      padding: EdgeInsets.only(left: math.max(pad - 8, 4), right: math.max(pad - 8, 4)),
+      padding: EdgeInsets.only(left: edge, right: edge),
       child: Row(
         children: [
-          HikkaIconButton(icon: Symbols.arrow_back_rounded, tooltip: 'Назад', scale: scale, onTap: onBack),
-          SizedBox(width: 6 * scale),
+          HikkaLineButton(scale: scale, icon: LineIcon.back, tooltip: 'Назад', iconSize: 23, onTap: onBack),
+          SizedBox(width: 4 * scale),
           Expanded(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -566,14 +658,14 @@ class HikkaBackBar extends StatelessWidget {
                   title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontFamily: 'Arial', color: uiTheme.textPrimary, fontSize: 15 * scale, fontWeight: FontWeight.bold),
+                  style: hikkaStyle((AppPlatform.isMobile ? 17 : 16) * scale, weight: FontWeight.bold),
                 ),
                 if (subtitle != null)
                   Text(
                     subtitle!,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontFamily: 'Arial', color: uiTheme.textDarkMuted, fontSize: 11.5 * scale),
+                    style: hikkaStyle(12 * scale, color: uiTheme.textMuted),
                   ),
               ],
             ),
@@ -629,12 +721,12 @@ class HikkaGridDelegate extends SliverGridDelegate {
       old.textHeight != textHeight;
 }
 
-/// Height of two title lines and a label line under the poster, accounting for the system font scale
+/// Height of two title lines and a grey line under the poster, accounting for the system font scale
 double hikkaCardTextHeight(BuildContext context, double scale, {int titleLines = 2, bool subtitle = true}) {
   final ts = MediaQuery.textScalerOf(context);
-  final title = ts.scale(12.5 * scale) * 1.25 * titleLines;
-  final sub = subtitle ? ts.scale(11 * scale) * 1.25 + 3 * scale : 0.0;
-  return 7 * scale + title + sub + 4 * scale;
+  final title = ts.scale(13 * scale) * 1.25 * titleLines;
+  final sub = subtitle ? ts.scale(12 * scale) * 1.3 + 3 * scale : 0.0;
+  return 7 * scale + title + sub + 3 * scale;
 }
 
 /// A placeholder card in the grid while data loads: a poster and text lines under it
@@ -655,7 +747,7 @@ class HikkaCardSkeleton extends StatelessWidget {
       children: [
         Expanded(
           child: DecoratedBox(
-            decoration: BoxDecoration(color: uiTheme.bgElevated, borderRadius: uiTheme.borderRadius(10 * scale)),
+            decoration: BoxDecoration(color: uiTheme.bgElevated, borderRadius: uiTheme.borderRadius(12 * scale)),
             child: const SizedBox.expand(),
           ),
         ),
@@ -758,11 +850,17 @@ class HikkaPagedGrid<T> extends StatefulWidget {
   final double posterAspect;
   final int titleLines;
 
+  /// Cards with a grey line under the name (anime: the year and score); portraits with only a name have none
+  final bool subtitle;
+
   /// A block above the grid that scrolls together with it
   final Widget? header;
 
   /// Grid sections ("Головні", "Другорядні"): a heading appears when the section changes; the server sets the order
   final String? Function(T item)? sectionOf;
+
+  /// Its own empty state instead of the icon with [emptyText]
+  final Widget? empty;
 
   const HikkaPagedGrid({
     super.key,
@@ -776,8 +874,10 @@ class HikkaPagedGrid<T> extends StatefulWidget {
     this.maxTileWidth = 170,
     this.posterAspect = 0.7,
     this.titleLines = 2,
+    this.subtitle = true,
     this.header,
     this.sectionOf,
+    this.empty,
   });
 
   @override
@@ -787,6 +887,24 @@ class HikkaPagedGrid<T> extends StatefulWidget {
 class _HikkaPagedGridState<T> extends State<HikkaPagedGrid<T>> {
   ScrollController? _own;
   ScrollController get _controller => widget.controller ?? (_own ??= AppSmoothScrollController());
+
+  /// The cards made by this widget's [HikkaPagedGrid.itemBuilder], by item: when a page arrives or the loading footer
+  /// comes and goes, the cards on screen are handed back as they are instead of being rebuilt (a few hundred widgets
+  /// in the frame a page lands in, while the finger scrolls)
+  final Map<Object?, Widget> _cards = HashMap<Object?, Widget>.identity();
+  HikkaPagedGrid<T>? _cardsFor;
+
+  /// The item slivers of the last build and what they were made of
+  List<Widget>? _slivers;
+  Object? _sliversKey;
+
+  Widget _card(BuildContext context, T item) {
+    if (!identical(_cardsFor, widget)) {
+      _cards.clear();
+      _cardsFor = widget;
+    }
+    return _cards[item] ??= widget.itemBuilder(context, item);
+  }
 
   @override
   void initState() {
@@ -818,6 +936,7 @@ class _HikkaPagedGridState<T> extends State<HikkaPagedGrid<T>> {
 
   void _onPager() {
     if (!mounted) return;
+    if (widget.pager.items.isEmpty) _cards.clear(); // reloaded: the old cards are not coming back
     setState(() {});
     // The list did not fill the screen: we load one more page
     WidgetsBinding.instance.addPostFrameCallback((_) => _fillViewport());
@@ -848,7 +967,7 @@ class _HikkaPagedGridState<T> extends State<HikkaPagedGrid<T>> {
             textHeight: textHeight,
           ),
           delegate: SliverChildBuilderDelegate(
-            (context, i) => widget.itemBuilder(context, items[from + i]),
+            (context, i) => _card(context, items[from + i]),
             childCount: to - from,
           ),
         );
@@ -863,10 +982,11 @@ class _HikkaPagedGridState<T> extends State<HikkaPagedGrid<T>> {
         end++;
       }
       if (name != null) {
+        // A grey caption, as the groups of the main tabs ("Головні · 3")
         out.add(SliverToBoxAdapter(
           child: Padding(
-            padding: EdgeInsets.fromLTRB(pad, start == 0 ? 4 * scale : 18 * scale, pad, 10 * scale),
-            child: AppSectionHeader(scale: scale, title: name),
+            padding: EdgeInsets.fromLTRB(pad, start == 0 ? 6 * scale : 22 * scale, pad, 10 * scale),
+            child: Text(name, style: hikkaStyle(13 * scale, color: AppTones.caption, weight: FontWeight.w700)),
           ),
         ));
       }
@@ -876,13 +996,24 @@ class _HikkaPagedGridState<T> extends State<HikkaPagedGrid<T>> {
     return out;
   }
 
+  /// [_itemSlivers] again only when the items, the widget or the layout changed: the loading footer coming and going
+  /// leaves the grid's widgets (and so its cards) as they are
+  List<Widget> _cachedSlivers(double pad, double spacing, double textHeight) {
+    final key = (widget, widget.pager.items, pad, spacing, textHeight);
+    if (_slivers == null || _sliversKey != key) {
+      _slivers = _itemSlivers(pad, spacing, textHeight);
+      _sliversKey = key;
+    }
+    return _slivers!;
+  }
+
   @override
   Widget build(BuildContext context) {
     final scale = widget.scale;
     final pager = widget.pager;
     final pad = HikkaLayout.sidePad(context, scale);
     final spacing = (HikkaLayout.compact(context) ? 12.0 : 14 * scale);
-    final textHeight = hikkaCardTextHeight(context, scale, titleLines: widget.titleLines);
+    final textHeight = hikkaCardTextHeight(context, scale, titleLines: widget.titleLines, subtitle: widget.subtitle);
 
     final Widget footer;
     if (pager.error != null && pager.items.isNotEmpty) {
@@ -901,7 +1032,7 @@ class _HikkaPagedGridState<T> extends State<HikkaPagedGrid<T>> {
     } else if (skeleton) {
       body = const SizedBox.shrink();
     } else if (pager.isEmpty) {
-      body = SizedBox(height: 260, child: AppEmptyState(scale: scale, icon: widget.emptyIcon, text: widget.emptyText));
+      body = widget.empty ?? SizedBox(height: 260, child: AppEmptyState(scale: scale, icon: widget.emptyIcon, text: widget.emptyText));
     } else {
       body = const SizedBox.shrink();
     }
@@ -934,7 +1065,7 @@ class _HikkaPagedGridState<T> extends State<HikkaPagedGrid<T>> {
           else if (pager.items.isEmpty)
             SliverToBoxAdapter(child: body)
           else
-            ..._itemSlivers(pad, spacing, textHeight),
+            ..._cachedSlivers(pad, spacing, textHeight),
           SliverToBoxAdapter(child: footer),
           SliverToBoxAdapter(child: SizedBox(height: 24 * scale + widget.bottomInset)),
         ],
@@ -1094,7 +1225,160 @@ class HikkaInfoTable extends StatelessWidget {
   }
 }
 
-/// A search row with a button on the right (filters); on a phone the field is at least 48 dp
+/// The search pill of the main tabs: a soft plate 44 tall with the line magnifier and a grey hint; a tap leads to search
+class HikkaSearchPill extends StatelessWidget {
+  final double scale;
+  final String hint;
+  final String label;
+  final VoidCallback onTap;
+
+  const HikkaSearchPill({super.key, required this.scale, required this.hint, required this.onTap, String? label}) : label = label ?? hint;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = uiTheme.borderRadius(14 * scale);
+    return Semantics(
+      button: true,
+      label: label,
+      excludeSemantics: true,
+      child: Material(
+        color: uiTheme.bgElevated,
+        shape: RoundedRectangleBorder(borderRadius: r),
+        child: InkWell(
+          borderRadius: r,
+          splashColor: Colors.transparent,
+          highlightColor: uiTheme.touchHighlight,
+          hoverColor: uiTheme.hoverOverlay,
+          onTap: onTap,
+          child: SizedBox(
+            height: math.max(44 * scale, AppPlatform.isMobile ? AppPlatform.touchTarget : 0.0),
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 14 * scale),
+              child: Row(
+                children: [
+                  LineIconView(LineIcon.search, size: 20 * scale, color: uiTheme.textMuted),
+                  SizedBox(width: 10 * scale),
+                  Expanded(child: Text(hint, maxLines: 1, overflow: TextOverflow.ellipsis, style: hikkaStyle(14 * scale, color: uiTheme.textMuted))),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A search field in the same plate as [HikkaSearchPill]: the magnifier lights up with the accent while typing,
+/// a cross on the right clears the text
+class HikkaSearchField extends StatefulWidget {
+  final double scale;
+  final TextEditingController controller;
+  final String hint;
+  final ValueChanged<String> onChanged;
+  final FocusNode? focusNode;
+
+  /// A tap on the field (before typing): "Огляд" uses it to switch to the section that searches
+  final VoidCallback? onTap;
+
+  const HikkaSearchField({super.key, required this.scale, required this.controller, required this.hint, required this.onChanged, this.focusNode, this.onTap});
+
+  @override
+  State<HikkaSearchField> createState() => _HikkaSearchFieldState();
+}
+
+class _HikkaSearchFieldState extends State<HikkaSearchField> {
+  FocusNode? _own;
+  FocusNode get _focus => widget.focusNode ?? (_own ??= FocusNode());
+
+  @override
+  void initState() {
+    super.initState();
+    _focus.addListener(_refresh);
+    widget.controller.addListener(_refresh);
+  }
+
+  @override
+  void didUpdateWidget(HikkaSearchField old) {
+    super.didUpdateWidget(old);
+    if (old.focusNode != widget.focusNode) {
+      (old.focusNode ?? _own)?.removeListener(_refresh);
+      _focus.addListener(_refresh);
+    }
+    if (old.controller != widget.controller) {
+      old.controller.removeListener(_refresh);
+      widget.controller.addListener(_refresh);
+    }
+  }
+
+  @override
+  void dispose() {
+    _focus.removeListener(_refresh);
+    widget.controller.removeListener(_refresh);
+    _own?.dispose();
+    super.dispose();
+  }
+
+  void _refresh() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scale = widget.scale;
+    final focused = _focus.hasFocus;
+    final double h = math.max(44 * scale, AppPlatform.isMobile ? AppPlatform.touchTarget : 0.0);
+    final font = 14 * scale;
+    return Container(
+      height: h,
+      padding: EdgeInsets.only(left: 14 * scale, right: 4 * scale),
+      decoration: BoxDecoration(
+        color: uiTheme.bgElevated,
+        borderRadius: uiTheme.borderRadius(14 * scale),
+        border: Border.all(color: focused ? uiTheme.accentBorder : Colors.transparent),
+      ),
+      child: Row(
+        children: [
+          LineIconView(LineIcon.search, size: 20 * scale, color: focused ? uiTheme.accentColor : uiTheme.textMuted),
+          SizedBox(width: 10 * scale),
+          Expanded(
+            child: TextField(
+              controller: widget.controller,
+              focusNode: _focus,
+              onChanged: widget.onChanged,
+              onTap: widget.onTap,
+              cursorColor: uiTheme.accentColor,
+              textInputAction: TextInputAction.search,
+              style: TextStyle(fontFamily: 'Arial', fontFamilyFallback: const ['MikiSans'], color: uiTheme.textPrimary, fontSize: font),
+              decoration: InputDecoration(
+                hintText: widget.hint,
+                hintStyle: TextStyle(fontFamily: 'Arial', fontFamilyFallback: const ['MikiSans'], color: uiTheme.textMuted, fontSize: font),
+                border: InputBorder.none,
+                isDense: true,
+                contentPadding: EdgeInsets.symmetric(vertical: 10 * scale),
+              ),
+            ),
+          ),
+          if (widget.controller.text.isNotEmpty)
+            Semantics(
+              button: true,
+              label: 'Очистити',
+              child: InkResponse(
+                radius: 20 * scale,
+                onTap: () {
+                  widget.controller.clear();
+                  widget.onChanged('');
+                },
+                child: SizedBox.square(dimension: h - 4 * scale, child: Center(child: LineIconView(LineIcon.close, size: 18 * scale, color: uiTheme.textMuted))),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A search row with a button on the right (filters)
 class HikkaSearchBar extends StatelessWidget {
   final double scale;
   final TextEditingController controller;
@@ -1120,15 +1404,7 @@ class HikkaSearchBar extends StatelessWidget {
       padding: EdgeInsets.fromLTRB(pad, 4 * scale, pad, 8 * scale),
       child: Row(
         children: [
-          Expanded(
-            child: AppSearchField(
-              scale: AppPlatform.isMobile ? scale * 1.12 : scale,
-              controller: controller,
-              focusNode: focusNode,
-              hint: hint,
-              onChanged: onChanged,
-            ),
-          ),
+          Expanded(child: HikkaSearchField(scale: scale, controller: controller, focusNode: focusNode, hint: hint, onChanged: onChanged)),
           if (trailing != null) ...[SizedBox(width: 8 * scale), trailing!],
         ],
       ),

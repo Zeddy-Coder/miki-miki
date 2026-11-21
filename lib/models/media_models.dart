@@ -5,10 +5,14 @@ class VideoChapter {
   final Duration startTime;
   final Duration? endTime;
 
+  /// "Автоматичний пропуск" may skip it: its times are exact (not moved over from another version with a margin)
+  final bool autoSkip;
+
   const VideoChapter({
     required this.title,
     required this.startTime,
     this.endTime,
+    this.autoSkip = true,
   });
 }
 
@@ -59,6 +63,9 @@ class PlaybackStats {
   final String videoCodec;
   final String audioCodec;
 
+  /// What goes to the speakers: channels (and what they came from), rate, the output (`MpvConfig.describeAudioOutput`)
+  final String audioOutput;
+
   const PlaybackStats({
     this.totalDroppedFrames = 0,
     this.voDroppedFrames = 0,
@@ -70,5 +77,6 @@ class PlaybackStats {
     this.avSyncDiff = 0.0,
     this.videoCodec = "HEVC",
     this.audioCodec = "AAC",
+    this.audioOutput = '—',
   });
-}
+}

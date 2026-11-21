@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:miki_miki/services/app_updater.dart';
 import 'package:miki_miki/services/deep_links.dart';
 import 'package:miki_miki/services/hikka_auth.dart';
 import 'package:miki_miki/services/hikka_nav.dart';
@@ -34,5 +35,24 @@ void main() {
     expect(auth.phase, HikkaAuthPhase.signedOut);
     expect(DeepLinks.handle('miki://open/auth?reference=00000000-0000-4000-8000-000000000003', auth: auth, nav: HikkaNav()), isFalse);
     expect(auth.phase, HikkaAuthPhase.signedOut, reason: 'чужий код не логінить без початого входу');
+  });
+
+  test('повідомлення: «нова версія» відкриває вікно оновлення, оголошення — сторінку сповіщень', () async {
+    final store = <String, dynamic>{};
+    final updater = AppUpdater(
+      transport: (_) async => (404, '{}'),
+      load: () => store,
+      save: (d) => store
+        ..clear()
+        ..addAll(d),
+      currentVersion: '1.1.0',
+    );
+    final nav = HikkaNav();
+    expect(DeepLinks.handle('miki://open/update', nav: nav, updater: updater), isTrue);
+    expect(updater.promptRequests.value, 1);
+    expect(nav.top, isNull);
+    await updater.check();
+    expect(DeepLinks.handle('miki://open/notifications', nav: nav, updater: updater), isTrue);
+    expect(nav.top?.kind, HikkaRouteKind.notifications);
   });
 }

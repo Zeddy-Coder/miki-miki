@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
 
 import '../../models/hikka_models.dart';
 import '../../services/continue_watching.dart';
@@ -9,10 +8,13 @@ import '../../services/hikka_api.dart';
 import '../../services/episode_alerts.dart';
 import '../../services/hikka_nav.dart';
 import '../../services/hikka_prefs.dart';
+import '../../services/network_status.dart';
 import '../../services/ui_theme_service.dart';
 import '../../services/watch_store.dart';
 import '../../utils/platform_info.dart';
 import '../app_animation_kit.dart';
+import '../downloads/downloads_page.dart' show DownloadsHomeShelf;
+import '../line_icons.dart';
 import 'hikka_airing_strip.dart';
 import 'hikka_banner.dart';
 import 'hikka_cards.dart';
@@ -45,9 +47,23 @@ class HikkaHomePage extends StatefulWidget {
 
 class _HikkaHomePageState extends State<HikkaHomePage> {
   final ScrollController _scroll = AppSmoothScrollController();
+  bool _online = NetworkStatus.instance.online;
+
+  @override
+  void initState() {
+    super.initState();
+    NetworkStatus.instance.addListener(_network);
+  }
+
+  /// Offline the downloaded titles move to the top (and back when the internet returns)
+  void _network() {
+    final online = NetworkStatus.instance.online;
+    if (online != _online && mounted) setState(() => _online = online);
+  }
 
   @override
   void dispose() {
+    NetworkStatus.instance.removeListener(_network);
     _scroll.dispose();
     super.dispose();
   }
@@ -93,17 +109,15 @@ class _HikkaHomePageState extends State<HikkaHomePage> {
     final recent = ContinueWatching.recent(limit: 1);
 
     return HikkaCollapsingHeader(
-      header: Padding(
-        padding: EdgeInsets.only(top: 6 * scale),
-        child: _TopBar(scale: scale, pad: pad, onRefresh: widget.onRefresh),
-      ),
+      header: _TopBar(scale: scale, pad: pad, onRefresh: widget.onRefresh),
       body: HikkaPageFrame(
       scale: scale,
       controller: _scroll,
       bottomInset: widget.bottomInset,
       onRefresh: widget.onRefresh,
       children: [
-        HikkaAiringStrip(scale: scale, pad: pad, token: token),
+        // No internet: what is on the device comes first
+        if (!_online) DownloadsHomeShelf(scale: scale, pad: pad),
         HikkaAsync<List<HikkaAnime>>(
           key: ValueKey('banners-$token'),
           scale: scale,
@@ -112,13 +126,13 @@ class _HikkaHomePageState extends State<HikkaHomePage> {
           loading: (context) => _BannerSkeleton(scale: scale, pad: pad),
           builder: (context, list) => HikkaBannerCarousel(items: list.take(HikkaHomePage.bannerCount).toList(), scale: scale, pad: pad),
         ),
+        HikkaAiringStrip(scale: scale, pad: pad, token: token),
         ListenableBuilder(
           listenable: WatchStore.instance,
           builder: (context, _) => HikkaShelfAsync<ContinueItem>(
             scale: scale,
             pad: pad,
             title: 'Продовжити перегляд',
-            subtitle: 'Ваш список «Дивлюсь» і нещодавні перегляди',
             token: '$token-${_recentSignature()}-${ContinueWatching.availabilitySignature()}',
             load: () async {
               final items = await ContinueWatching.load(allowAdult: adult);
@@ -130,11 +144,12 @@ class _HikkaHomePageState extends State<HikkaHomePage> {
             itemBuilder: (context, it) => HikkaContinueCard(item: it, scale: scale),
           ),
         ),
+        if (_online) DownloadsHomeShelf(scale: scale, pad: pad),
         HikkaShelfAsync<HikkaAnime>(
           scale: scale,
           pad: pad,
           title: 'Рекомендації',
-          subtitle: recent.isEmpty ? 'Найкраще за оцінками спільноти Hikka' : 'За вашими переглядами',
+          subtitle: recent.isEmpty ? 'Найкраще за оцінками спільноти' : 'За вашими переглядами',
           token: '$token-${recent.isEmpty ? '' : recent.first.$1}',
           load: () async {
             if (recent.isNotEmpty) {
@@ -170,7 +185,8 @@ class _HikkaHomePageState extends State<HikkaHomePage> {
   }
 }
 
-/// Top row: the search bar (opens the catalog with the cursor in the search field) and notifications
+/// Top row: the search bar (opens the catalog with the cursor in the search field) and the bell with an accent dot
+/// when there are unread new episodes
 class _TopBar extends StatelessWidget {
   final double scale;
   final double pad;
@@ -183,96 +199,33 @@ class _TopBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final mobile = AppPlatform.isMobile;
-    final search = _SearchPill(scale: scale);
+    final search = HikkaSearchPill(scale: scale, hint: 'Пошук аніме…', label: 'Пошук аніме', onTap: HikkaNav.instance.openSearch);
     return Padding(
-      padding: EdgeInsets.fromLTRB(pad, 2 * scale, mobile ? pad - 8 : pad - 8, 12 * scale),
+      // The page frame adds 6 more under it: 14 to the banner, as in the design
+      padding: EdgeInsets.fromLTRB(pad, 8 * scale, pad - 6 * scale, 8 * scale),
       child: Row(
         children: [
           mobile
               ? Expanded(child: search)
               : Flexible(child: ConstrainedBox(constraints: BoxConstraints(maxWidth: 560 * scale), child: search)),
-          SizedBox(width: 4 * scale),
-          if (!mobile && onRefresh != null) HikkaIconButton(icon: Symbols.refresh_rounded, tooltip: 'Оновити', scale: scale, onTap: () => onRefresh!()),
-          // Counter of unread new episodes
+          SizedBox(width: 6 * scale),
+          if (!mobile && onRefresh != null) HikkaLineButton(scale: scale, icon: LineIcon.refresh, tooltip: 'Оновити', onTap: () => onRefresh!()),
           ListenableBuilder(
             listenable: EpisodeAlerts.instance,
             builder: (context, _) {
               final unread = EpisodeAlerts.instance.unread;
-              return Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  HikkaIconButton(
-                    icon: Symbols.notifications_rounded,
-                    tooltip: unread > 0 ? 'Сповіщення: $unread нових' : 'Сповіщення',
-                    scale: scale,
-                    onTap: HikkaNav.instance.openNotifications,
-                  ),
-                  if (unread > 0)
-                    Positioned(
-                      key: const ValueKey('bell-badge'),
-                      right: 2 * scale,
-                      top: 2 * scale,
-                      child: IgnorePointer(
-                        child: Container(
-                          constraints: BoxConstraints(minWidth: 16 * scale),
-                          padding: EdgeInsets.symmetric(horizontal: 4 * scale, vertical: 1 * scale),
-                          decoration: BoxDecoration(color: uiTheme.accentColor, borderRadius: BorderRadius.circular(10 * scale)),
-                          child: Text(
-                            unread > 99 ? '99+' : '$unread',
-                            textAlign: TextAlign.center,
-                            style: hikkaStyle(10 * scale, color: Colors.white, weight: FontWeight.bold, height: 1.2),
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
+              return HikkaLineButton(
+                scale: scale,
+                icon: LineIcon.bell,
+                iconSize: 24,
+                tooltip: unread > 0 ? 'Сповіщення: $unread нових' : 'Сповіщення',
+                onTap: HikkaNav.instance.openNotifications,
+                dot: unread > 0,
+                dotKey: const ValueKey('bell-badge'),
               );
             },
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _SearchPill extends StatelessWidget {
-  final double scale;
-
-  const _SearchPill({required this.scale});
-
-  @override
-  Widget build(BuildContext context) {
-    final r = uiTheme.borderRadius(16 * scale);
-    final height = AppPlatform.isMobile ? AppPlatform.touchTarget : 42 * scale;
-    return Semantics(
-      button: true,
-      label: 'Пошук аніме',
-      excludeSemantics: true,
-      child: Material(
-        color: uiTheme.bgSurface,
-        shape: RoundedRectangleBorder(borderRadius: r, side: BorderSide(color: uiTheme.borderSubtle)),
-        child: InkWell(
-          borderRadius: r,
-          splashColor: Colors.transparent,
-          highlightColor: uiTheme.touchHighlight,
-          hoverColor: uiTheme.hoverOverlay,
-          onTap: HikkaNav.instance.openSearch,
-          child: SizedBox(
-            height: height,
-            child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 14 * scale),
-              child: Row(
-                children: [
-                  Icon(Symbols.search_rounded, color: uiTheme.textMuted, size: 22 * scale, weight: 300),
-                  SizedBox(width: 10 * scale),
-                  Expanded(
-                    child: Text('Пошук аніме…', maxLines: 1, overflow: TextOverflow.ellipsis, style: hikkaStyle(14 * scale, color: uiTheme.textMuted)),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
       ),
     );
   }
@@ -290,10 +243,12 @@ class _BannerSkeleton extends StatelessWidget {
       padding: EdgeInsets.fromLTRB(pad, 0, pad, 20 * scale),
       child: LayoutBuilder(
         builder: (context, box) {
-          final w = box.maxWidth.clamp(0.0, 640 * (AppPlatform.isMobile ? 1.0 : scale));
+          final maxCard = 640 * (AppPlatform.isMobile ? 1.0 : scale);
+          final phone = box.maxWidth <= maxCard;
+          final w = phone ? box.maxWidth : maxCard;
           return Container(
             width: w,
-            height: HikkaBannerCarouselMetrics.heightFor(w),
+            height: phone ? HikkaBannerCarouselMetrics.phoneHeight(scale) : HikkaBannerCarouselMetrics.heightFor(w),
             decoration: BoxDecoration(color: uiTheme.bgElevated, borderRadius: uiTheme.borderRadius(18 * scale)),
           );
         },

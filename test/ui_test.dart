@@ -71,8 +71,8 @@ void main() {
       );
       await tester.pump();
       await tick(tester, 400);
-      expect(find.text('Anime4K'), findsOneWidget);
-      expect(find.text('Режим A+A (HQ)'), findsOneWidget);
+      // a short value reads as part of the title
+      expect(find.text('Anime4K · Режим A+A (HQ)'), findsOneWidget);
       expect(find.text('Ctrl'), findsOneWidget);
       expect(find.text('4'), findsOneWidget);
       await shot(tester, 'osd_anime4k');
@@ -80,8 +80,8 @@ void main() {
       msg.value = const OsdMessage(icon: Symbols.volume_up_rounded, title: 'Гучність', detail: '65%', progress: 0.65);
       await tester.pump();
       await tick(tester, 400);
-      expect(find.text('Гучність'), findsOneWidget);
-      expect(find.text('Anime4K'), findsNothing);
+      expect(find.text('Гучність · 65%'), findsOneWidget);
+      expect(find.textContaining('Anime4K'), findsNothing);
       await shot(tester, 'osd_volume');
 
       msg.value = const OsdMessage(
@@ -92,6 +92,8 @@ void main() {
       );
       await tester.pump();
       await tick(tester, 400);
+      // a long value goes under the title in grey
+      expect(find.text('Anime4K вимкнено'), findsOneWidget);
       await shot(tester, 'osd_error');
 
       msg.value = null;
@@ -367,12 +369,12 @@ void main() {
       await openSettings(tester);
       expect(find.text('Anime4K'), findsOneWidget);
       expect(find.text('Гарячі клавіші'), findsOneWidget);
+      await shot(tester, 'settings_menu_desktop');
       expect(tester.takeException(), isNull);
     });
 
     Future<void> toggleA4k(WidgetTester tester) async {
-      final row = find.ancestor(of: find.text('Підвищує чіткість ліній і роздільність відео в реальному часі'), matching: find.byType(Row)).first;
-      await tester.tap(find.descendant(of: row, matching: find.byType(GestureDetector)).last);
+      await tester.tap(find.text('Підвищує чіткість ліній і роздільність відео в реальному часі'));
       await tick(tester);
     }
 
@@ -392,8 +394,8 @@ void main() {
       expect(a4kExpanded(tester), isTrue);
       expect(find.text('Режим A  ·  Відновлення та апскейл'), findsOneWidget);
       expect(find.text('Режим C+A  ·  C з додатковим відновленням'), findsOneWidget);
-      expect(find.text('Fast · Швидкий'), findsOneWidget);
-      expect(find.text('HQ · Висока якість'), findsOneWidget);
+      expect(find.text('Якість шейдерів'), findsOneWidget);
+      expect(find.text('Fast · Швидкий'), findsOneWidget, reason: 'у рядку видно поточне значення');
       expect(find.text('Не пропускати'), findsOneWidget);
       expect(find.text('Застосувати'), findsOneWidget);
       expect(tester.takeException(), isNull);
@@ -412,11 +414,16 @@ void main() {
       await tester.tap(find.text('Режим B+B  ·  B з другим проходом відновлення'));
       await tick(tester);
 
-      await tester.ensureVisible(find.text('HQ · Висока якість'));
+      // A value is chosen in a picker opened from its row
+      await tester.ensureVisible(find.text('Якість шейдерів'));
+      await tick(tester);
+      await tester.tap(find.text('Якість шейдерів'));
       await tick(tester);
       await tester.tap(find.text('HQ · Висока якість'));
       await tick(tester);
-      await tester.ensureVisible(find.text('від 1440p'));
+      await tester.ensureVisible(find.text('Вимикати для високої роздільності'));
+      await tick(tester);
+      await tester.tap(find.text('Вимикати для високої роздільності'));
       await tick(tester);
       await tester.tap(find.text('від 1440p'));
       await tick(tester);
@@ -467,7 +474,9 @@ void main() {
 
     testWidgets('вкладка Гарячі клавіші: схема, пошук, список, застосування', (tester) async {
       final c = await openSettings(tester);
-      await tester.tap(find.text('Гарячі клавіші').first);
+      await tester.ensureVisible(find.byKey(const ValueKey('settings-tab-8')));
+      await tick(tester, 300);
+      await tester.tap(find.byKey(const ValueKey('settings-tab-8')));
       await tick(tester, 500);
       expect(find.text('Схема клавіш'), findsOneWidget);
       expect(find.text('Усі комбінації'), findsOneWidget);
@@ -483,7 +492,7 @@ void main() {
       await tick(tester, 300);
       await settle(tester, () => c.keyScheme == KeyScheme.mpv);
 
-      await tester.enterText(find.byType(TextField), 'anime');
+      await tester.enterText(find.byType(TextField).last, 'anime'); // the first field is the settings search
       await tick(tester, 300);
       expect(find.text('Режим C+A'), findsOneWidget);
       expect(find.text('Пауза / відтворення'), findsNothing);
@@ -497,7 +506,9 @@ void main() {
       await tick(tester, 500);
       await toggleA4k(tester);
       await shot(tester, 'settings_a4k_light');
-      await tester.tap(find.text('Гарячі клавіші').first);
+      await tester.ensureVisible(find.byKey(const ValueKey('settings-tab-8')));
+      await tick(tester, 300);
+      await tester.tap(find.byKey(const ValueKey('settings-tab-8')));
       await tick(tester, 500);
       await shot(tester, 'settings_hotkeys_light');
       expect(tester.takeException(), isNull);

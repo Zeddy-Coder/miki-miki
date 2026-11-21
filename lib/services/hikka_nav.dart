@@ -32,7 +32,7 @@ enum HikkaTab {
   const HikkaTab(this.label);
 }
 
-enum HikkaRouteKind { notifications, anime, character, person, animeStaff, franchise, animeCharacters, collection, article, user, localLibrary, settings }
+enum HikkaRouteKind { notifications, anime, character, person, animeStaff, franchise, animeCharacters, collection, article, user, localLibrary, settings, admin, downloads, downloadShelf }
 
 /// A page opened over the root: anime, character, franchise, collection, article…
 class HikkaRoute {
@@ -172,8 +172,12 @@ class HikkaNav extends ChangeNotifier {
   /// Notifications: a page over the tab
   void openNotifications() => _push(HikkaRoute(HikkaRouteKind.notifications, 'notifications'));
 
-  void openPerson(String slug, {HikkaPerson? seed}) {
-    if (slug.isNotEmpty) _push(HikkaRoute(HikkaRouteKind.person, slug, seed: seed));
+  /// [roles] opens the voiced characters first (coming from a character's voice actors)
+  void openPerson(String slug, {HikkaPerson? seed, bool roles = false}) {
+    if (slug.isEmpty) return;
+    final route = HikkaRoute(HikkaRouteKind.person, slug, seed: seed);
+    if (roles) route.memo['tab'] = 'characters';
+    _push(route);
   }
 
   void openAnimeStaff(String slug, {HikkaAnime? seed}) {
@@ -197,9 +201,10 @@ class HikkaNav extends ChangeNotifier {
   VoidCallback? refreshAll;
 
   /// The tab from which the settings page opens (see `AppSettingsDialog.tab*`)
-  int settingsTab = 0;
+  /// null — the list of sections
+  int? settingsTab;
 
-  void openSettings({int tab = 0}) {
+  void openSettings({int? tab}) {
     settingsTab = tab;
     _push(HikkaRoute(HikkaRouteKind.settings, 'settings'));
   }
@@ -236,6 +241,25 @@ class HikkaNav extends ChangeNotifier {
 
   /// The old local media library (open a file, file history, playlists): hidden in developer settings
   void openLocalLibrary() => _push(HikkaRoute(HikkaRouteKind.localLibrary, 'local'));
+
+  /// The admin panel (only for the accounts the server knows as admins, see `AdminApi`)
+  void openAdmin() => _push(HikkaRoute(HikkaRouteKind.admin, 'admin'));
+
+  /// Downloaded episodes: what is on the device, what is downloading, the downloads' settings
+  void openDownloads() {
+    final top = this.top;
+    if (top != null && top.kind == HikkaRouteKind.downloads) return;
+    _push(HikkaRoute(HikkaRouteKind.downloads, 'downloads'));
+  }
+
+  /// One title's downloads in one dub (`<animeKey>|<groupId>`; the group id has its own `|` inside)
+  void openDownloadShelf(String animeKey, String groupId) => _push(HikkaRoute(HikkaRouteKind.downloadShelf, '$animeKey|$groupId'));
+
+  /// [openDownloadShelf]'s route back into its parts
+  static (String animeKey, String groupId) shelfOf(HikkaRoute r) {
+    final i = r.slug.indexOf('|');
+    return i < 0 ? (r.slug, '') : (r.slug.substring(0, i), r.slug.substring(i + 1));
+  }
 
   /// Link from a description: Hikka pages open here, the rest in the browser
   Future<void> openLink(String url) async {

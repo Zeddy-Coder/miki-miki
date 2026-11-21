@@ -206,6 +206,15 @@ class BackendClient {
     return status == 200;
   }
 
+  // ── Admin panel ─────────────────────────────────────────────────
+
+  /// The admin panel (`tools/backend/admin.ts`): [action] with its [fields] → (status, answer). The server learns who asks
+  /// from the Hikka token and answers only the accounts it knows as admins
+  Future<(int, Map<String, dynamic>)> admin(String hikkaToken, String action, [Map<String, Object?> fields = const {}]) async {
+    final (status, text) = await _authed('POST', 'admin', body: jsonEncode({...fields, 'action': action}), extra: {'x-hikka-auth': hikkaToken});
+    return (status, _json(text));
+  }
+
   // ── Banners ─────────────────────────────────────────────────────
 
   /// Title banners from the backend (it caches TMDB / AniList CDN addresses): MAL id → (address, color); `null` as a value means
@@ -238,6 +247,41 @@ class BackendClient {
       return null;
     } catch (e) {
       AppLog.w('бекенд', 'банери: ${e.runtimeType}: $e');
+      return null;
+    }
+  }
+
+  // ── Episode guide ──────────────────────────────────────────────
+
+  /// Where our Hosting serves what its CDN keeps (MoonAnime's stills made small: `guideThumb`)
+  static String get hostingOrigin => fallbackBaseUrl.substring(0, fallbackBaseUrl.length - '/api'.length);
+
+  bool _guideMissing = false;
+
+  /// MoonAnime's episode guide of MyAnimeList's title [mal] through the backend (`guide`, tools/backend/guide.ts:
+  /// MoonAnime's key stays there): `eps` by episode number — `t` title, `d` seconds, `a` description, `i` the small
+  /// still's path, `f` / `r` filler / recap. Null when the backend cannot be reached or has no `guide` function yet
+  Future<Map<String, dynamic>?> guide(int mal) async {
+    if (_guideMissing) return null;
+    try {
+      final (status, text) = await _authed('GET', 'guide?mal=$mal');
+      if (status == 404) {
+        // Not deployed yet: not asked again until the app starts anew
+        _guideMissing = true;
+        AppLog.w('бекенд', 'функції guide немає — назв і кадрів MoonAnime не буде (tools/backend/guide.ts)');
+        return null;
+      }
+      final j = _json(text);
+      if (status != 200 || j['eps'] is! Map) {
+        AppLog.w('бекенд', 'гід по серіях: відповідь $status');
+        return null;
+      }
+      return j;
+    } on BackendException catch (e) {
+      AppLog.w('бекенд', 'гід по серіях: ${e.message}');
+      return null;
+    } catch (e) {
+      AppLog.w('бекенд', 'гід по серіях: ${e.runtimeType}: $e');
       return null;
     }
   }

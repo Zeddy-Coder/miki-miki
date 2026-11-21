@@ -1,4 +1,3 @@
-import 'dart:ui' show FontFeature;
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:media_kit/media_kit.dart';
@@ -10,6 +9,9 @@ import '../services/thumbnail_service.dart';
 import '../utils/formatters.dart';
 import 'app_animation_kit.dart';
 import 'app_media_thumbnail.dart';
+import 'app_tones.dart';
+import 'design_kit.dart';
+import 'line_icons.dart';
 import 'remote_panel.dart';
 import 'app_ui_kit.dart';
 
@@ -137,12 +139,12 @@ class _SidePanelState extends State<SidePanel> {
 
   Widget _chapterThumb(double scale, int index, Duration start, bool isCurrent) {
     return Container(
-      width: 96 * scale,
-      height: 54 * scale,
+      width: 88 * scale,
+      height: 50 * scale,
       decoration: BoxDecoration(
-        color: uiTheme.bgElevated,
-        borderRadius: uiTheme.borderRadius(6 * scale),
-        border: Border.all(color: isCurrent ? uiTheme.accentBorder : uiTheme.colors.borderSubtle),
+        color: AppTones.plate,
+        borderRadius: uiTheme.borderRadius(8 * scale),
+        border: isCurrent ? Border.all(color: uiTheme.accentColor, width: 1.5) : null,
       ),
       clipBehavior: Clip.antiAlias,
       child: Stack(
@@ -156,40 +158,73 @@ class _SidePanelState extends State<SidePanel> {
                 expand: true,
                 child: bytes != null
                     ? Image.memory(bytes, key: ValueKey('f$index'), fit: BoxFit.cover, gaplessPlayback: true)
-                    : Center(
-                        key: ValueKey('p$index'),
-                        child: Icon(
-                          isCurrent ? Symbols.equalizer_rounded : Symbols.auto_stories_rounded,
-                          color: isCurrent ? uiTheme.accentColor : uiTheme.textDarkMuted,
-                          size: 20 * scale,
-                          weight: 300,
-                          opticalSize: 24,
-                        ),
-                      ),
+                    : Center(key: ValueKey('p$index'), child: LineIconView(LineIcon.chapters, size: 20 * scale, color: AppTones.chevron)),
               );
             },
           ),
-          Positioned(
-            top: 4 * scale,
-            left: 4 * scale,
-            child: Container(
-              padding: EdgeInsets.symmetric(horizontal: 5 * scale, vertical: 1.5 * scale),
-              decoration: BoxDecoration(
-                color: isCurrent ? uiTheme.accentColor : Colors.black.withValues(alpha: 0.72),
-                borderRadius: uiTheme.borderRadius(4 * scale),
-              ),
-              child: Text(
-                '${index + 1}',
-                style: TextStyle(
-                  fontFamily: 'Arial',
-                  color: isCurrent ? uiTheme.onAccent : Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 10 * scale,
-                ),
-              ),
+          Positioned(top: 4 * scale, left: 4 * scale, child: _badge(scale, '${index + 1}')),
+        ],
+      ),
+    );
+  }
+
+  /// A small dark number on a picture ("3", "#2")
+  Widget _badge(double scale, String text) => Container(
+        padding: EdgeInsets.symmetric(horizontal: 5 * scale, vertical: 1.5 * scale),
+        decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.72), borderRadius: uiTheme.borderRadius(5 * scale)),
+        child: Text(text, style: _text(10 * scale, color: Colors.white, weight: FontWeight.w700)),
+      );
+
+  static TextStyle _text(double size, {Color? color, FontWeight weight = FontWeight.normal, double? height, List<FontFeature>? features}) => TextStyle(
+        fontFamily: 'Arial',
+        fontFamilyFallback: const ['MikiSans'],
+        color: color ?? uiTheme.textPrimary,
+        fontSize: size,
+        fontWeight: weight,
+        height: height,
+        fontFeatures: features,
+      );
+
+  /// A flat list row in the style of the app's menus: a soft highlight under the finger or cursor, nothing else
+  Widget _flatRow(double scale, {required Widget child, VoidCallback? onTap, Key? key}) => Material(
+        key: key,
+        type: MaterialType.transparency,
+        child: InkWell(
+          onTap: onTap,
+          splashColor: Colors.transparent,
+          highlightColor: uiTheme.touchHighlight,
+          hoverColor: uiTheme.hoverOverlay,
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: (widget.sheet ? 14 : 10) * scale, vertical: 7 * scale),
+            child: child,
+          ),
+        ),
+      );
+
+  /// A small line-icon button in a row (loop a chapter, move or remove a file); [active] — in the accent
+  Widget _rowButton(double scale, LineIcon icon, String label, VoidCallback? onTap, {bool active = false, Key? key}) {
+    final double size = widget.sheet ? 44 : 30 * scale;
+    final enabled = onTap != null;
+    return Semantics(
+      button: true,
+      enabled: enabled,
+      selected: active,
+      label: label,
+      child: Tooltip(
+        message: label,
+        child: InkResponse(
+          key: key,
+          onTap: onTap,
+          radius: size * 0.55,
+          highlightColor: uiTheme.hoverOverlay,
+          splashColor: uiTheme.hoverOverlay,
+          child: SizedBox.square(
+            dimension: size,
+            child: Center(
+              child: LineIconView(icon, size: (widget.sheet ? 20 : 17) * scale, color: active ? uiTheme.accentColor : (enabled ? AppTones.rowIcon : AppTones.chevron)),
             ),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -207,39 +242,34 @@ class _SidePanelState extends State<SidePanel> {
   @override
   Widget build(BuildContext context) {
     final scale = widget.scale;
+    final rd = widget.remote;
+    // Site episodes: the "Перегляд" panel draws its own header (its pages have their own titles)
+    final Widget body = widget.type == SidePanelType.episodes && rd != null && rd.active
+        ? RemotePanelBody(scale: scale, driver: rd, sheet: widget.sheet, onEpisodeSelected: widget.onEpisodeSelected, onClose: widget.onClose)
+        : Column(
+            children: [
+              AppPanelHeader(scale: scale, title: _getTitle(), onClose: widget.onClose),
+              Expanded(child: _buildContent(scale)),
+            ],
+          );
 
-    if (widget.sheet) {
-      return Column(
-        children: [
-          AppPanelHeader(scale: scale, title: _getTitle(), onClose: widget.onClose),
-          Expanded(child: _buildContent(scale)),
-        ],
-      );
-    }
+    if (widget.sheet) return body;
 
     return AppPanelSurface(
       scale: scale,
       width: 380 * scale,
-      radius: 14,
+      radius: 16,
       shadowOffset: const Offset(-4, 0),
       margin: EdgeInsets.only(top: 8 * scale, bottom: 8 * scale, right: 8 * scale),
-      child: Column(
-        children: [
-          AppPanelHeader(scale: scale, title: _getTitle(), onClose: widget.onClose),
-          Expanded(child: _buildContent(scale)),
-        ],
-      ),
+      child: body,
     );
   }
 
   String _getTitle() {
     switch (widget.type) {
-      case SidePanelType.chapters: return 'Розділи та глави (${widget.chapters.length})';
-      case SidePanelType.episodes:
-        final rd = widget.remote;
-        if (rd != null && rd.active) return 'Серії (${rd.session!.entries.length})';
-        return 'Черга відтворення (${widget.playlistItems.length})';
-      case SidePanelType.info: return 'Інформація про медіа';
+      case SidePanelType.chapters: return widget.chapters.isEmpty ? 'Розділи' : 'Розділи · ${widget.chapters.length}';
+      case SidePanelType.episodes: return widget.playlistItems.isEmpty ? 'Черга' : 'Черга · ${widget.playlistItems.length}';
+      case SidePanelType.info: return 'Про відео';
     }
   }
 
@@ -247,10 +277,6 @@ class _SidePanelState extends State<SidePanel> {
     switch (widget.type) {
       case SidePanelType.chapters: return _buildChaptersList(scale);
       case SidePanelType.episodes:
-        final rd = widget.remote;
-        if (rd != null && rd.active) {
-          return RemotePanelBody(scale: scale, driver: rd, sheet: widget.sheet, onEpisodeSelected: widget.onEpisodeSelected);
-        }
         return _buildEpisodesList(scale);
       case SidePanelType.info: return _buildInfoTab(scale);
     }
@@ -287,7 +313,7 @@ class _SidePanelState extends State<SidePanel> {
           scale,
           ListView.builder(
             controller: _scrollController,
-            padding: EdgeInsets.only(left: 8 * scale, right: 8 * scale, bottom: 8 * scale),
+            padding: EdgeInsets.only(bottom: 8 * scale),
             itemCount: widget.chapters.length,
             itemBuilder: (context, index) {
               final ch = widget.chapters[index];
@@ -295,79 +321,48 @@ class _SidePanelState extends State<SidePanel> {
 
               final Duration chEnd = (index + 1 < widget.chapters.length) ? widget.chapters[index + 1].startTime : widget.player.state.duration;
               final Duration len = chEnd - ch.startTime;
+              final bool looping = _loopChapter == index;
               return KeyedSubtree(
                 key: isCurrent ? _currentRowKey : ValueKey('ch$index'),
-                child: AppSelectableSurface(
-                scale: scale,
-                isSelected: isCurrent,
-                padding: EdgeInsets.all(8 * scale),
-                onTap: () => widget.onChapterSelected(ch.startTime),
-                child: Row(
-                  children: [
-                    _chapterThumb(scale, index, ch.startTime, isCurrent),
-                    SizedBox(width: 12 * scale),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            AppFormatters.translateChapterTitle(ch.title),
-                            style: TextStyle(
-                              fontFamily: 'Arial',
-                              color: isCurrent ? uiTheme.accentColor : uiTheme.textPrimary,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 13.5 * scale,
-                              height: 1.25,
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          if (len > Duration.zero) ...[
-                            SizedBox(height: 4 * scale),
+                child: _flatRow(
+                  scale,
+                  onTap: () => widget.onChapterSelected(ch.startTime),
+                  child: Row(
+                    children: [
+                      _chapterThumb(scale, index, ch.startTime, isCurrent),
+                      SizedBox(width: 12 * scale),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
                             Text(
-                              isCurrent ? 'Зараз відтворюється' : 'Тривалість ${AppFormatters.formatTime(len)}',
-                              style: TextStyle(
-                                fontFamily: 'Arial',
-                                color: isCurrent ? uiTheme.accentColor.withValues(alpha: 0.85) : uiTheme.textDarkMuted,
-                                fontSize: 11 * scale,
-                                fontWeight: FontWeight.w500,
-                              ),
+                              AppFormatters.translateChapterTitle(ch.title),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: _text((widget.sheet ? 15 : 14) * scale, weight: isCurrent ? FontWeight.w700 : FontWeight.normal, height: 1.25),
+                            ),
+                            SizedBox(height: 2 * scale),
+                            Text(
+                              isCurrent ? 'Зараз · ${AppFormatters.formatTime(ch.startTime)}' : (len > Duration.zero ? '${AppFormatters.formatTime(ch.startTime)} · ${AppFormatters.formatTime(len)}' : AppFormatters.formatTime(ch.startTime)),
+                              style: _text(12.5 * scale, color: isCurrent ? uiTheme.accentColor : AppTones.rowSub, features: const [FontFeature.tabularFigures()]),
                             ),
                           ],
-                        ],
-                      ),
-                    ),
-                    SizedBox(width: 8 * scale),
-                    _iconTile(
-                      scale,
-                      Symbols.repeat_one_rounded,
-                      active: _loopChapter == index,
-                      tooltip: _loopChapter == index ? 'Вимкнути повтор розділу' : 'Повторювати розділ',
-                      onTap: () => _toggleLoop(index),
-                      size: widget.sheet ? 40 : 30,
-                    ),
-                    SizedBox(width: 6 * scale),
-                    Container(
-                      padding: EdgeInsets.symmetric(horizontal: 8 * scale, vertical: 4 * scale),
-                      decoration: BoxDecoration(
-                        color: isCurrent ? uiTheme.accentColor : uiTheme.bgElevated,
-                        borderRadius: uiTheme.borderRadius(6 * scale),
-                      ),
-                      child: Text(
-                        AppFormatters.formatTime(ch.startTime),
-                        style: TextStyle(
-                          fontFamily: 'Arial',
-                          color: isCurrent ? uiTheme.onAccent : uiTheme.textPrimary,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 11.5 * scale,
-                          fontFeatures: const [FontFeature.tabularFigures()],
                         ),
                       ),
-                    ),
-                  ],
+                      SizedBox(width: 4 * scale),
+                      _rowButton(
+                        scale,
+                        LineIcon.repeat,
+                        looping ? 'Вимкнути повтор розділу' : 'Повторювати розділ',
+                        () => _toggleLoop(index),
+                        active: looping,
+                        key: ValueKey('chapter-loop-$index'),
+                      ),
+                    ],
+                  ),
                 ),
-              ));
+              );
             },
           ),
         );
@@ -384,40 +379,10 @@ class _SidePanelState extends State<SidePanel> {
     return -1;
   }
 
-  /// A small square tile button for panels
-  Widget _iconTile(double scale, IconData icon, {required VoidCallback onTap, bool active = false, String? tooltip, double size = 30}) {
-    final tile = Material(
-      color: active ? uiTheme.accentColor.withValues(alpha: 0.18) : uiTheme.bgElevated,
-      borderRadius: uiTheme.borderRadius(8 * scale),
-      child: InkWell(
-        borderRadius: uiTheme.borderRadius(8 * scale),
-        onTap: onTap,
-        child: Container(
-          width: size * scale,
-          height: size * scale,
-          decoration: BoxDecoration(
-            borderRadius: uiTheme.borderRadius(8 * scale),
-            border: Border.all(color: active ? uiTheme.accentBorder : uiTheme.colors.borderSubtle),
-          ),
-          child: Icon(icon, size: 17 * scale, color: active ? uiTheme.accentColor : uiTheme.textDarkMuted, weight: 300, opticalSize: 24),
-        ),
-      ),
-    );
-    return tooltip == null ? tile : Tooltip(message: tooltip, child: tile);
-  }
-
-  IconData _modeIcon(PlaylistMode m) {
-    switch (m) {
-      case PlaylistMode.single: return Symbols.repeat_one_rounded;
-      case PlaylistMode.loop: return Symbols.repeat_rounded;
-      case PlaylistMode.none: return Symbols.repeat_rounded;
-    }
-  }
-
   String _modeTip(PlaylistMode m) {
     switch (m) {
-      case PlaylistMode.single: return 'Повтор: поточне відео';
-      case PlaylistMode.loop: return 'Повтор: уся черга';
+      case PlaylistMode.single: return 'Повтор відео';
+      case PlaylistMode.loop: return 'Повтор черги';
       case PlaylistMode.none: return 'Без повтору';
     }
   }
@@ -430,37 +395,44 @@ class _SidePanelState extends State<SidePanel> {
   }
 
   Widget _buildEpisodesList(double scale) {
+    final many = widget.playlistItems.length > 1;
     return Column(
       children: [
         Padding(
-          padding: EdgeInsets.fromLTRB(8 * scale, 0, 8 * scale, 8 * scale),
+          padding: EdgeInsets.fromLTRB((widget.sheet ? 20 : 16) * scale, 2 * scale, (widget.sheet ? 20 : 16) * scale, 8 * scale),
           child: Row(
             children: [
-              Expanded(
-                child: AppSecondaryButton(
-                  scale: scale,
-                  label: 'Додати до черги',
-                  icon: Symbols.add_circle_rounded,
-                  onTap: widget.onAddMedia,
-                ),
+              AppPlate(
+                key: const ValueKey('queue-add'),
+                scale: scale,
+                label: 'Додати',
+                height: widget.sheet ? 40 : 34,
+                radius: 10,
+                leading: (c) => LineIconView(LineIcon.plus, size: 17 * scale, color: c),
+                onTap: widget.onAddMedia,
               ),
               SizedBox(width: 8 * scale),
-              StreamBuilder<PlaylistMode>(
-                stream: widget.player.stream.playlistMode,
-                initialData: widget.player.state.playlistMode,
-                builder: (context, snap) {
-                  final m = snap.data ?? PlaylistMode.none;
-                  return _iconTile(scale, _modeIcon(m), active: m != PlaylistMode.none, tooltip: _modeTip(m), onTap: _cycleMode, size: widget.sheet ? 42 : 36);
-                },
+              Flexible(
+                child: StreamBuilder<PlaylistMode>(
+                  stream: widget.player.stream.playlistMode,
+                  initialData: widget.player.state.playlistMode,
+                  builder: (context, snap) {
+                    final m = snap.data ?? PlaylistMode.none;
+                    return AppPlate(
+                      key: const ValueKey('queue-repeat'),
+                      scale: scale,
+                      label: _modeTip(m),
+                      height: widget.sheet ? 40 : 34,
+                      radius: 10,
+                      selected: m != PlaylistMode.none,
+                      leading: (c) => LineIconView(LineIcon.repeat, size: 17 * scale, color: m != PlaylistMode.none ? uiTheme.accentColor : c),
+                      onTap: _cycleMode,
+                    );
+                  },
+                ),
               ),
-              SizedBox(width: 6 * scale),
-              _iconTile(
-                scale,
-                Symbols.delete_sweep_rounded,
-                tooltip: 'Очистити чергу (крім поточного)',
-                onTap: widget.playlistItems.length > 1 ? widget.onQueueClear : () {},
-                size: widget.sheet ? 42 : 36,
-              ),
+              const Spacer(),
+              _rowButton(scale, LineIcon.trash, 'Очистити чергу (крім поточного)', many ? widget.onQueueClear : null, key: const ValueKey('queue-clear')),
             ],
           ),
         ),
@@ -472,112 +444,71 @@ class _SidePanelState extends State<SidePanel> {
                   ReorderableListView.builder(
                     scrollController: _scrollController,
                     buildDefaultDragHandles: false,
-                    padding: EdgeInsets.only(left: 8 * scale, right: 8 * scale, bottom: 8 * scale),
+                    padding: EdgeInsets.only(bottom: 8 * scale),
                     itemCount: widget.playlistItems.length,
-                    proxyDecorator: (child, i, anim) => Material(color: Colors.transparent, child: child),
+                    proxyDecorator: (child, i, anim) => Material(color: uiTheme.bgSurface, elevation: 6, child: child),
                     onReorderItem: widget.onQueueReorder,
                     itemBuilder: (context, index) {
                       final item = widget.playlistItems[index];
                       final bool isCurrent = index == widget.currentPlaylistIndex;
                       final title = item.extras?['title'] ?? AppFormatters.cleanMediaTitle(item.uri);
-
                       final bool isFirst = index == 0;
                       final bool isLast = index == widget.playlistItems.length - 1;
-                      final bool many = widget.playlistItems.length > 1;
-                      final radius = uiTheme.borderRadius(10 * scale);
 
-                      // A row in the same look as the language priority list in settings
-                      return Container(
+                      return KeyedSubtree(
                         key: ObjectKey(item),
-                        margin: EdgeInsets.only(bottom: 6 * scale),
-                        decoration: BoxDecoration(
-                          color: isCurrent ? uiTheme.accentWash : uiTheme.bgSurface,
-                          borderRadius: radius,
-                          border: Border.all(color: isCurrent ? uiTheme.accentBorder : uiTheme.borderSubtle, width: 1.0),
-                        ),
-                        child: Material(
-                          color: Colors.transparent,
-                          borderRadius: radius,
-                          child: InkWell(
-                            borderRadius: radius,
-                            splashColor: Colors.transparent,
-                            highlightColor: uiTheme.touchHighlight,
-                            hoverColor: uiTheme.hoverOverlay,
-                            onTap: () => widget.onEpisodeSelected(index),
-                            child: Padding(
-                              padding: EdgeInsets.symmetric(horizontal: 8 * scale, vertical: 7 * scale),
-                              child: Row(
-                                children: [
-                                  AppDragHandle(scale: scale, index: index),
-                                  SizedBox(width: 2 * scale),
-                                  _buildThumb(scale, index, isCurrent, item.uri),
-                                  SizedBox(width: 10 * scale),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        Text(
-                                          title,
-                                          style: TextStyle(
-                                            fontFamily: 'Arial',
-                                            color: isCurrent ? uiTheme.accentColor : uiTheme.textPrimary,
-                                            fontWeight: isCurrent ? FontWeight.w600 : FontWeight.w500,
-                                            fontSize: 13 * scale,
-                                            height: 1.25,
-                                          ),
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                        if (isCurrent) ...[
-                                          SizedBox(height: 4 * scale),
-                                          Text(
-                                            'Зараз відтворюється',
-                                            style: TextStyle(
-                                              fontFamily: 'Arial',
-                                              color: uiTheme.accentColor.withValues(alpha: 0.85),
-                                              fontSize: 11 * scale,
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                          ),
-                                        ],
-                                      ],
-                                    ),
+                        child: _flatRow(
+                          scale,
+                          key: ValueKey('queue-$index'),
+                          onTap: () => widget.onEpisodeSelected(index),
+                          child: Row(
+                            children: [
+                              ReorderableDragStartListener(
+                                index: index,
+                                child: MouseRegion(
+                                  cursor: SystemMouseCursors.grab,
+                                  child: Padding(
+                                    padding: EdgeInsets.symmetric(horizontal: (widget.sheet ? 6 : 2) * scale, vertical: 12 * scale),
+                                    child: LineIconView(LineIcon.grip, size: 18 * scale, color: AppTones.chevron, stroke: 2.6),
                                   ),
-                                  if (many && !widget.sheet) ...[
-                                    SizedBox(width: 4 * scale),
-                                    Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        AppRowIconButton(
-                                          scale: scale,
-                                          icon: Symbols.keyboard_arrow_up_rounded,
-                                          onTap: isFirst ? null : () => widget.onQueueReorder(index, index - 1),
-                                        ),
-                                        SizedBox(height: 4 * scale),
-                                        AppRowIconButton(
-                                          scale: scale,
-                                          icon: Symbols.keyboard_arrow_down_rounded,
-                                          onTap: isLast ? null : () => widget.onQueueReorder(index, index + 1),
-                                        ),
-                                      ],
-                                    ),
-                                    SizedBox(width: 8 * scale),
-                                  ],
-                                  if (!isCurrent && many)
-                                    AppRowIconButton(
-                                      scale: scale,
-                                      icon: Symbols.close_rounded,
-                                      muted: true,
-                                      size: 17,
-                                      onTap: () => widget.onQueueRemove(index),
-                                    )
-                                  else
-                                    SizedBox(width: widget.sheet ? AppRowIconButton.touchSize : 17 * scale),
-                                  SizedBox(width: 2 * scale),
-                                ],
+                                ),
                               ),
-                            ),
+                              SizedBox(width: 4 * scale),
+                              _buildThumb(scale, index, isCurrent, item.uri),
+                              SizedBox(width: 12 * scale),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                      title,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: _text((widget.sheet ? 15 : 14) * scale, weight: isCurrent ? FontWeight.w700 : FontWeight.normal, height: 1.25),
+                                    ),
+                                    if (isCurrent) ...[
+                                      SizedBox(height: 2 * scale),
+                                      Text('Зараз відтворюється', style: _text(12.5 * scale, color: uiTheme.accentColor)),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                              if (many && !widget.sheet) ...[
+                                SizedBox(width: 4 * scale),
+                                Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    _rowButton(scale, LineIcon.chevronUp, 'Вище', isFirst ? null : () => widget.onQueueReorder(index, index - 1)),
+                                    _rowButton(scale, LineIcon.chevronDown, 'Нижче', isLast ? null : () => widget.onQueueReorder(index, index + 1)),
+                                  ],
+                                ),
+                              ],
+                              if (!isCurrent && many)
+                                _rowButton(scale, LineIcon.close, 'Прибрати з черги', () => widget.onQueueRemove(index), key: ValueKey('queue-remove-$index'))
+                              else
+                                SizedBox(width: widget.sheet ? 44 : 30 * scale),
+                            ],
                           ),
                         ),
                       );
@@ -593,39 +524,14 @@ class _SidePanelState extends State<SidePanel> {
     return AppMediaThumbnail(
       uri: uri,
       scale: scale,
-      width: 96 * scale,
-      height: 54 * scale,
-      radius: 6,
-      borderColor: isCurrent ? uiTheme.accentBorder : uiTheme.colors.borderSubtle,
-      fallback: Icon(
-        isCurrent ? Symbols.equalizer_rounded : Symbols.movie_rounded,
-        color: isCurrent ? uiTheme.accentColor : uiTheme.textDarkMuted,
-        size: 22 * scale,
-        weight: 300,
-        opticalSize: 24,
-      ),
+      width: 88 * scale,
+      height: 50 * scale,
+      radius: 8,
+      borderColor: isCurrent ? uiTheme.accentColor : Colors.transparent,
+      fallback: Center(child: LineIconView(LineIcon.play, size: 18 * scale, color: isCurrent ? uiTheme.accentColor : AppTones.chevron)),
       overlay: Stack(
         children: [
-          Positioned(
-            top: 4 * scale,
-            left: 4 * scale,
-            child: Container(
-              padding: EdgeInsets.symmetric(horizontal: 5 * scale, vertical: 1.5 * scale),
-              decoration: BoxDecoration(
-                color: isCurrent ? uiTheme.accentColor : Colors.black.withValues(alpha: 0.72),
-                borderRadius: uiTheme.borderRadius(4 * scale),
-              ),
-              child: Text(
-                '#${index + 1}',
-                style: TextStyle(
-                  fontFamily: 'Arial',
-                  color: isCurrent ? uiTheme.onAccent : Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 10 * scale,
-                ),
-              ),
-            ),
-          ),
+          Positioned(top: 4 * scale, left: 4 * scale, child: _badge(scale, '${index + 1}')),
           if (isCurrent)
             Positioned(
               bottom: 4 * scale,
@@ -636,22 +542,7 @@ class _SidePanelState extends State<SidePanel> {
                 builder: (context, snapshot) {
                   final dur = snapshot.data ?? Duration.zero;
                   if (dur == Duration.zero) return const SizedBox.shrink();
-                  return Container(
-                    padding: EdgeInsets.symmetric(horizontal: 4 * scale, vertical: 1 * scale),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.72),
-                      borderRadius: uiTheme.borderRadius(3 * scale),
-                    ),
-                    child: Text(
-                      AppFormatters.formatTime(dur),
-                      style: TextStyle(
-                        fontFamily: 'Arial',
-                        color: Colors.white,
-                        fontWeight: FontWeight.w500,
-                        fontSize: 9.5 * scale,
-                      ),
-                    ),
-                  );
+                  return _badge(scale, AppFormatters.formatTime(dur));
                 },
               ),
             ),
@@ -669,9 +560,9 @@ class _SidePanelState extends State<SidePanel> {
       scale,
       SingleChildScrollView(
         controller: _scrollController,
-        padding: EdgeInsets.only(left: 8 * scale, right: 8 * scale, bottom: 8 * scale),
+        padding: EdgeInsets.only(bottom: 8 * scale),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _buildInfoSection(
               scale,
@@ -717,54 +608,26 @@ class _SidePanelState extends State<SidePanel> {
   }
 
   Widget _buildInfoSection(double scale, {required String title, required List<Widget> items}) {
-    return Container(
-      width: double.infinity,
-      margin: EdgeInsets.only(bottom: 8 * scale),
-      padding: EdgeInsets.all(12 * scale),
-      decoration: BoxDecoration(
-        color: uiTheme.bgElevated,
-        borderRadius: uiTheme.borderRadius(10 * scale),
-        border: Border.all(color: uiTheme.colors.borderSubtle),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: TextStyle(
-              fontFamily: 'Arial',
-              color: uiTheme.accentColor,
-              fontSize: 12 * scale,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          SizedBox(height: 8 * scale),
-          ...items,
-        ],
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        AppGroupCaption(scale: scale, text: title, inset: (widget.sheet ? 20 : 16) * scale, top: 10),
+        ...items,
+        SizedBox(height: 4 * scale),
+      ],
     );
   }
 
   Widget _buildInfoRow(double scale, String label, String value) {
+    final pad = (widget.sheet ? 20 : 16) * scale;
     return Padding(
-      padding: EdgeInsets.symmetric(vertical: 3 * scale),
+      padding: EdgeInsets.fromLTRB(pad, 5 * scale, pad, 5 * scale),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: 85 * scale,
-            child: Text(
-              label,
-              style: TextStyle(fontFamily: 'Arial', color: uiTheme.textMuted, fontSize: 11.5 * scale),
-            ),
-          ),
+          SizedBox(width: 92 * scale, child: Text(label, style: _text(13 * scale, color: AppTones.rowSub, height: 1.35))),
           Expanded(
-            child: Text(
-              value,
-              style: TextStyle(fontFamily: 'Arial', color: uiTheme.textPrimary, fontSize: 12 * scale, fontWeight: FontWeight.w400),
-              overflow: TextOverflow.ellipsis,
-              maxLines: 2,
-            ),
+            child: Text(value, maxLines: 3, overflow: TextOverflow.ellipsis, style: _text(13.5 * scale, height: 1.35)),
           ),
         ],
       ),

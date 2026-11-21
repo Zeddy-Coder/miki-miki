@@ -300,7 +300,10 @@ class HikkaOst {
   final String? author;
   final String type; // opening | ending
 
-  const HikkaOst({required this.index, this.title, this.author, required this.type});
+  /// The song on Spotify (a track link), when Hikka knows it
+  final String? spotify;
+
+  const HikkaOst({required this.index, this.title, this.author, required this.type, this.spotify});
 
   bool get isOpening => type == 'opening';
 
@@ -309,6 +312,7 @@ class HikkaOst {
         title: _str(j['title']),
         author: _str(j['author']),
         type: _str(j['ost_type']) ?? 'opening',
+        spotify: _str(j['spotify']),
       );
 }
 
@@ -837,20 +841,49 @@ class HikkaCharacterVoice {
       final name = v.person.name;
       if (!people.contains(name)) people.add(name);
     }
-    const preferred = ['ja', 'uk', 'en'];
-    int rank(String key) {
-      final i = preferred.indexOf(key);
-      if (i != -1) return i;
-      if (key.isEmpty) return 30; // language not specified: goes last
-      return languages.containsKey(key) ? 10 : 20; // unknown codes come after known languages
-    }
-
     final keys = byKey.keys.toList()
       ..sort((a, b) {
-        final d = rank(a).compareTo(rank(b));
+        final d = _languageRank(a).compareTo(_languageRank(b));
         return d != 0 ? d : _compareUk(labels[a]!, labels[b]!);
       });
     return [for (final k in keys) (labels[k]!, byKey[k]!)];
+  }
+
+  /// The voice actors one by one, languages in the order of [groupByLanguage]: a person who voices the character in
+  /// several anime appears once per language, with the number of those anime
+  static List<({HikkaPerson person, String language, int anime})> actors(Iterable<HikkaCharacterVoice> voices) {
+    final order = <String>[];
+    final people = <String, HikkaPerson>{};
+    final labels = <String, String>{};
+    final keys = <String, String>{};
+    final counts = <String, int>{};
+    for (final v in voices) {
+      final id = '${v.languageKey}|${v.person.slug}';
+      if (!people.containsKey(id)) {
+        order.add(id);
+        people[id] = v.person;
+        labels[id] = v.languageLabel;
+        keys[id] = v.languageKey;
+      }
+      counts[id] = (counts[id] ?? 0) + 1;
+    }
+    final sorted = [...order]
+      ..sort((a, b) {
+        final d = _languageRank(keys[a]!).compareTo(_languageRank(keys[b]!));
+        if (d != 0) return d;
+        if (keys[a] != keys[b]) return _compareUk(labels[a]!, labels[b]!);
+        return order.indexOf(a).compareTo(order.indexOf(b));
+      });
+    return [for (final id in sorted) (person: people[id]!, language: labels[id]!, anime: counts[id]!)];
+  }
+
+  /// Japanese, Ukrainian, English first; then known languages, unknown codes after them, the unspecified one last
+  static int _languageRank(String key) {
+    const preferred = ['ja', 'uk', 'en'];
+    final i = preferred.indexOf(key);
+    if (i != -1) return i;
+    if (key.isEmpty) return 30;
+    return languages.containsKey(key) ? 10 : 20;
   }
 
   static const String _alphabet = 'абвгґдеєжзиіїйклмнопрстуфхцчшщьюя';
@@ -995,8 +1028,8 @@ class HikkaSearchFilters {
   /// Sorting of user lists (`POST /watch/{user}/list`): the entry's own fields and the title's fields
   static const String defaultListSort = 'watch_updated';
   static const List<HikkaSortOption> listSorts = [
-    HikkaSortOption('watch_updated', 'Нещодавно оновлені'),
-    HikkaSortOption('watch_created', 'Дата додавання'),
+    HikkaSortOption('watch_updated', 'Оновлені'),
+    HikkaSortOption('watch_created', 'Додані'),
     HikkaSortOption('watch_score', 'Моя оцінка', secondary: ['watch_created']),
     HikkaSortOption('score', 'Оцінка MAL', secondary: ['scored_by']),
     HikkaSortOption('start_date', 'Дата виходу'),

@@ -278,25 +278,25 @@ void main() {
 
     testWidgets('підписи часу: початок, оновлення раз на секунду', (tester) async {
       final (p, _) = await mount(tester, at: const Duration(minutes: 20));
-      expect(find.text('20:00'), findsOneWidget);
-      expect(find.text('1:30:00'), findsOneWidget);
+      // one label "position / duration" in the dock
+      expect(find.text('20:00 / 1:30:00'), findsOneWidget);
 
       await play(tester, p, const Duration(milliseconds: 1100));
-      expect(find.text('20:01'), findsOneWidget);
-      expect(find.text('20:00'), findsNothing);
+      expect(find.text('20:01 / 1:30:00'), findsOneWidget);
+      expect(find.text('20:00 / 1:30:00'), findsNothing);
 
       await play(tester, p, const Duration(seconds: 3));
-      expect(find.text('20:04'), findsOneWidget);
+      expect(find.text('20:04 / 1:30:00'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
     testWidgets('тривалість оновлюється, коли файл змінився', (tester) async {
       final (p, _) = await mount(tester);
-      expect(find.text('1:30:00'), findsOneWidget);
+      expect(find.textContaining('/ 1:30:00'), findsOneWidget);
       p.setDuration(const Duration(minutes: 24, seconds: 5));
       await tester.pump(const Duration(milliseconds: 16));
-      expect(find.text('24:05'), findsWidgets); // top bar + bottom bar
-      expect(find.text('1:30:00'), findsNothing);
+      expect(find.textContaining('/ 24:05'), findsOneWidget);
+      expect(find.textContaining('1:30:00'), findsNothing);
     });
 
     testWidgets('прихована панель не оновлюється, а при показі одразу показує актуальне', (tester) async {
@@ -309,7 +309,7 @@ void main() {
       show.value = true;
       await tester.pump(const Duration(milliseconds: 16));
       await tester.pump(const Duration(milliseconds: 400));
-      expect(find.text('20:05'), findsOneWidget, reason: 'після показу панель відразу актуальна');
+      expect(find.text('20:05 / 1:30:00'), findsOneWidget, reason: 'після показу панель відразу актуальна');
     });
 
     testWidgets('прихована панель не замовляє жодного кадру від подій позиції', (tester) async {
@@ -363,16 +363,16 @@ void main() {
         VideoChapter(title: 'Chapter 2', startTime: Duration(minutes: 5)),
       ];
       final (p, _) = await mount(tester, at: const Duration(minutes: 4, seconds: 58), chapters: chs);
-      expect(find.text('Розділ 1'), findsOneWidget);
-      expect(find.text('Розділ 2'), findsNothing);
+      expect(find.text('· Розділ 1'), findsOneWidget);
+      expect(find.text('· Розділ 2'), findsNothing);
       await play(tester, p, const Duration(seconds: 3));
-      expect(find.text('Розділ 2'), findsOneWidget);
-      expect(find.text('Розділ 1'), findsNothing);
+      expect(find.text('· Розділ 2'), findsOneWidget);
+      expect(find.text('· Розділ 1'), findsNothing);
     });
 
     testWidgets('без розділів чипа немає', (tester) async {
       await mount(tester, chapters: const []);
-      expect(find.byIcon(Icons.chevron_right), findsNothing);
+      expect(find.byKey(const ValueKey('dock-chapter')), findsNothing);
       expect(tester.takeException(), isNull);
     });
 

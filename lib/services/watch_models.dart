@@ -23,6 +23,17 @@ String episodeLabel(SEpisode e, int index) {
   return n == n.roundToDouble() ? '${n.toInt()}' : '$n';
 }
 
+/// «з N» for a dub's episodes ("Серія 14 з 19"): by their numbers, not the list's length (a dub of 10–19 has 10 in
+/// its list), and Hikka's [total] when it is more (a dub of 38 of Gintama's 201)
+int episodesOfList(Iterable<SEpisode> episodes, {int? total}) {
+  var n = episodes.length;
+  for (final e in episodes) {
+    final x = e.number;
+    if (x != null && x == x.roundToDouble() && x > n) n = x.toInt();
+  }
+  return (total ?? 0) > n ? total! : n;
+}
+
 /// One watch variant: a dub or subtitles from a specific team (or a dub from another site)
 class WatchGroup {
   /// Stable identifier: `source|anime|release`

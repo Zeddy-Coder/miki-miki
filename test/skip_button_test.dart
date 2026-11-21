@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:miki_miki/models/media_models.dart';
 import 'package:miki_miki/services/storage_service.dart';
 import 'package:miki_miki/widgets/skip_button.dart';
 
@@ -13,14 +14,14 @@ void main() {
     await loadTestFonts();
   });
 
-  Future<FakePlayer> pumpAt(WidgetTester t, Duration pos) async {
+  Future<FakePlayer> pumpAt(WidgetTester t, Duration pos, {List<VideoChapter>? chapters}) async {
     t.view.physicalSize = const Size(1280, 720);
     t.view.devicePixelRatio = 1.0;
     addTearDown(t.view.reset);
     final p = FakePlayer();
     p.current = p.current.copyWith(position: Duration.zero);
     await t.pumpWidget(MaterialApp(
-      home: Scaffold(body: Stack(children: [SkipButton(scale: 1, showControls: true, player: p, chapters: sampleChapters(), dismissedChapterStartTime: null)])),
+      home: Scaffold(body: Stack(children: [SkipButton(scale: 1, showControls: true, player: p, chapters: chapters ?? sampleChapters(), dismissedChapterStartTime: null)])),
     ));
     await t.pump(const Duration(milliseconds: 100));
     p.tickPosition(pos);
@@ -54,5 +55,27 @@ void main() {
     p.tickPosition(const Duration(minutes: 1, seconds: 38));
     await t.pump(const Duration(milliseconds: 200));
     expect(p.seeks.length, 1);
+  });
+
+  testWidgets('приблизні таймкоди (AniSkip без відомого зсуву): лише кнопка, автопропуску немає', (t) async {
+    StorageService.saveAutoSkipChapters(true);
+    final p = await pumpAt(t, const Duration(seconds: 70), chapters: const [
+      VideoChapter(title: 'Episode', startTime: Duration.zero, endTime: Duration(seconds: 65)),
+      VideoChapter(title: 'Opening', startTime: Duration(seconds: 65), endTime: Duration(seconds: 125), autoSkip: false),
+      VideoChapter(title: 'Episode', startTime: Duration(seconds: 125)),
+    ]);
+    expect(p.seeks, isEmpty);
+    expect(find.text('Пропустити опенінґ'), findsOneWidget);
+    await t.tap(find.text('Пропустити опенінґ'));
+    await t.pump(const Duration(milliseconds: 200));
+    expect(p.seeks, [const Duration(seconds: 125)]);
+  });
+
+  testWidgets('заставка команди: «Пропустити заставку»', (t) async {
+    await pumpAt(t, const Duration(seconds: 2), chapters: const [
+      VideoChapter(title: 'Заставка', startTime: Duration.zero, endTime: Duration(seconds: 8)),
+      VideoChapter(title: 'Episode', startTime: Duration(seconds: 8)),
+    ]);
+    expect(find.text('Пропустити заставку'), findsOneWidget);
   });
 }

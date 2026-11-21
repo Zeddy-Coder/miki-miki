@@ -191,6 +191,11 @@ class StorageService {
   static String getUiRadius({String fallback = 'MD'}) => _cache['ui_radius'] as String? ?? fallback;
   static void saveUiRadius(String r) { _cache['ui_radius'] = r; _isDirty = true; }
 
+  /// Phone: scale of the settings (and other screens built from settings_kit); per device, not synced
+  static const double defaultPhoneUiScale = 1.0;
+  static double getPhoneUiScale() => ((_cache['phone_ui_scale'] as num?)?.toDouble() ?? defaultPhoneUiScale).clamp(0.8, 1.15);
+  static void savePhoneUiScale(double v) { _cache['phone_ui_scale'] = v; _isDirty = true; }
+
   // --- Playback settings ---
   static bool getAutoplayNext({bool fallback = true}) => _cache['autoplay_next'] as bool? ?? fallback;
   static void saveAutoplayNext(bool val) { _cache['autoplay_next'] = val; _isDirty = true; }
@@ -224,6 +229,14 @@ class StorageService {
   static bool getShowSkipButton({bool fallback = true}) => _cache['show_skip_button'] as bool? ?? fallback;
   static void saveShowSkipButton(bool val) { _cache['show_skip_button'] = val; _isDirty = true; }
 
+  /// Finding the opening by listening (the first minutes of two episodes compared; on Wi-Fi or from downloads)
+  static bool getListenForSkips({bool fallback = true}) => _cache['listen_for_skips'] as bool? ?? fallback;
+  static void saveListenForSkips(bool val) { _cache['listen_for_skips'] = val; _isDirty = true; }
+
+  /// The opening's / ending's song in the player: a card with its cover, where to listen to it (shown by default)
+  static bool getShowThemeSongs({bool fallback = true}) => _cache['show_theme_songs'] as bool? ?? fallback;
+  static void saveShowThemeSongs(bool val) { _cache['show_theme_songs'] = val; _isDirty = true; }
+
   // --- Anime4K (upscaling shaders) ---
   static bool getAnime4kEnabled({bool fallback = false}) => _cache['anime4k_enabled'] as bool? ?? fallback;
   static void saveAnime4kEnabled(bool val) { _cache['anime4k_enabled'] = val; _isDirty = true; }
@@ -248,6 +261,9 @@ class StorageService {
   /// Secondary title under the title-page heading: whether to show it and in which language (ua | en | ja)
   static bool getHikkaShowSecondary({bool fallback = true}) => _cache['hikka_show_secondary'] as bool? ?? fallback;
   static void saveHikkaShowSecondary(bool val) { _cache['hikka_show_secondary'] = val; _isDirty = true; }
+  /// "Списки" as rows instead of the poster grid
+  static bool getHikkaListRows({bool fallback = false}) => _cache['hikka_list_rows'] as bool? ?? fallback;
+  static void saveHikkaListRows(bool val) { _cache['hikka_list_rows'] = val; _isDirty = true; }
   static String getHikkaSecondaryLang({String fallback = 'en'}) => _cache['hikka_secondary_lang'] as String? ?? fallback;
   static void saveHikkaSecondaryLang(String lang) { _cache['hikka_secondary_lang'] = lang; _isDirty = true; }
 

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The folder of downloaded updates (AppUpdater: cache/updates) that FileProvider may hand to the system installer -->
+<paths>
+    <cache-path name="updates" path="updates/"/>
+</paths>

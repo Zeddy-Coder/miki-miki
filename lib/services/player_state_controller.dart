@@ -15,6 +15,9 @@ import '../utils/platform_info.dart';
 import '../widgets/side_panel.dart';
 import 'anime4k_controller.dart';
 import 'app_log.dart';
+import 'audio_route_guard.dart';
+import 'downloads/download_manager.dart';
+import 'downloads/download_resolver.dart';
 import 'orientation_policy.dart';
 import 'player_diagnostics.dart';
 import 'osd_message.dart';
@@ -30,11 +33,14 @@ import 'touch_hide_timer.dart';
 import 'mpv_config.dart';
 import 'playlist_service.dart';
 import 'remote_driver.dart';
+import 'skips/skip_service.dart';
+import 'songs/song_service.dart';
+import 'songs/theme_songs.dart';
 import 'remote_engine.dart';
 import 'remote_playback.dart';
+import 'watch_models.dart';
 import 'source_prefs.dart';
 import 'source_registry.dart';
-import 'stream_resolver.dart';
 import 'track_defaults.dart';
 
 class PlayerStateController extends ChangeNotifier {
@@ -87,6 +93,30 @@ class PlayerStateController extends ChangeNotifier {
 
   List<Media> playlistItems = [];
   int currentPlaylistIndex = 0;
+
+  /// The player chrome's title: the anime for site episodes ("Проводжальниця Фрірен"), else the file's title
+  String get chromeTitle {
+    final s = remote.active ? remote.session : null;
+    return s != null && s.animeTitle.isNotEmpty ? s.animeTitle : currentTitle;
+  }
+
+  /// The grey line under it: "Серія 6 з 28 · Inari" (with [quality] also " · 1080p", as on a PC); a file queue —
+  /// "Серія 2 з 3"; a single file — nothing
+  String chromeSubtitle({bool quality = false}) {
+    final s = remote.active ? remote.session : null;
+    if (s != null) {
+      final i = remote.index;
+      final e = i >= 0 && i < s.entries.length ? s.entries[i] : null;
+      final q = remote.video?.title ?? '';
+      return [
+        if (e != null) 'Серія ${episodeLabel(e.episode, i)} з ${episodesOfList(s.entries.map((x) => x.episode), total: remote.hikka?.total)}',
+        if (remote.group != null) remote.group!.teamLabel,
+        if (quality && q.isNotEmpty) q,
+      ].join(' · ');
+    }
+    final queue = playlistItems.length;
+    return queue > 1 ? 'Серія ${currentPlaylistIndex + 1} з $queue' : '';
+  }
   List<VideoChapter> currentChapters = [];
   List<CachedSubtitleTrack> cachedSubtitleTracks = [];
   List<CachedAudioTrack> cachedAudioTracks = [];
@@ -112,7 +142,12 @@ class PlayerStateController extends ChangeNotifier {
   late final RemoteDriver remote = RemoteDriver(
     engine: MpvRemoteEngine(player: player, command: mpv),
     registry: SourceRegistry.instance,
-    resolver: StreamResolver(maxHeight: () => SourcePrefs.instance.maxHeight, preferredHoster: () => SourcePrefs.instance.hoster),
+    // A downloaded episode plays from the device, the rest from the site
+    resolver: DownloadAwareResolver(maxHeight: () => SourcePrefs.instance.maxHeight, preferredHoster: () => SourcePrefs.instance.hoster),
+    // Opening and ending for episodes the site gave no times for: AniSkip, made exact by listening
+    skips: SkipService.instance,
+    // The songs of the opening and ending: a card over the video, where to listen to them
+    songs: SongService.instance,
   );
 
   // ───────── Hotkeys ─────────
@@ -243,6 +278,8 @@ class PlayerStateController extends ChangeNotifier {
       SystemControls.inPip.addListener(_onPipChanged);
       SystemControls.onPipToggle = _onPipToggle;
       SystemControls.onAudioFocus = _onAudioFocus;
+      SystemControls.onAudioRoute = _audioRoute.routeChanged;
+      SystemControls.onAudioNoisy = _audioRoute.becomingNoisy;
       SystemControls.pipSupported().then((ok) {
         if (_disposed) return;
         pipSupported = ok;
@@ -337,6 +374,10 @@ class PlayerStateController extends ChangeNotifier {
     });
 
     player.stream.log.listen((log) {
+      // The audio output: what opened (format, channels), its device latency, its failures — the facts behind "the sound lags"
+      if (log.prefix == 'cplayer' && log.text.startsWith('AO: ') || (log.prefix.startsWith('ao') && log.level != 'trace' && log.level != 'debug')) {
+        AppLog.i('звук', '[${log.prefix}] ${log.text.trim()}');
+      }
       // Detailed (v / debug / trace) lines go only to the log file so they do not push important things out of the stats window
       final noisy = log.level == 'v' || log.level == 'debug' || log.level == 'trace';
       if (!noisy) {
@@ -580,6 +621,18 @@ class PlayerStateController extends ChangeNotifier {
 
   bool _resumeOnFocus = false;
 
+  /// Bluetooth / headphones / speaker: the audio output is reopened for the new route, headphones off pause
+  late final AudioRouteGuard _audioRoute = AudioRouteGuard(
+    reload: () => mpv(['ao-reload']),
+    hasMedia: () => !_disposed && !isHome,
+    isPlaying: () => !_disposed && player.state.playing,
+    pause: () {
+      _resumeOnFocus = false;
+      player.pause();
+    },
+    notice: (text) => showOsd(text, icon: Symbols.headphones_rounded),
+  );
+
   void _onAudioFocus(String event) {
     if (_disposed) return;
     AppLog.i('дія', 'аудіофокус: $event');
@@ -688,6 +741,7 @@ class PlayerStateController extends ChangeNotifier {
       return true;
     }
     if (activeSidePanel != null) {
+      if (panelStepBack()) return true;
       closeSidePanel();
       return true;
     }
@@ -697,6 +751,9 @@ class PlayerStateController extends ChangeNotifier {
     }
     return false;
   }
+
+  /// The "Перегляд" panel steps back first: from an episode's details or an inner page to its list
+  bool panelStepBack() => activeSidePanel == SidePanelType.episodes && (remote.panelBack?.call() ?? false);
 
   /// The app went to the background (not PiP): pause and save the position
   void onAppBackgrounded() {
@@ -985,13 +1042,19 @@ class PlayerStateController extends ChangeNotifier {
       AppFormatters.clearTrackCache();
       notifyListeners();
     };
+    // Smart downloads: the next episode downloads, the watched one goes (as set in the downloads' settings)
+    remote.onWatched = (animeKey, e) => DownloadManager.instance.onWatched(animeKey, e.epKey, group: remote.group);
     remote.onMessage = (text, {bool error = false}) => showOsd(
           text,
           icon: error ? Symbols.error_rounded : Symbols.skip_next_rounded,
           isError: error,
           duration: const Duration(seconds: 2),
         );
-    remote.addListener(notifyListeners);
+    remote.addListener(() {
+      // The skip plan may come after the start (AniSkip, listening): its chapters replace the site's
+      if (remote.active && remote.phase == RemotePhase.playing && !identical(currentChapters, remote.chapters)) currentChapters = remote.chapters;
+      notifyListeners();
+    });
   }
 
   void openDrawer(String name, GlobalKey key, {bool isTop = false}) {
@@ -1009,6 +1072,12 @@ class PlayerStateController extends ChangeNotifier {
     drawerAnchorPixelX = pixelX;
     drawerIsTop = isTop;
     notifyListeners();
+  }
+
+  /// The song card was tapped: «Пісня» (where to listen) from it; on a PC the controls come up with the menu
+  void openSongDrawer(SongKind kind, GlobalKey key) {
+    showControls = true;
+    openDrawer('song-${kind.name}', key);
   }
 
   void openSubDrawer(String name) {
@@ -1470,6 +1539,9 @@ class PlayerStateController extends ChangeNotifier {
     SystemControls.inPip.removeListener(_onPipChanged);
     if (SystemControls.onPipToggle == _onPipToggle) SystemControls.onPipToggle = null;
     if (SystemControls.onAudioFocus == _onAudioFocus) SystemControls.onAudioFocus = null;
+    if (SystemControls.onAudioRoute == _audioRoute.routeChanged) SystemControls.onAudioRoute = null;
+    if (SystemControls.onAudioNoisy == _audioRoute.becomingNoisy) SystemControls.onAudioNoisy = null;
+    _audioRoute.dispose();
     if (MediaControls.onButton == _onMediaButton) MediaControls.onButton = null;
     MediaControls.clear();
     _hideTimer?.cancel();
