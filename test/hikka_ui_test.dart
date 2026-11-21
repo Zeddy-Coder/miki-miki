@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:miki_miki/constants/app_identity.dart';
 import 'package:miki_miki/models/hikka_models.dart';
 import 'package:miki_miki/services/backend_client.dart';
 import 'package:miki_miki/services/episode_alerts.dart';
@@ -1247,7 +1248,7 @@ void main() {
       for (final label in ['Головна', 'Огляд', 'Списки', 'Профіль', 'Налаштування']) {
         expect(find.text(label), findsWidgets, reason: label);
       }
-      expect(find.text('v1.1.5'), findsOneWidget);
+      expect(find.text('v${AppIdentity.version}'), findsOneWidget);
       expect(find.text('MyPlayer'), findsNothing);
       expect(find.text('YouTube Mobile Fork'), findsNothing);
       await shot(tester, 'homehub_desktop_home');

@@ -25,7 +25,7 @@ class AppDiagnostics with WidgetsBindingObserver {
   static final AppDiagnostics instance = AppDiagnostics._();
 
   /// Build marker in the log
-  static const String build = 'b112';
+  static const String build = 'b113';
 
   bool _installed = false;
   Timer? _sampleTimer;

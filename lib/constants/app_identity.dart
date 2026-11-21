@@ -29,7 +29,7 @@ class AppIdentity {
   static const String tagline = 'Hikka · аніме українською';
 
   /// Human-readable version (kept in sync with `pubspec.yaml`)
-  static const String version = '1.1.5';
+  static const String version = '1.1.6';
 
   /// `User-Agent` of requests to sites and APIs (no personal data)
   static String userAgent(String purpose) => '$shortName/$version (Flutter; $purpose)';

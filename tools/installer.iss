@@ -6,7 +6,7 @@
 #define AppPublisher "Zeddy"
 #define AppUrl "https://github.com/Zeddy-Coder/miki-miki"
 #ifndef AppVersion
-  #define AppVersion "1.1.5"
+  #define AppVersion "1.1.6"
 #endif
 ; The folder with the release build (+ Visual C++ runtime), prepared by build_installer.ps1
 #ifndef SourceDir
