@@ -1,0 +1,95 @@
+# libmpv for Android with FFmpeg's mpdecimate filter: repeated frames are dropped before Anime4K's shaders, so they
+# work only on frames that changed (TV anime is drawn at 8–12 pictures a second but encoded at 24 frames).
+#
+# The stock libmpv of media_kit_libs_android_video (media-kit/libmpv-android-video-build, "default" flavour) builds
+# FFmpeg with almost no filters, and mpdecimate is GPL: FFmpeg is configured with --enable-gpl (the app itself is
+# GPL-3.0). Everything else is the version and the flags of the stock jars the app used (v1.1.7). The jars go to the
+# release `libmpv-android-v1.1.7-mpdecimate`, from which third_party/media_kit_libs_android_video downloads them.
+name: libmpv for Android
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [libmpv-android]
+    paths: ['.github/workflows/libmpv-android.yml']
+
+permissions:
+  contents: write
+
+env:
+  UPSTREAM_TAG: v1.1.7
+  RELEASE_TAG: libmpv-android-v1.1.7-mpdecimate
+  OUT: upstream/buildscripts/deps/media-kit-android-helper/app/build/outputs/apk/release
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-22.04
+    timeout-minutes: 240
+    steps:
+      - name: Upstream build scripts
+        uses: actions/checkout@v4
+        with:
+          repository: media-kit/libmpv-android-video-build
+          ref: ${{ env.UPSTREAM_TAG }}
+          path: upstream
+
+      - name: Setup Java JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Symlink SDK
+        working-directory: upstream/buildscripts
+        run: |
+          mkdir sdk
+          ln -s "${ANDROID_HOME}" ./sdk/android-sdk-linux
+
+      - name: FFmpeg with mpdecimate (GPL)
+        working-directory: upstream/buildscripts
+        run: |
+          sed -i -e 's/--disable-gpl \\/--enable-gpl \\/' \
+                 -e 's/^\(\s*\)--enable-filter=overlay \\$/\1--enable-filter=overlay \\\n\1--enable-filter=mpdecimate \\/' \
+                 flavors/default.sh
+          grep -n -e '-gpl' -e '--enable-filter' flavors/default.sh
+          grep -q -e '--enable-gpl \\' flavors/default.sh
+          grep -q -e '--enable-filter=mpdecimate \\' flavors/default.sh
+
+      - name: Build (default flavour)
+        working-directory: upstream/buildscripts
+        run: |
+          sudo chmod +x bundle_default.sh
+          ./bundle_default.sh
+
+      - name: Check the filter is in every jar
+        working-directory: ${{ env.OUT }}
+        run: |
+          for abi in arm64-v8a armeabi-v7a x86 x86_64; do
+            strings "lib/$abi/libmpv.so" | grep -qx mpdecimate || { echo "no mpdecimate in $abi"; exit 1; }
+          done
+          md5sum *.jar | tee md5.txt
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: libmpv-android
+          path: |
+            ${{ env.OUT }}/*.jar
+            ${{ env.OUT }}/md5.txt
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          target_commitish: ${{ github.sha }}
+          name: libmpv for Android ${{ env.UPSTREAM_TAG }} + mpdecimate
+          prerelease: true
+          body: |
+            libmpv for Android from media-kit/libmpv-android-video-build ${{ env.UPSTREAM_TAG }} ("default" flavour) with FFmpeg's mpdecimate filter (FFmpeg configured with --enable-gpl). Used by third_party/media_kit_libs_android_video; MD5 sums in md5.txt.
+          files: |
+            ${{ env.OUT }}/*.jar
+            ${{ env.OUT }}/md5.txt
