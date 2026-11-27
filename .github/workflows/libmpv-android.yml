@@ -3,22 +3,34 @@
 #
 # The stock libmpv of media_kit_libs_android_video (media-kit/libmpv-android-video-build, "default" flavour) builds
 # FFmpeg with almost no filters, and mpdecimate is GPL: FFmpeg is configured with --enable-gpl (the app itself is
-# GPL-3.0). Everything else is the version and the flags of the stock jars the app used (v1.1.7). The jars go to the
-# release `libmpv-android-v1.1.7-mpdecimate`, from which third_party/media_kit_libs_android_video downloads them.
+# GPL-3.0). Everything else is the version and the flags of the stock jars the app used (v1.1.7).
+#
+# FFmpeg also gets .github/libmpv/ffmpeg-mediacodec-stall.patch: a MediaCodec decoder that neither takes input nor
+# gives output (c2.exynos.h264.decoder on a Pixel 8 Pro, after the app slept in the background) kept FFmpeg in an
+# endless loop on mpv's core thread, and the player hung; now decoding gives up after a second and mpv goes on with
+# software decoding.
+#
+# And .github/libmpv/ffmpeg-pixelutils-neon.patch: the 8x8 sum of differences mpdecimate checks every block of a frame
+# with, in NEON. FFmpeg is built for size here (--enable-small, -Os), and clang left the C version a byte loop: on a
+# still shot, where the filter reads the whole frame to call it a repeat, a warm Pixel 8 Pro took longer than a frame
+# lasts, and the picture fell behind the sound by up to 1.7 s (Anime4K A+A on 1080p).
+#
+# The jars go to the release `RELEASE_TAG`, from which third_party/media_kit_libs_android_video downloads them (the
+# earlier release `libmpv-android-v1.1.7-mpdecimate` stays: older builds of the app download from it).
 name: libmpv for Android
 
 on:
   workflow_dispatch:
   push:
     branches: [libmpv-android]
-    paths: ['.github/workflows/libmpv-android.yml']
+    paths: ['.github/workflows/libmpv-android.yml', '.github/libmpv/**']
 
 permissions:
   contents: write
 
 env:
   UPSTREAM_TAG: v1.1.7
-  RELEASE_TAG: libmpv-android-v1.1.7-mpdecimate
+  RELEASE_TAG: libmpv-android-v1.1.7-mpdecimate-2
   OUT: upstream/buildscripts/deps/media-kit-android-helper/app/build/outputs/apk/release
 
 jobs:
@@ -27,6 +39,11 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 240
     steps:
+      - name: This repository (the FFmpeg patches)
+        uses: actions/checkout@v4
+        with:
+          path: own
+
       - name: Upstream build scripts
         uses: actions/checkout@v4
         with:
@@ -59,17 +76,27 @@ jobs:
           grep -q -e '--enable-gpl \\' flavors/default.sh
           grep -q -e '--enable-filter=mpdecimate \\' flavors/default.sh
 
+      - name: FFmpeg patches (the MediaCodec stall fix, the NEON SAD)
+        working-directory: upstream/buildscripts
+        run: |
+          # patch.sh applies every patches/ffmpeg/*.patch to FFmpeg's sources with git apply
+          cp ../../own/.github/libmpv/ffmpeg-mediacodec-stall.patch ../../own/.github/libmpv/ffmpeg-pixelutils-neon.patch patches/ffmpeg/
+          ls patches/ffmpeg
+
       - name: Build (default flavour)
         working-directory: upstream/buildscripts
         run: |
           sudo chmod +x bundle_default.sh
           ./bundle_default.sh
 
-      - name: Check the filter is in every jar
+      - name: Check the filter and the stall fix are in every jar
         working-directory: ${{ env.OUT }}
         run: |
+          # The NEON SAD leaves no string in a stripped library: its source is checked instead
+          grep -q block_sad_8x8_neon "$GITHUB_WORKSPACE/upstream/buildscripts/deps/ffmpeg/libavutil/pixelutils.c" || { echo "no NEON SAD in FFmpeg"; exit 1; }
           for abi in arm64-v8a armeabi-v7a x86 x86_64; do
             strings "lib/$abi/libmpv.so" | grep -qx mpdecimate || { echo "no mpdecimate in $abi"; exit 1; }
+            strings "lib/$abi/libmpv.so" | grep -q 'MediaCodec stalled' || { echo "no stall fix in $abi"; exit 1; }
           done
           md5sum *.jar | tee md5.txt
 
@@ -86,10 +113,10 @@ jobs:
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           target_commitish: ${{ github.sha }}
-          name: libmpv for Android ${{ env.UPSTREAM_TAG }} + mpdecimate
+          name: libmpv for Android ${{ env.UPSTREAM_TAG }} + mpdecimate + MediaCodec stall fix + NEON SAD
           prerelease: true
           body: |
-            libmpv for Android from media-kit/libmpv-android-video-build ${{ env.UPSTREAM_TAG }} ("default" flavour) with FFmpeg's mpdecimate filter (FFmpeg configured with --enable-gpl). Used by third_party/media_kit_libs_android_video; MD5 sums in md5.txt.
+            libmpv for Android from media-kit/libmpv-android-video-build ${{ env.UPSTREAM_TAG }} ("default" flavour) with FFmpeg's mpdecimate filter (FFmpeg configured with --enable-gpl), .github/libmpv/ffmpeg-mediacodec-stall.patch (a stalled MediaCodec decoder no longer hangs the player: decoding gives up after a second and mpv falls back to software decoding) and .github/libmpv/ffmpeg-pixelutils-neon.patch (mpdecimate's 8x8 sum of differences in NEON: in FFmpeg built for size the C one is a byte loop too slow for 1080p on a phone). Used by third_party/media_kit_libs_android_video; MD5 sums in md5.txt.
           files: |
             ${{ env.OUT }}/*.jar
             ${{ env.OUT }}/md5.txt

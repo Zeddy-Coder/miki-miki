@@ -1,0 +1,52 @@
+diff --git a/libavutil/pixelutils.c b/libavutil/pixelutils.c
+index 820889a..c56f9c9 100644
+--- a/libavutil/pixelutils.c
++++ b/libavutil/pixelutils.c
+@@ -30,6 +30,36 @@
+ 
+ #include "x86/pixelutils.h"
+ 
++#if (ARCH_AARCH64 || ARCH_ARM) && defined(__ARM_NEON)
++#include <arm_neon.h>
++
++#include "cpu.h"
++
++/* mpdecimate compares every 8x8 block of a repeated frame (in steps of 4 pixels) with this. Built for size
++ * (--enable-small, -Os), the C version is a byte loop: clang does not vectorize it there, and on a phone's CPU a 1080p
++ * frame took longer than the frame lasts. */
++static int block_sad_8x8_neon(const uint8_t *src1, ptrdiff_t stride1,
++                              const uint8_t *src2, ptrdiff_t stride2)
++{
++    uint16x8_t acc = vabdl_u8(vld1_u8(src1), vld1_u8(src2));
++    int y;
++
++    for (y = 1; y < 8; y++) {
++        src1 += stride1;
++        src2 += stride2;
++        acc = vabal_u8(acc, vld1_u8(src1), vld1_u8(src2));
++    }
++#if ARCH_AARCH64
++    return vaddlvq_u16(acc);
++#else
++    {
++        uint64x2_t sum = vpaddlq_u32(vpaddlq_u16(acc));
++        return (int)(vgetq_lane_u64(sum, 0) + vgetq_lane_u64(sum, 1));
++    }
++#endif
++}
++#endif
++
+ static av_always_inline int sad_wxh(const uint8_t *src1, ptrdiff_t stride1,
+                                     const uint8_t *src2, ptrdiff_t stride2,
+                                     int w, int h)
+@@ -89,6 +119,10 @@ av_pixelutils_sad_fn av_pixelutils_get_sad_fn(int w_bits, int h_bits, int aligne
+ #if ARCH_X86
+     ff_pixelutils_sad_init_x86(sad, aligned);
+ #endif
++#if (ARCH_AARCH64 || ARCH_ARM) && defined(__ARM_NEON)
++    if (av_get_cpu_flags() & AV_CPU_FLAG_NEON)
++        sad[2] = block_sad_8x8_neon;
++#endif
+ 
+     return sad[w_bits - 1];
+ #endif
