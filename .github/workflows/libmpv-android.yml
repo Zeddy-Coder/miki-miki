@@ -76,6 +76,14 @@ jobs:
           grep -q -e '--enable-gpl \\' flavors/default.sh
           grep -q -e '--enable-filter=mpdecimate \\' flavors/default.sh
 
+      - name: gas-preprocessor straight from raw.githubusercontent.com
+        working-directory: upstream/buildscripts
+        run: |
+          # The upstream script takes it through github.com/…/raw/…, which answered 504 for minutes (2026-11-27): the
+          # build then stopped before FFmpeg was even cloned. The file itself lives on raw.githubusercontent.com
+          sed -i 's#https://github.com/FFmpeg/gas-preprocessor/raw/master/#https://raw.githubusercontent.com/FFmpeg/gas-preprocessor/master/#' include/download-sdk.sh
+          grep -q 'raw.githubusercontent.com/FFmpeg/gas-preprocessor/master/gas-preprocessor.pl' include/download-sdk.sh
+
       - name: FFmpeg patches (the MediaCodec stall fix, the NEON SAD)
         working-directory: upstream/buildscripts
         run: |
